@@ -7,6 +7,11 @@ import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus } from 'l
 import { useGraphStore } from './stores/graphStore';
 import { selectLoadingPaths, selectRootNode, selectSelectedNode } from './stores/graphSelectors';
 
+const analysisCacheTtlEnv = Number(import.meta.env.VITE_ANALYSIS_CACHE_TTL_MS ?? '0');
+const analysisCacheTtlMs = Number.isFinite(analysisCacheTtlEnv) && analysisCacheTtlEnv > 0
+    ? analysisCacheTtlEnv
+    : undefined;
+
 const App: React.FC = () => {
     const [fileMap, setFileMap] = useState<Map<string, string>>(new Map());
     const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
@@ -287,7 +292,7 @@ const App: React.FC = () => {
                 if (n.path === selectedNode.path) {
                     if (!n.codeStructure) {
                         setStatus(AppStatus.ANALYZING_QUERY);
-                        analyzeFileContent(content, n.name).then(structure => {
+                        analyzeFileContent(content, n.name, { ttlMs: analysisCacheTtlMs }).then(structure => {
                             if (!isActive) return;
                             n.codeStructure = structure;
                             updateRootNode(prev => (prev ? { ...prev } : null));
