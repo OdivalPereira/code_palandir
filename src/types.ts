@@ -18,14 +18,19 @@ export interface CodeNode {
   children?: CodeNode[];
 }
 
+export interface ClusterData {
+  parentPath: string;
+  childCount: number;
+}
+
 export interface FlatNode extends d3.SimulationNodeDatum {
   id: string;
   name: string;
-  type: 'directory' | 'file' | 'function' | 'class' | 'variable' | 'api_endpoint';
+  type: 'directory' | 'file' | 'function' | 'class' | 'variable' | 'api_endpoint' | 'cluster';
   path: string;
   group: number;
   relevant?: boolean;
-  data?: FileSystemNode | CodeNode; // Reference to original data
+  data?: FileSystemNode | CodeNode | ClusterData; // Reference to original data
 }
 
 export interface Link extends d3.SimulationLinkDatum<FlatNode> {
