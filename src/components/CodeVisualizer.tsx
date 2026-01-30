@@ -2,6 +2,69 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3';
 import { ClusterData, FileSystemNode, FlatNode, Link } from '../types';
 
+const LAYOUT_DB_NAME = 'graphLayoutCache';
+const LAYOUT_STORE_NAME = 'positions';
+
+const openLayoutDB = () => new Promise<IDBDatabase | null>((resolve) => {
+  if (typeof window === 'undefined' || !('indexedDB' in window)) {
+    resolve(null);
+    return;
+  }
+  const request = window.indexedDB.open(LAYOUT_DB_NAME, 1);
+  request.onupgradeneeded = () => {
+    const db = request.result;
+    if (!db.objectStoreNames.contains(LAYOUT_STORE_NAME)) {
+      db.createObjectStore(LAYOUT_STORE_NAME);
+    }
+  };
+  request.onsuccess = () => resolve(request.result);
+  request.onerror = () => resolve(null);
+});
+
+const readLayoutCache = async (hash: string) => {
+  const db = await openLayoutDB();
+  if (!db) return null;
+  return new Promise<Record<string, { x: number; y: number }> | null>((resolve) => {
+    const transaction = db.transaction(LAYOUT_STORE_NAME, 'readonly');
+    const store = transaction.objectStore(LAYOUT_STORE_NAME);
+    const request = store.get(hash);
+    request.onsuccess = () => resolve(request.result ?? null);
+    request.onerror = () => resolve(null);
+  });
+};
+
+const writeLayoutCache = async (hash: string, positions: Record<string, { x: number; y: number }>) => {
+  const db = await openLayoutDB();
+  if (!db) return;
+  await new Promise<void>((resolve) => {
+    const transaction = db.transaction(LAYOUT_STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(LAYOUT_STORE_NAME);
+    store.put(positions, hash);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => resolve();
+  });
+};
+
+const hashString = (input: string) => {
+  let hash = 5381;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash * 33) ^ input.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(16);
+};
+
+const buildGraphHash = (nodes: FlatNode[], links: Link[]) => {
+  const nodeParts = [...nodes]
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map(node => `${node.id}:${node.type}`)
+    .join('|');
+  const linkParts = [...links]
+    .map(link => `${link.source}->${link.target}`)
+    .sort()
+    .join('|');
+  return hashString(`${nodeParts}::${linkParts}`);
+};
+
 interface CodeVisualizerProps {
   rootNode: FileSystemNode | null;
   highlightedPaths: string[];
@@ -24,6 +87,8 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
   const [layoutPositions, setLayoutPositions] = useState<Record<string, { x: number; y: number }>>({});
   const pendingLayoutRef = useRef<{ requestId: number; positions: Record<string, { x: number; y: number }> } | null>(null);
   const layoutFrameRef = useRef<number | null>(null);
+  const layoutCacheRef = useRef<Map<string, Record<string, { x: number; y: number }>>>(new Map());
+  const layoutHashRef = useRef<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const renderCanvasRef = useRef<() => void>(() => {});
   const dragStateRef = useRef<{ nodeId: string | null; isDragging: boolean }>({ nodeId: null, isDragging: false });
@@ -227,6 +292,47 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
     const nextLinks = links.filter(link => filteredNodeIds.has(link.source as string) && filteredNodeIds.has(link.target as string));
     return { filteredNodes: nextNodes, filteredLinks: nextLinks };
   }, [links, nodes, visibleNodeFilter]);
+
+  const graphHash = useMemo(() => buildGraphHash(filteredNodes, filteredLinks), [filteredLinks, filteredNodes]);
+
+  useEffect(() => {
+    if (!rootNode) return;
+    layoutHashRef.current = graphHash;
+    let isActive = true;
+
+    const applyPositions = (positions: Record<string, { x: number; y: number }>) => {
+      if (!isActive || layoutHashRef.current !== graphHash) return;
+      stablePositionsRef.current = new Map(Object.entries(positions));
+      setLayoutPositions(positions);
+    };
+
+    const memoryCache = layoutCacheRef.current.get(graphHash);
+    if (memoryCache) {
+      applyPositions(memoryCache);
+      return () => {
+        isActive = false;
+      };
+    }
+
+    stablePositionsRef.current = new Map();
+    setLayoutPositions({});
+
+    readLayoutCache(graphHash).then((cached) => {
+      if (!cached) return;
+      layoutCacheRef.current.set(graphHash, cached);
+      applyPositions(cached);
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [graphHash, rootNode]);
+
+  useEffect(() => {
+    if (!graphHash || Object.keys(layoutPositions).length === 0) return;
+    layoutCacheRef.current.set(graphHash, layoutPositions);
+    writeLayoutCache(graphHash, layoutPositions);
+  }, [graphHash, layoutPositions]);
 
   useEffect(() => {
     if (!rootNode || !workerRef.current) return;
