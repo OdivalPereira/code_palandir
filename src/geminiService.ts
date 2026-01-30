@@ -1,12 +1,22 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { CodeNode } from './types';
+import { getCachedAnalysis, hashContent, setCachedAnalysis } from './cacheRepository';
 
 // Note: In Vite, env vars must start with VITE_
 const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY || '', vertexai: true });
 const modelId = 'gemini-2.5-flash';
 
 // Analyze a single file's content to extract structure
-export const analyzeFileContent = async (code: string, filename: string): Promise<CodeNode[]> => {
+export const analyzeFileContent = async (
+  code: string,
+  filename: string,
+  options?: { ttlMs?: number },
+): Promise<CodeNode[]> => {
+  const key = await hashContent(`${filename}:${code}`);
+  const cached = await getCachedAnalysis(key);
+  if (cached) {
+    return cached;
+  }
   const prompt = `
     Analyze the source code of ${filename}.
     Extract the top-level structure: classes, functions, exported variables, and API endpoints.
@@ -43,8 +53,11 @@ export const analyzeFileContent = async (code: string, filename: string): Promis
     });
 
     if (response.text) {
-      return JSON.parse(response.text) as CodeNode[];
+      const parsed = JSON.parse(response.text) as CodeNode[];
+      await setCachedAnalysis(key, parsed, options?.ttlMs);
+      return parsed;
     }
+    await setCachedAnalysis(key, [], options?.ttlMs);
     return [];
   } catch (error) {
     console.error("File analysis failed", error);
