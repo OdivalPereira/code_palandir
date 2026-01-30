@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { FileSystemNode, FlatNode, Link } from '../types';
+import { ClusterData, FileSystemNode, FlatNode, Link } from '../types';
 
 interface CodeVisualizerProps {
   rootNode: FileSystemNode | null;
@@ -14,15 +14,44 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
   const [dimensions, setDimensions] = useState({ width: 1000, height: 800 });
   const [visibleNodeFilter, setVisibleNodeFilter] = useState<'all' | 'directories'>('all');
   const zoomTransformRef = useRef(d3.zoomIdentity);
+  const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set(['']));
+
+  const isAggregateNode = (node: FlatNode) => node.type === 'directory' || node.type === 'cluster';
 
   // Nodes are restricted to directories when zoomed out below this threshold.
   // Adjust to change when file-level nodes become visible.
   const DIRECTORY_ONLY_ZOOM_THRESHOLD = 0.7;
 
   // Flatten hierarchical data
-  const flattenData = (root: FileSystemNode): { nodes: FlatNode[], links: Link[] } => {
+  const flattenData = (root: FileSystemNode, expanded: Set<string>): { nodes: FlatNode[], links: Link[] } => {
     const nodes: FlatNode[] = [];
     const links: Link[] = [];
+
+    const countDescendants = (node: FileSystemNode): number => {
+      if (!node.children || node.children.length === 0) return 0;
+      return node.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
+    };
+
+    const addClusterNode = (node: FileSystemNode, depth: number) => {
+      const childCount = countDescendants(node);
+      const clusterId = `${node.path}::__cluster`;
+      const clusterNode: FlatNode = {
+        id: clusterId,
+        name: `${childCount} items`,
+        type: 'cluster',
+        path: clusterId,
+        group: depth + 1,
+        relevant: false,
+        data: {
+          parentPath: node.path,
+          childCount
+        } as ClusterData,
+        x: 0,
+        y: 0
+      };
+      nodes.push(clusterNode);
+      links.push({ source: node.path, target: clusterId });
+    };
 
     const traverse = (node: FileSystemNode, parentId: string | null, depth: number) => {
       const flatNode: FlatNode = {
@@ -42,8 +71,13 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
         links.push({ source: parentId, target: node.path });
       }
 
-      if (node.children) {
-        node.children.forEach(child => traverse(child, node.path, depth + 1));
+      if (node.children && node.children.length > 0) {
+        const isExpanded = expanded.has(node.path);
+        if (isExpanded) {
+          node.children.forEach(child => traverse(child, node.path, depth + 1));
+        } else {
+          addClusterNode(node, depth);
+        }
       }
 
       // If the node has analyzed code structure (expanded file), add those as children
@@ -86,13 +120,18 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
   }, []);
 
   useEffect(() => {
+    if (!rootNode) return;
+    setExpandedDirectories(new Set([rootNode.path]));
+  }, [rootNode]);
+
+  useEffect(() => {
     if (!rootNode || !svgRef.current) return;
 
     const { width, height } = dimensions;
-    const { nodes, links } = flattenData(rootNode);
+    const { nodes, links } = flattenData(rootNode, expandedDirectories);
     const shouldShowDirectoriesOnly = visibleNodeFilter === 'directories';
     const filteredNodes = shouldShowDirectoriesOnly
-      ? nodes.filter(node => node.type === 'directory')
+      ? nodes.filter(node => node.type === 'directory' || node.type === 'cluster')
       : nodes;
     const filteredNodeIds = new Set(filteredNodes.map(node => node.id));
     const filteredLinks = links.filter(link => filteredNodeIds.has(link.source as string) && filteredNodeIds.has(link.target as string));
@@ -115,7 +154,7 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
     svg.call(zoom.transform, zoomTransformRef.current);
 
     const simulation = d3.forceSimulation(filteredNodes)
-      .force("link", d3.forceLink(filteredLinks).id((d: any) => d.id).distance(d => (d.target as FlatNode).type === 'directory' ? 150 : 80))
+      .force("link", d3.forceLink(filteredLinks).id((d: any) => d.id).distance(d => isAggregateNode(d.target as FlatNode) ? 150 : 80))
       .force("charge", d3.forceManyBody().strength(-300))
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collide", d3.forceCollide().radius(40));
@@ -127,7 +166,7 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
       .selectAll("line")
       .data(filteredLinks)
       .join("line")
-      .attr("stroke-width", d => (d.target as FlatNode).type === 'directory' ? 2 : 1);
+      .attr("stroke-width", d => isAggregateNode(d.target as FlatNode) ? 2 : 1);
 
     // Nodes
     const node = g.append("g")
@@ -137,7 +176,30 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
       .attr("cursor", "pointer")
       .on("click", (event, d) => {
         event.stopPropagation();
+        if (d.type === 'cluster') {
+          const { parentPath } = d.data as ClusterData;
+          setExpandedDirectories(prev => {
+            const next = new Set(prev);
+            next.add(parentPath);
+            return next;
+          });
+          return;
+        }
         onNodeClick(d);
+      })
+      .on("dblclick", (event, d) => {
+        if (d.type === 'directory') {
+          event.stopPropagation();
+          setExpandedDirectories(prev => {
+            const next = new Set(prev);
+            if (next.has(d.path)) {
+              next.delete(d.path);
+            } else {
+              next.add(d.path);
+            }
+            return next;
+          });
+        }
       })
       .call(d3.drag<SVGGElement, FlatNode>()
         .on("start", dragstarted)
@@ -147,6 +209,7 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
     // Node Shapes
     node.append("circle")
       .attr("r", d => {
+        if (d.type === 'cluster') return 18;
         if (d.type === 'directory') return 15;
         if (d.type === 'file') return 10;
         return 6;
@@ -154,6 +217,7 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
       .attr("fill", d => {
         if (d.relevant) return "#facc15"; // Highlight
         switch (d.type) {
+          case 'cluster': return "#0f172a";
           case 'directory': return "#3b82f6";
           case 'file': return "#64748b";
           case 'function': return "#4ade80";
@@ -162,8 +226,13 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
           default: return "#94a3b8";
         }
       })
-      .attr("stroke", d => d.relevant ? "#ffffff" : "none")
-      .attr("stroke-width", 2);
+      .attr("stroke", d => {
+        if (d.relevant) return "#ffffff";
+        if (d.type === 'cluster') return "#38bdf8";
+        return "none";
+      })
+      .attr("stroke-width", d => d.type === 'cluster' ? 2.5 : 2)
+      .attr("stroke-dasharray", d => d.type === 'cluster' ? "4 3" : "0");
 
     // Labels
     node.append("text")
@@ -204,7 +273,7 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
       d.fy = null;
     }
 
-  }, [rootNode, dimensions, highlightedPaths, onNodeClick, visibleNodeFilter]);
+  }, [rootNode, dimensions, highlightedPaths, onNodeClick, visibleNodeFilter, expandedDirectories]);
 
   if (!rootNode) {
     return (
@@ -224,10 +293,14 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
         <div className="grid grid-cols-2 gap-x-4 gap-y-1">
           <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Directory</div>
           <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-slate-500"></span> File</div>
+          <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full border border-sky-300 bg-slate-900"></span> Cluster (collapsed)</div>
           <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-400"></span> Function</div>
           <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-pink-400"></span> Class</div>
           <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-purple-400"></span> API</div>
           <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-yellow-400"></span> Relevant</div>
+        </div>
+        <div className="mt-2 text-[11px] text-slate-400">
+          Double-click a directory to collapse/expand. Click a cluster to expand.
         </div>
       </div>
     </div>
