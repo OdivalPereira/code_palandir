@@ -2,6 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3';
 import { ClusterData, FlatNode, Link } from '../types';
 import { useGraphStore } from '../stores/graphStore';
+import {
+  selectExpandedDirectories,
+  selectGraphLinks,
+  selectGraphNodes,
+  selectLoadingPaths,
+  selectRequestExpandNode,
+  selectRootNode
+} from '../stores/graphSelectors';
 
 const LAYOUT_DB_NAME = 'graphLayoutCache';
 const LAYOUT_STORE_NAME = 'positions';
@@ -70,15 +78,15 @@ const CodeVisualizer: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const rootNode = useGraphStore((state) => state.rootNode);
-  const loadingPaths = useGraphStore((state) => state.loadingPaths);
-  const expandedDirectories = useGraphStore((state) => state.expandedDirectories);
-  const graphNodes = useGraphStore((state) => Object.values(state.nodesById));
-  const graphLinks = useGraphStore((state) => Object.values(state.linksById));
+  const rootNode = useGraphStore(selectRootNode);
+  const loadingPaths = useGraphStore(selectLoadingPaths);
+  const expandedDirectories = useGraphStore(selectExpandedDirectories);
+  const graphNodes = useGraphStore(selectGraphNodes);
+  const graphLinks = useGraphStore(selectGraphLinks);
   const setSelectedNode = useGraphStore((state) => state.setSelectedNode);
   const expandDirectory = useGraphStore((state) => state.expandDirectory);
   const toggleDirectory = useGraphStore((state) => state.toggleDirectory);
-  const requestExpandNode = useGraphStore((state) => state.requestExpandNode);
+  const requestExpandNode = useGraphStore(selectRequestExpandNode);
   const [dimensions, setDimensions] = useState({ width: 1000, height: 800 });
   const [visibleNodeFilter, setVisibleNodeFilter] = useState<'all' | 'directories'>('all');
   const zoomTransformRef = useRef(d3.zoomIdentity);

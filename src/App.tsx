@@ -5,6 +5,7 @@ import { analyzeFileContent, findRelevantFiles } from './geminiService';
 import { FileSystemNode, PromptItem, AppStatus, CodeNode } from './types';
 import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus } from 'lucide-react';
 import { useGraphStore } from './stores/graphStore';
+import { selectLoadingPaths, selectRootNode, selectSelectedNode } from './stores/graphSelectors';
 
 const App: React.FC = () => {
     const [fileMap, setFileMap] = useState<Map<string, string>>(new Map());
@@ -14,11 +15,9 @@ const App: React.FC = () => {
     const [githubUrl, setGithubUrl] = useState('');
     const [isPromptOpen, setIsPromptOpen] = useState(false);
 
-    const rootNode = useGraphStore((state) => state.rootNode);
-    const selectedNode = useGraphStore((state) => (
-        state.selectedNodeId ? (state.nodesById[state.selectedNodeId] ?? null) : null
-    ));
-    const loadingPaths = useGraphStore((state) => state.loadingPaths);
+    const rootNode = useGraphStore(selectRootNode);
+    const selectedNode = useGraphStore(selectSelectedNode);
+    const loadingPaths = useGraphStore(selectLoadingPaths);
     const setRootNode = useGraphStore((state) => state.setRootNode);
     const updateRootNode = useGraphStore((state) => state.updateRootNode);
     const setHighlightedPaths = useGraphStore((state) => state.setHighlightedPaths);
