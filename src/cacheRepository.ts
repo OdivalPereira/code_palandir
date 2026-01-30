@@ -7,9 +7,18 @@ type CachedAnalysis = {
   expiresAt: number | null;
 };
 
+type CachedRelevance = {
+  key: string;
+  value: string[];
+  createdAt: number;
+  expiresAt: number | null;
+  repoHash: string;
+};
+
 const DB_NAME = 'code-mind-ai-cache';
-const DB_VERSION = 1;
-const STORE_NAME = 'analysis';
+const DB_VERSION = 2;
+const ANALYSIS_STORE = 'analysis';
+const RELEVANCE_STORE = 'relevance';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -21,8 +30,11 @@ const openDb = (): Promise<IDBDatabase> => {
 
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'key' });
+      if (!db.objectStoreNames.contains(ANALYSIS_STORE)) {
+        db.createObjectStore(ANALYSIS_STORE, { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains(RELEVANCE_STORE)) {
+        db.createObjectStore(RELEVANCE_STORE, { keyPath: 'key' });
       }
     };
 
@@ -34,14 +46,15 @@ const openDb = (): Promise<IDBDatabase> => {
 };
 
 const withStore = async <T>(
+  storeName: string,
   mode: IDBTransactionMode,
   callback: (store: IDBObjectStore) => void,
 ): Promise<T> => {
   const db = await openDb();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, mode);
-    const store = transaction.objectStore(STORE_NAME);
+    const transaction = db.transaction(storeName, mode);
+    const store = transaction.objectStore(storeName);
 
     transaction.oncomplete = () => resolve(undefined as T);
     transaction.onerror = () => reject(transaction.error);
@@ -74,8 +87,8 @@ export const getCachedAnalysis = async (key: string): Promise<CodeNode[] | null>
   const db = await openDb();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
+    const transaction = db.transaction(ANALYSIS_STORE, 'readwrite');
+    const store = transaction.objectStore(ANALYSIS_STORE);
     const request = store.get(key);
 
     request.onsuccess = () => {
@@ -106,12 +119,69 @@ export const setCachedAnalysis = async (
   const now = Date.now();
   const expiresAt = ttlMs && ttlMs > 0 ? now + ttlMs : null;
 
-  await withStore<void>('readwrite', (store) => {
+  await withStore<void>(ANALYSIS_STORE, 'readwrite', (store) => {
     store.put({
       key,
       value,
       createdAt: now,
       expiresAt,
+    });
+  });
+};
+
+export const getCachedRelevantFiles = async (
+  key: string,
+  repoHash: string,
+): Promise<string[] | null> => {
+  const db = await openDb();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(RELEVANCE_STORE, 'readwrite');
+    const store = transaction.objectStore(RELEVANCE_STORE);
+    const request = store.get(key);
+
+    request.onsuccess = () => {
+      const result = request.result as CachedRelevance | undefined;
+      if (!result) {
+        resolve(null);
+        return;
+      }
+
+      if (result.repoHash !== repoHash) {
+        store.delete(key);
+        resolve(null);
+        return;
+      }
+
+      if (result.expiresAt && Date.now() > result.expiresAt) {
+        store.delete(key);
+        resolve(null);
+        return;
+      }
+
+      resolve(result.value);
+    };
+
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const setCachedRelevantFiles = async (
+  key: string,
+  value: string[],
+  repoHash: string,
+  ttlMs?: number,
+): Promise<void> => {
+  const now = Date.now();
+  const expiresAt = ttlMs && ttlMs > 0 ? now + ttlMs : null;
+
+  await withStore<void>(RELEVANCE_STORE, 'readwrite', (store) => {
+    store.put({
+      key,
+      value,
+      createdAt: now,
+      expiresAt,
+      repoHash,
     });
   });
 };
