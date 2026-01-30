@@ -12,6 +12,12 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 1000, height: 800 });
+  const [visibleNodeFilter, setVisibleNodeFilter] = useState<'all' | 'directories'>('all');
+  const zoomTransformRef = useRef(d3.zoomIdentity);
+
+  // Nodes are restricted to directories when zoomed out below this threshold.
+  // Adjust to change when file-level nodes become visible.
+  const DIRECTORY_ONLY_ZOOM_THRESHOLD = 0.7;
 
   // Flatten hierarchical data
   const flattenData = (root: FileSystemNode): { nodes: FlatNode[], links: Link[] } => {
@@ -84,6 +90,12 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
 
     const { width, height } = dimensions;
     const { nodes, links } = flattenData(rootNode);
+    const shouldShowDirectoriesOnly = visibleNodeFilter === 'directories';
+    const filteredNodes = shouldShowDirectoriesOnly
+      ? nodes.filter(node => node.type === 'directory')
+      : nodes;
+    const filteredNodeIds = new Set(filteredNodes.map(node => node.id));
+    const filteredLinks = links.filter(link => filteredNodeIds.has(link.source as string) && filteredNodeIds.has(link.target as string));
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
@@ -93,13 +105,17 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 4])
       .on("zoom", (event) => {
+        zoomTransformRef.current = event.transform;
+        const nextFilter = event.transform.k < DIRECTORY_ONLY_ZOOM_THRESHOLD ? 'directories' : 'all';
+        setVisibleNodeFilter(current => (current === nextFilter ? current : nextFilter));
         g.attr("transform", event.transform);
       });
 
     svg.call(zoom);
+    svg.call(zoom.transform, zoomTransformRef.current);
 
-    const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id((d: any) => d.id).distance(d => (d.target as FlatNode).type === 'directory' ? 150 : 80))
+    const simulation = d3.forceSimulation(filteredNodes)
+      .force("link", d3.forceLink(filteredLinks).id((d: any) => d.id).distance(d => (d.target as FlatNode).type === 'directory' ? 150 : 80))
       .force("charge", d3.forceManyBody().strength(-300))
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collide", d3.forceCollide().radius(40));
@@ -109,14 +125,14 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
       .attr("stroke", "#475569")
       .attr("stroke-opacity", 0.4)
       .selectAll("line")
-      .data(links)
+      .data(filteredLinks)
       .join("line")
       .attr("stroke-width", d => (d.target as FlatNode).type === 'directory' ? 2 : 1);
 
     // Nodes
     const node = g.append("g")
       .selectAll("g")
-      .data(nodes)
+      .data(filteredNodes)
       .join("g")
       .attr("cursor", "pointer")
       .on("click", (event, d) => {
@@ -188,7 +204,7 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
       d.fy = null;
     }
 
-  }, [rootNode, dimensions, highlightedPaths, onNodeClick]);
+  }, [rootNode, dimensions, highlightedPaths, onNodeClick, visibleNodeFilter]);
 
   if (!rootNode) {
     return (
