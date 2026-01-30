@@ -1,0 +1,4 @@
+{
+  "name": "CodeMind Project Visualizer",
+  "description": "Visualize entire codebases as interactive mind maps. Import from GitHub or local folders, use AI to highlight relevant architecture, and build context-rich prompts for AI agents."
+}
