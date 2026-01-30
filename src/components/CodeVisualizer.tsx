@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { ClusterData, FileSystemNode, FlatNode, Link } from '../types';
 
@@ -12,6 +12,7 @@ interface CodeVisualizerProps {
 
 const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPaths, onNodeClick, onExpandNode, loadingPaths }) => {
   const svgRef = useRef<SVGSVGElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 1000, height: 800 });
   const [visibleNodeFilter, setVisibleNodeFilter] = useState<'all' | 'directories'>('all');
@@ -21,6 +22,14 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
   const workerRef = useRef<Worker | null>(null);
   const layoutRequestIdRef = useRef(0);
   const [layoutPositions, setLayoutPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const renderCanvasRef = useRef<() => void>(() => {});
+  const dragStateRef = useRef<{ nodeId: string | null; isDragging: boolean }>({ nodeId: null, isDragging: false });
+  const clickTimeoutRef = useRef<number | null>(null);
+
+  // VITE_GRAPH_RENDERER=canvas|webgl switches to the canvas-backed renderer (webgl currently uses canvas fallback).
+  const renderMode = (import.meta.env.VITE_GRAPH_RENDERER ?? 'svg').toLowerCase();
+  const useCanvasRenderer = renderMode === 'canvas' || renderMode === 'webgl';
 
   const layoutPositionsRef = useRef(layoutPositions);
   useEffect(() => {
@@ -28,6 +37,38 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
   }, [layoutPositions]);
 
   const isAggregateNode = (node: FlatNode) => node.type === 'directory' || node.type === 'cluster';
+  const getNodeRadius = (node: FlatNode) => {
+    if (node.type === 'cluster') return 18;
+    if (node.type === 'directory') return 15;
+    if (node.type === 'file') return 10;
+    return 6;
+  };
+  const getNodeFill = (node: FlatNode) => {
+    if (node.relevant) return "#facc15";
+    switch (node.type) {
+      case 'cluster': return "#0f172a";
+      case 'directory': return "#3b82f6";
+      case 'file': return "#64748b";
+      case 'function': return "#4ade80";
+      case 'class': return "#f472b6";
+      case 'api_endpoint': return "#a78bfa";
+      default: return "#94a3b8";
+    }
+  };
+  const getNodeStroke = (node: FlatNode) => {
+    if (node.relevant) return "#ffffff";
+    if (node.type === 'cluster') return "#38bdf8";
+    return "transparent";
+  };
+  const getNodeStrokeWidth = (node: FlatNode) => (node.type === 'cluster' ? 2.5 : 2);
+  const getNodeDash = (node: FlatNode) => (node.type === 'cluster' ? [4, 3] : []);
+  const isNodeLoading = useCallback((d: FlatNode) => {
+    if (d.type === 'cluster') {
+      const { parentPath } = d.data as ClusterData;
+      return loadingPaths.has(parentPath);
+    }
+    return loadingPaths.has(d.path);
+  }, [loadingPaths]);
 
   // Nodes are restricted to directories when zoomed out below this threshold.
   // Adjust to change when file-level nodes become visible.
@@ -137,6 +178,7 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
     setExpandedDirectories(new Set([rootNode.path]));
     stablePositionsRef.current = new Map();
     setLayoutPositions({});
+    setHoveredNodeId(null);
   }, [rootNode]);
 
   useEffect(() => {
@@ -162,15 +204,18 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
     return flattenData(rootNode, expandedDirectories);
   }, [rootNode, expandedDirectories, highlightedPaths]);
 
-  useEffect(() => {
-    if (!rootNode || !workerRef.current) return;
-
+  const { filteredNodes, filteredLinks } = useMemo(() => {
     const shouldShowDirectoriesOnly = visibleNodeFilter === 'directories';
-    const filteredNodes = shouldShowDirectoriesOnly
+    const nextNodes = shouldShowDirectoriesOnly
       ? nodes.filter(node => node.type === 'directory' || node.type === 'cluster')
       : nodes;
-    const filteredNodeIds = new Set(filteredNodes.map(node => node.id));
-    const filteredLinks = links.filter(link => filteredNodeIds.has(link.source as string) && filteredNodeIds.has(link.target as string));
+    const filteredNodeIds = new Set(nextNodes.map(node => node.id));
+    const nextLinks = links.filter(link => filteredNodeIds.has(link.source as string) && filteredNodeIds.has(link.target as string));
+    return { filteredNodes: nextNodes, filteredLinks: nextLinks };
+  }, [links, nodes, visibleNodeFilter]);
+
+  useEffect(() => {
+    if (!rootNode || !workerRef.current) return;
 
     const requestId = layoutRequestIdRef.current + 1;
     layoutRequestIdRef.current = requestId;
@@ -182,18 +227,12 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
       height: dimensions.height,
       positions: Object.fromEntries(stablePositionsRef.current)
     });
-  }, [rootNode, nodes, links, dimensions, visibleNodeFilter]);
+  }, [rootNode, filteredNodes, filteredLinks, dimensions]);
 
   useEffect(() => {
-    if (!rootNode || !svgRef.current) return;
+    if (!rootNode || !svgRef.current || useCanvasRenderer) return;
 
     const { width, height } = dimensions;
-    const shouldShowDirectoriesOnly = visibleNodeFilter === 'directories';
-    const filteredNodes = shouldShowDirectoriesOnly
-      ? nodes.filter(node => node.type === 'directory' || node.type === 'cluster')
-      : nodes;
-    const filteredNodeIds = new Set(filteredNodes.map(node => node.id));
-    const filteredLinks = links.filter(link => filteredNodeIds.has(link.source as string) && filteredNodeIds.has(link.target as string));
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
@@ -228,14 +267,6 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
       .attr("stroke-width", d => isAggregateNode(d.target as FlatNode) ? 2 : 1);
 
     // Nodes
-    const isNodeLoading = (d: FlatNode) => {
-      if (d.type === 'cluster') {
-        const { parentPath } = d.data as ClusterData;
-        return loadingPaths.has(parentPath);
-      }
-      return loadingPaths.has(d.path);
-    };
-
     const node = g.append("g")
       .selectAll("g")
       .data(filteredNodes)
@@ -368,7 +399,319 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
     return () => {
       g.remove();
     };
-  }, [rootNode, dimensions, highlightedPaths, onNodeClick, onExpandNode, visibleNodeFilter, expandedDirectories, loadingPaths, nodes, links, layoutPositions]);
+  }, [rootNode, dimensions, highlightedPaths, onNodeClick, onExpandNode, visibleNodeFilter, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading]);
+
+  const updateNodePositions = useCallback(() => {
+    const { width, height } = dimensions;
+    const positions = new Map<string, { x: number; y: number }>();
+    filteredNodes.forEach(node => {
+      const savedPosition = layoutPositionsRef.current[node.id] ?? stablePositionsRef.current.get(node.id);
+      const nextPosition = savedPosition ?? { x: width / 2, y: height / 2 };
+      node.x = nextPosition.x;
+      node.y = nextPosition.y;
+      positions.set(node.id, nextPosition);
+    });
+    return positions;
+  }, [dimensions, filteredNodes]);
+
+  const resolveNodeAtPosition = useCallback((x: number, y: number) => {
+    const transform = zoomTransformRef.current;
+    const [graphX, graphY] = transform.invert([x, y]);
+    for (let i = filteredNodes.length - 1; i >= 0; i -= 1) {
+      const node = filteredNodes[i];
+      const radius = getNodeRadius(node) + 4;
+      const savedPosition = layoutPositionsRef.current[node.id] ?? stablePositionsRef.current.get(node.id);
+      const nodeX = savedPosition?.x ?? node.x ?? dimensions.width / 2;
+      const nodeY = savedPosition?.y ?? node.y ?? dimensions.height / 2;
+      const dx = graphX - nodeX;
+      const dy = graphY - nodeY;
+      if (dx * dx + dy * dy <= radius * radius) {
+        return node;
+      }
+    }
+    return null;
+  }, [dimensions.height, dimensions.width, filteredNodes]);
+
+  const renderCanvas = useCallback(() => {
+    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const { width, height } = dimensions;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const transform = zoomTransformRef.current;
+    ctx.save();
+    ctx.setTransform(transform.k * dpr, 0, 0, transform.k * dpr, transform.x * dpr, transform.y * dpr);
+
+    const positions = updateNodePositions();
+    const nodeById = new Map(filteredNodes.map(node => [node.id, node]));
+
+    const aggregateLinks: Link[] = [];
+    const normalLinks: Link[] = [];
+    filteredLinks.forEach(link => {
+      const targetNode = nodeById.get(link.target as string);
+      if (targetNode && isAggregateNode(targetNode)) {
+        aggregateLinks.push(link);
+      } else {
+        normalLinks.push(link);
+      }
+    });
+
+    const drawLinksBatch = (batch: Link[], strokeWidth: number) => {
+      if (batch.length === 0) return;
+      ctx.beginPath();
+      batch.forEach(link => {
+        const sourcePos = positions.get(link.source as string);
+        const targetPos = positions.get(link.target as string);
+        if (!sourcePos || !targetPos) return;
+        ctx.moveTo(sourcePos.x, sourcePos.y);
+        ctx.lineTo(targetPos.x, targetPos.y);
+      });
+      ctx.strokeStyle = "#475569";
+      ctx.globalAlpha = 0.4;
+      ctx.lineWidth = strokeWidth;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    };
+
+    drawLinksBatch(normalLinks, 1);
+    drawLinksBatch(aggregateLinks, 2);
+
+    type NodeBatch = {
+      nodes: FlatNode[];
+      fill: string;
+      stroke: string;
+      strokeWidth: number;
+      dash: number[];
+      radius: number;
+    };
+
+    const batches = new Map<string, NodeBatch>();
+    filteredNodes.forEach(node => {
+      const radius = getNodeRadius(node);
+      const fill = getNodeFill(node);
+      const stroke = getNodeStroke(node);
+      const strokeWidth = getNodeStrokeWidth(node);
+      const dash = getNodeDash(node);
+      const key = `${fill}|${stroke}|${strokeWidth}|${dash.join(',')}|${radius}`;
+      const batch = batches.get(key) ?? { nodes: [], fill, stroke, strokeWidth, dash, radius };
+      batch.nodes.push(node);
+      batches.set(key, batch);
+    });
+
+    batches.forEach(batch => {
+      ctx.beginPath();
+      batch.nodes.forEach(node => {
+        const position = positions.get(node.id);
+        if (!position) return;
+        ctx.moveTo(position.x + batch.radius, position.y);
+        ctx.arc(position.x, position.y, batch.radius, 0, Math.PI * 2);
+      });
+      ctx.fillStyle = batch.fill;
+      ctx.fill();
+      if (batch.stroke !== "transparent") {
+        ctx.strokeStyle = batch.stroke;
+        ctx.lineWidth = batch.strokeWidth;
+        ctx.setLineDash(batch.dash);
+        ctx.stroke();
+      }
+    });
+
+    filteredNodes.forEach(node => {
+      if (!isNodeLoading(node)) return;
+      const position = positions.get(node.id);
+      if (!position) return;
+      const radius = (node.type === 'cluster' || node.type === 'directory') ? 22 : 16;
+      ctx.beginPath();
+      ctx.arc(position.x, position.y, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.stroke();
+
+      ctx.fillStyle = "#38bdf8";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText("Carregando...", position.x, position.y + (node.type === 'directory' ? 40 : 34));
+    });
+
+    if (hoveredNodeId) {
+      const hoveredNode = nodeById.get(hoveredNodeId);
+      const position = hoveredNode ? positions.get(hoveredNode.id) : null;
+      if (hoveredNode && position) {
+        ctx.beginPath();
+        ctx.arc(position.x, position.y, getNodeRadius(hoveredNode) + 6, 0, Math.PI * 2);
+        ctx.strokeStyle = "#f8fafc";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.stroke();
+      }
+    }
+
+    ctx.fillStyle = "#cbd5e1";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0,0,0,0.8)";
+    ctx.shadowBlur = 2;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 1;
+    filteredNodes.forEach(node => {
+      const position = positions.get(node.id);
+      if (!position) return;
+      ctx.font = node.type === 'directory' ? "12px sans-serif" : "10px sans-serif";
+      const labelOffset = node.type === 'directory' ? 25 : 20;
+      ctx.fillText(node.name, position.x, position.y + labelOffset);
+    });
+
+    ctx.restore();
+  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, isNodeLoading, updateNodePositions]);
+
+  useEffect(() => {
+    renderCanvasRef.current = renderCanvas;
+  }, [renderCanvas]);
+
+  useEffect(() => {
+    if (!useCanvasRenderer || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+
+    const zoom = d3.zoom<HTMLCanvasElement, unknown>()
+      .scaleExtent([0.1, 4])
+      .on("zoom", (event) => {
+        zoomTransformRef.current = event.transform;
+        const nextFilter = event.transform.k < DIRECTORY_ONLY_ZOOM_THRESHOLD ? 'directories' : 'all';
+        setVisibleNodeFilter(current => (current === nextFilter ? current : nextFilter));
+        renderCanvasRef.current();
+      });
+
+    const selection = d3.select(canvas);
+    selection.call(zoom);
+    selection.call(zoom.transform, zoomTransformRef.current);
+
+    return () => {
+      selection.on(".zoom", null);
+    };
+  }, [useCanvasRenderer]);
+
+  useEffect(() => {
+    if (!useCanvasRenderer || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const node = resolveNodeAtPosition(event.clientX - rect.left, event.clientY - rect.top);
+      const nextId = node?.id ?? null;
+      if (nextId !== hoveredNodeId) {
+        setHoveredNodeId(nextId);
+        canvas.style.cursor = node ? "pointer" : "default";
+        renderCanvasRef.current();
+      }
+      if (dragStateRef.current.isDragging && dragStateRef.current.nodeId) {
+        const transform = zoomTransformRef.current;
+        const [graphX, graphY] = transform.invert([event.clientX - rect.left, event.clientY - rect.top]);
+        stablePositionsRef.current.set(dragStateRef.current.nodeId, { x: graphX, y: graphY });
+        renderCanvasRef.current();
+      }
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const node = resolveNodeAtPosition(event.clientX - rect.left, event.clientY - rect.top);
+      if (node) {
+        dragStateRef.current = { nodeId: node.id, isDragging: true };
+      }
+    };
+
+    const handlePointerUp = () => {
+      if (dragStateRef.current.isDragging && dragStateRef.current.nodeId) {
+        const nodeId = dragStateRef.current.nodeId;
+        const position = stablePositionsRef.current.get(nodeId);
+        if (position) {
+          setLayoutPositions(prev => ({ ...prev, [nodeId]: position }));
+        }
+      }
+      dragStateRef.current = { nodeId: null, isDragging: false };
+    };
+
+    const handleClick = (event: MouseEvent) => {
+      if (dragStateRef.current.isDragging) return;
+      const rect = canvas.getBoundingClientRect();
+      const node = resolveNodeAtPosition(event.clientX - rect.left, event.clientY - rect.top);
+      if (!node) return;
+      if (clickTimeoutRef.current) {
+        window.clearTimeout(clickTimeoutRef.current);
+        clickTimeoutRef.current = null;
+      }
+      clickTimeoutRef.current = window.setTimeout(() => {
+        if (node.type === 'cluster') {
+          const { parentPath } = node.data as ClusterData;
+          onExpandNode(parentPath);
+          setExpandedDirectories(prev => new Set(prev).add(parentPath));
+          return;
+        }
+        onNodeClick(node);
+      }, 150);
+    };
+
+    const handleDoubleClick = (event: MouseEvent) => {
+      if (clickTimeoutRef.current) {
+        window.clearTimeout(clickTimeoutRef.current);
+        clickTimeoutRef.current = null;
+      }
+      const rect = canvas.getBoundingClientRect();
+      const node = resolveNodeAtPosition(event.clientX - rect.left, event.clientY - rect.top);
+      if (node?.type === 'directory') {
+        setExpandedDirectories(prev => {
+          const next = new Set(prev);
+          if (next.has(node.path)) {
+            next.delete(node.path);
+          } else {
+            onExpandNode(node.path);
+            next.add(node.path);
+          }
+          return next;
+        });
+      }
+    };
+
+    canvas.addEventListener("pointermove", handlePointerMove);
+    canvas.addEventListener("pointerdown", handlePointerDown);
+    canvas.addEventListener("pointerup", handlePointerUp);
+    canvas.addEventListener("pointerleave", handlePointerUp);
+    canvas.addEventListener("click", handleClick);
+    canvas.addEventListener("dblclick", handleDoubleClick);
+
+    return () => {
+      canvas.removeEventListener("pointermove", handlePointerMove);
+      canvas.removeEventListener("pointerdown", handlePointerDown);
+      canvas.removeEventListener("pointerup", handlePointerUp);
+      canvas.removeEventListener("pointerleave", handlePointerUp);
+      canvas.removeEventListener("click", handleClick);
+      canvas.removeEventListener("dblclick", handleDoubleClick);
+    };
+  }, [hoveredNodeId, onExpandNode, onNodeClick, resolveNodeAtPosition, useCanvasRenderer]);
+
+  useEffect(() => {
+    if (!useCanvasRenderer) return;
+    renderCanvasRef.current();
+  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, layoutPositions, loadingPaths, useCanvasRenderer, visibleNodeFilter]);
+
+  useEffect(() => {
+    return () => {
+      if (clickTimeoutRef.current) {
+        window.clearTimeout(clickTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (!rootNode) {
     return (
@@ -381,7 +724,11 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
 
   return (
     <div ref={wrapperRef} className="w-full h-full relative bg-slate-950 overflow-hidden">
-      <svg ref={svgRef} width={dimensions.width} height={dimensions.height} className="w-full h-full" />
+      {useCanvasRenderer ? (
+        <canvas ref={canvasRef} className="w-full h-full" role="img" aria-label="Graph canvas renderer" />
+      ) : (
+        <svg ref={svgRef} width={dimensions.width} height={dimensions.height} className="w-full h-full" />
+      )}
 
       <div className="absolute bottom-4 left-4 bg-slate-900/80 backdrop-blur p-3 rounded-lg border border-slate-700 text-xs text-slate-300 shadow-lg">
         <div className="font-semibold mb-2 text-slate-200">Legend</div>
