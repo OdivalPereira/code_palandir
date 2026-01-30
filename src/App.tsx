@@ -11,6 +11,10 @@ const analysisCacheTtlEnv = Number(import.meta.env.VITE_ANALYSIS_CACHE_TTL_MS ??
 const analysisCacheTtlMs = Number.isFinite(analysisCacheTtlEnv) && analysisCacheTtlEnv > 0
     ? analysisCacheTtlEnv
     : undefined;
+const relevantCacheTtlEnv = Number(import.meta.env.VITE_RELEVANT_FILES_CACHE_TTL_MS ?? '0');
+const relevantCacheTtlMs = Number.isFinite(relevantCacheTtlEnv) && relevantCacheTtlEnv > 0
+    ? relevantCacheTtlEnv
+    : undefined;
 
 const App: React.FC = () => {
     const [fileMap, setFileMap] = useState<Map<string, string>>(new Map());
@@ -198,7 +202,7 @@ const App: React.FC = () => {
         const allPaths = allFilePathsRef.current.length > 0 ? allFilePathsRef.current : [];
 
         try {
-            const relevantPaths = await findRelevantFiles(searchQuery, allPaths);
+            const relevantPaths = await findRelevantFiles(searchQuery, allPaths, { ttlMs: relevantCacheTtlMs });
             setHighlightedPaths(relevantPaths);
 
             // Add context

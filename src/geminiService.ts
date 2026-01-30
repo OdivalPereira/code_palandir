@@ -1,6 +1,12 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { CodeNode } from './types';
-import { getCachedAnalysis, hashContent, setCachedAnalysis } from './cacheRepository';
+import {
+  getCachedAnalysis,
+  getCachedRelevantFiles,
+  hashContent,
+  setCachedAnalysis,
+  setCachedRelevantFiles,
+} from './cacheRepository';
 
 // Note: In Vite, env vars must start with VITE_
 const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY || '', vertexai: true });
@@ -66,7 +72,11 @@ export const analyzeFileContent = async (
 };
 
 // Identify relevant files in the project based on a user query
-export const findRelevantFiles = async (query: string, filePaths: string[]): Promise<string[]> => {
+export const findRelevantFiles = async (
+  query: string,
+  filePaths: string[],
+  options?: { ttlMs?: number },
+): Promise<string[]> => {
   const prompt = `
     I have a project with the following file structure.
     User Query: "${query}"
@@ -76,7 +86,15 @@ export const findRelevantFiles = async (query: string, filePaths: string[]): Pro
   `;
 
   // Batch paths if too many, but for now assume it fits
-  const pathsStr = filePaths.join('\n');
+  const normalizedPaths = [...filePaths].sort();
+  const repoHash = await hashContent(normalizedPaths.join('\n'));
+  const cacheKey = await hashContent(`relevance:${query}:${repoHash}`);
+  const cached = await getCachedRelevantFiles(cacheKey, repoHash);
+  if (cached) {
+    return cached;
+  }
+
+  const pathsStr = normalizedPaths.join('\n');
 
   try {
     const response = await ai.models.generateContent({
@@ -104,8 +122,11 @@ export const findRelevantFiles = async (query: string, filePaths: string[]): Pro
 
     if (response.text) {
       const result = JSON.parse(response.text);
-      return result.relevantFiles || [];
+      const relevantFiles = result.relevantFiles || [];
+      await setCachedRelevantFiles(cacheKey, relevantFiles, repoHash, options?.ttlMs);
+      return relevantFiles;
     }
+    await setCachedRelevantFiles(cacheKey, [], repoHash, options?.ttlMs);
     return [];
   } catch (error) {
     console.error("Relevance search failed", error);
