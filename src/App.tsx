@@ -1,21 +1,28 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import CodeVisualizer from './components/CodeVisualizer';
 import PromptBuilder from './components/PromptBuilder';
 import { analyzeFileContent, findRelevantFiles } from './geminiService';
-import { FileSystemNode, FlatNode, PromptItem, AppStatus, CodeNode } from './types';
+import { FileSystemNode, PromptItem, AppStatus, CodeNode } from './types';
 import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus } from 'lucide-react';
+import { useGraphStore } from './stores/graphStore';
 
 const App: React.FC = () => {
-    const [rootNode, setRootNode] = useState<FileSystemNode | null>(null);
     const [fileMap, setFileMap] = useState<Map<string, string>>(new Map());
     const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
-    const [highlightedPaths, setHighlightedPaths] = useState<string[]>([]);
     const [promptItems, setPromptItems] = useState<PromptItem[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [githubUrl, setGithubUrl] = useState('');
     const [isPromptOpen, setIsPromptOpen] = useState(false);
-    const [selectedNode, setSelectedNode] = useState<FlatNode | null>(null);
-    const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
+
+    const rootNode = useGraphStore((state) => state.rootNode);
+    const selectedNode = useGraphStore((state) => state.selectedNode);
+    const loadingPaths = useGraphStore((state) => state.loadingPaths);
+    const setRootNode = useGraphStore((state) => state.setRootNode);
+    const updateRootNode = useGraphStore((state) => state.updateRootNode);
+    const setHighlightedPaths = useGraphStore((state) => state.setHighlightedPaths);
+    const setLoadingPaths = useGraphStore((state) => state.setLoadingPaths);
+    const setSelectedNode = useGraphStore((state) => state.setSelectedNode);
+    const setRequestExpandNode = useGraphStore((state) => state.setRequestExpandNode);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const childrenIndexRef = useRef<Map<string, { path: string; name: string; type: 'directory' | 'file' }[]>>(new Map());
@@ -234,41 +241,6 @@ const App: React.FC = () => {
         return content;
     };
 
-    const handleNodeClick = async (node: FlatNode) => {
-        setSelectedNode(node);
-
-        // If it's a file and we haven't analyzed it yet, let's try to analyze it
-        if (node.type === 'file') {
-            const content = await ensureFileContent(node.path);
-
-            if (content) {
-                // Analyze structure if not present
-                // Find the node in the tree to update it
-                const updateTree = (n: FileSystemNode): boolean => {
-                    if (n.path === node.path) {
-                        if (!n.codeStructure) {
-                            setStatus(AppStatus.ANALYZING_QUERY); // Reuse status
-                            analyzeFileContent(content!, n.name).then(structure => {
-                                n.codeStructure = structure;
-                                // Force re-render of visualizer by creating new object ref
-                                setRootNode(prev => prev ? { ...prev } : null);
-                                setStatus(AppStatus.IDLE);
-                            });
-                        }
-                        return true;
-                    }
-                    if (n.children) {
-                        for (const child of n.children) {
-                            if (updateTree(child)) return true;
-                        }
-                    }
-                    return false;
-                };
-                if (rootNode) updateTree(rootNode);
-            }
-        }
-    };
-
     const handleExpandNode = (path: string) => {
         if (!rootNode) return;
         if (!childrenIndexRef.current.has(path)) return;
@@ -289,16 +261,54 @@ const App: React.FC = () => {
             };
         };
 
-        setLoadingPaths(prev => new Set(prev).add(path));
-        setRootNode(prev => (prev ? updateTree(prev) : prev));
+        setLoadingPaths(new Set([...loadingPaths, path]));
+        updateRootNode((prev) => (prev ? updateTree(prev) : prev));
         window.setTimeout(() => {
-            setLoadingPaths(prev => {
-                const next = new Set(prev);
-                next.delete(path);
-                return next;
-            });
+            const currentLoading = useGraphStore.getState().loadingPaths;
+            const next = new Set(currentLoading);
+            next.delete(path);
+            setLoadingPaths(next);
         }, 250);
     };
+
+    useEffect(() => {
+        setRequestExpandNode(() => handleExpandNode);
+        return () => setRequestExpandNode(null);
+    }, [handleExpandNode, setRequestExpandNode]);
+
+    useEffect(() => {
+        if (!selectedNode || selectedNode.type !== 'file') return;
+        let isActive = true;
+        const analyzeSelectedFile = async () => {
+            const content = await ensureFileContent(selectedNode.path);
+            if (!content || !isActive) return;
+            const updateTree = (n: FileSystemNode): boolean => {
+                if (n.path === selectedNode.path) {
+                    if (!n.codeStructure) {
+                        setStatus(AppStatus.ANALYZING_QUERY);
+                        analyzeFileContent(content, n.name).then(structure => {
+                            if (!isActive) return;
+                            n.codeStructure = structure;
+                            updateRootNode(prev => (prev ? { ...prev } : null));
+                            setStatus(AppStatus.IDLE);
+                        });
+                    }
+                    return true;
+                }
+                if (n.children) {
+                    for (const child of n.children) {
+                        if (updateTree(child)) return true;
+                    }
+                }
+                return false;
+            };
+            if (rootNode) updateTree(rootNode);
+        };
+        analyzeSelectedFile();
+        return () => {
+            isActive = false;
+        };
+    }, [rootNode, selectedNode, updateRootNode]);
 
     const addToPrompt = (title: string, content: string) => {
         setPromptItems(prev => [...prev, {
@@ -396,13 +406,7 @@ const App: React.FC = () => {
                             <p className="text-slate-400">Parsing project structure...</p>
                         </div>
                     ) : (
-                        <CodeVisualizer
-                            rootNode={rootNode}
-                            highlightedPaths={highlightedPaths}
-                            onNodeClick={handleNodeClick}
-                            onExpandNode={handleExpandNode}
-                            loadingPaths={loadingPaths}
-                        />
+                        <CodeVisualizer />
                     )}
 
                     {/* Selected Node Detail Overlay */}
