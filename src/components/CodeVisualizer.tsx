@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { ClusterData, FileSystemNode, FlatNode, Link } from '../types';
 
@@ -18,7 +18,14 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
   const zoomTransformRef = useRef(d3.zoomIdentity);
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set(['']));
   const stablePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const stableTickCountRef = useRef(0);
+  const workerRef = useRef<Worker | null>(null);
+  const layoutRequestIdRef = useRef(0);
+  const [layoutPositions, setLayoutPositions] = useState<Record<string, { x: number; y: number }>>({});
+
+  const layoutPositionsRef = useRef(layoutPositions);
+  useEffect(() => {
+    layoutPositionsRef.current = layoutPositions;
+  }, [layoutPositions]);
 
   const isAggregateNode = (node: FlatNode) => node.type === 'directory' || node.type === 'cluster';
 
@@ -129,13 +136,58 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
     if (!rootNode) return;
     setExpandedDirectories(new Set([rootNode.path]));
     stablePositionsRef.current = new Map();
+    setLayoutPositions({});
   }, [rootNode]);
+
+  useEffect(() => {
+    const worker = new Worker(new URL('../workers/graphLayout.worker.ts', import.meta.url), { type: 'module' });
+    workerRef.current = worker;
+
+    worker.onmessage = (event: MessageEvent<{ requestId: number; positions: Record<string, { x: number; y: number }> }>) => {
+      if (event.data.requestId !== layoutRequestIdRef.current) return;
+      setLayoutPositions(event.data.positions);
+      stablePositionsRef.current = new Map(Object.entries(event.data.positions));
+    };
+
+    return () => {
+      worker.terminate();
+      workerRef.current = null;
+    };
+  }, []);
+
+  const { nodes, links } = useMemo(() => {
+    if (!rootNode) {
+      return { nodes: [], links: [] };
+    }
+    return flattenData(rootNode, expandedDirectories);
+  }, [rootNode, expandedDirectories, highlightedPaths]);
+
+  useEffect(() => {
+    if (!rootNode || !workerRef.current) return;
+
+    const shouldShowDirectoriesOnly = visibleNodeFilter === 'directories';
+    const filteredNodes = shouldShowDirectoriesOnly
+      ? nodes.filter(node => node.type === 'directory' || node.type === 'cluster')
+      : nodes;
+    const filteredNodeIds = new Set(filteredNodes.map(node => node.id));
+    const filteredLinks = links.filter(link => filteredNodeIds.has(link.source as string) && filteredNodeIds.has(link.target as string));
+
+    const requestId = layoutRequestIdRef.current + 1;
+    layoutRequestIdRef.current = requestId;
+    workerRef.current.postMessage({
+      requestId,
+      nodes: filteredNodes.map(node => ({ id: node.id, type: node.type })),
+      links: filteredLinks.map(link => ({ source: link.source as string, target: link.target as string })),
+      width: dimensions.width,
+      height: dimensions.height,
+      positions: Object.fromEntries(stablePositionsRef.current)
+    });
+  }, [rootNode, nodes, links, dimensions, visibleNodeFilter]);
 
   useEffect(() => {
     if (!rootNode || !svgRef.current) return;
 
     const { width, height } = dimensions;
-    const { nodes, links } = flattenData(rootNode, expandedDirectories);
     const shouldShowDirectoriesOnly = visibleNodeFilter === 'directories';
     const filteredNodes = shouldShowDirectoriesOnly
       ? nodes.filter(node => node.type === 'directory' || node.type === 'cluster')
@@ -160,23 +212,11 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
     svg.call(zoom);
     svg.call(zoom.transform, zoomTransformRef.current);
 
-    const simulation = d3.forceSimulation(filteredNodes)
-      .force("link", d3.forceLink(filteredLinks).id((d: any) => d.id).distance(d => isAggregateNode(d.target as FlatNode) ? 150 : 80))
-      .force("charge", d3.forceManyBody().strength(-300))
-      .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collide", d3.forceCollide().radius(40));
-    const stableAlphaThreshold = 0.03;
-    const stableTicksRequired = 20;
-    stableTickCountRef.current = 0;
-
     filteredNodes.forEach(node => {
-      const savedPosition = stablePositionsRef.current.get(node.id);
-      if (savedPosition) {
-        node.x = savedPosition.x;
-        node.y = savedPosition.y;
-      }
+      const savedPosition = layoutPositionsRef.current[node.id] ?? stablePositionsRef.current.get(node.id);
+      node.x = savedPosition?.x ?? width / 2;
+      node.y = savedPosition?.y ?? height / 2;
     });
-    simulation.alpha(1).restart();
 
     // Links
     const link = g.append("g")
@@ -292,7 +332,7 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
       .style("pointer-events", "none")
       .style("text-shadow", "0 1px 2px rgba(0,0,0,0.8)");
 
-    simulation.on("tick", () => {
+    const updateLayout = () => {
       link
         .attr("x1", d => (d.source as FlatNode).x!)
         .attr("y1", d => (d.source as FlatNode).y!)
@@ -301,45 +341,34 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
 
       node
         .attr("transform", d => `translate(${d.x},${d.y})`);
+    };
 
-      if (simulation.alpha() < stableAlphaThreshold) {
-        stableTickCountRef.current += 1;
-        if (stableTickCountRef.current >= stableTicksRequired) {
-          simulation.stop();
-          filteredNodes.forEach(d => {
-            if (typeof d.x === 'number' && typeof d.y === 'number') {
-              stablePositionsRef.current.set(d.id, { x: d.x, y: d.y });
-            }
-          });
-        }
-      } else {
-        stableTickCountRef.current = 0;
-      }
-    });
+    updateLayout();
 
     function dragstarted(event: any, d: FlatNode) {
-      if (!event.active) simulation.alphaTarget(0.3).restart();
       d.fx = d.x;
       d.fy = d.y;
     }
 
     function dragged(event: any, d: FlatNode) {
-      stableTickCountRef.current = 0;
       d.fx = event.x;
       d.fy = event.y;
+      d.x = event.x;
+      d.y = event.y;
+      updateLayout();
     }
 
     function dragended(event: any, d: FlatNode) {
-      if (!event.active) simulation.alphaTarget(0);
       stablePositionsRef.current.set(d.id, { x: event.x, y: event.y });
       d.fx = null;
       d.fy = null;
+      setLayoutPositions(prev => ({ ...prev, [d.id]: { x: event.x, y: event.y } }));
     }
 
     return () => {
-      simulation.stop();
+      g.remove();
     };
-  }, [rootNode, dimensions, highlightedPaths, onNodeClick, onExpandNode, visibleNodeFilter, expandedDirectories, loadingPaths]);
+  }, [rootNode, dimensions, highlightedPaths, onNodeClick, onExpandNode, visibleNodeFilter, expandedDirectories, loadingPaths, nodes, links, layoutPositions]);
 
   if (!rootNode) {
     return (
