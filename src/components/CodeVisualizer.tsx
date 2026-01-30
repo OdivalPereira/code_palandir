@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { ClusterData, FileSystemNode, FlatNode, Link } from '../types';
+import { ClusterData, FlatNode, Link } from '../types';
+import { useGraphStore } from '../stores/graphStore';
 
 const LAYOUT_DB_NAME = 'graphLayoutCache';
 const LAYOUT_STORE_NAME = 'positions';
@@ -65,22 +66,22 @@ const buildGraphHash = (nodes: FlatNode[], links: Link[]) => {
   return hashString(`${nodeParts}::${linkParts}`);
 };
 
-interface CodeVisualizerProps {
-  rootNode: FileSystemNode | null;
-  highlightedPaths: string[];
-  onNodeClick: (node: FlatNode) => void;
-  onExpandNode: (path: string) => void;
-  loadingPaths: Set<string>;
-}
-
-const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPaths, onNodeClick, onExpandNode, loadingPaths }) => {
+const CodeVisualizer: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const rootNode = useGraphStore((state) => state.rootNode);
+  const loadingPaths = useGraphStore((state) => state.loadingPaths);
+  const expandedDirectories = useGraphStore((state) => state.expandedDirectories);
+  const graphNodes = useGraphStore((state) => state.graphNodes);
+  const graphLinks = useGraphStore((state) => state.graphLinks);
+  const setSelectedNode = useGraphStore((state) => state.setSelectedNode);
+  const expandDirectory = useGraphStore((state) => state.expandDirectory);
+  const toggleDirectory = useGraphStore((state) => state.toggleDirectory);
+  const requestExpandNode = useGraphStore((state) => state.requestExpandNode);
   const [dimensions, setDimensions] = useState({ width: 1000, height: 800 });
   const [visibleNodeFilter, setVisibleNodeFilter] = useState<'all' | 'directories'>('all');
   const zoomTransformRef = useRef(d3.zoomIdentity);
-  const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set(['']));
   const stablePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const workerRef = useRef<Worker | null>(null);
   const layoutRequestIdRef = useRef(0);
@@ -141,91 +142,6 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
   // Adjust to change when file-level nodes become visible.
   const DIRECTORY_ONLY_ZOOM_THRESHOLD = 0.7;
 
-  // Flatten hierarchical data
-  const flattenData = (root: FileSystemNode, expanded: Set<string>): { nodes: FlatNode[], links: Link[] } => {
-    const nodes: FlatNode[] = [];
-    const links: Link[] = [];
-
-    const countDescendants = (node: FileSystemNode): number => {
-      if (typeof node.descendantCount === 'number') return node.descendantCount;
-      if (!node.children || node.children.length === 0) return 0;
-      return node.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
-    };
-
-    const addClusterNode = (node: FileSystemNode, depth: number) => {
-      const childCount = countDescendants(node);
-      const clusterId = `${node.path}::__cluster`;
-      const clusterNode: FlatNode = {
-        id: clusterId,
-        name: `${childCount} items`,
-        type: 'cluster',
-        path: clusterId,
-        group: depth + 1,
-        relevant: false,
-        data: {
-          parentPath: node.path,
-          childCount
-        } as ClusterData,
-        x: 0,
-        y: 0
-      };
-      nodes.push(clusterNode);
-      links.push({ source: node.path, target: clusterId });
-    };
-
-    const traverse = (node: FileSystemNode, parentId: string | null, depth: number) => {
-      const flatNode: FlatNode = {
-        id: node.path, // Use path as ID for uniqueness
-        name: node.name,
-        type: node.type,
-        path: node.path,
-        group: depth,
-        relevant: highlightedPaths.some(p => node.path.includes(p)),
-        data: node,
-        x: 0,
-        y: 0
-      };
-      nodes.push(flatNode);
-
-      if (parentId) {
-        links.push({ source: parentId, target: node.path });
-      }
-
-      const hasChildren = (node.children && node.children.length > 0) || node.hasChildren;
-      if (hasChildren) {
-        const isExpanded = expanded.has(node.path);
-        if (isExpanded && node.children && node.children.length > 0) {
-          node.children.forEach(child => traverse(child, node.path, depth + 1));
-        } else {
-          addClusterNode(node, depth);
-        }
-      }
-
-      // If the node has analyzed code structure (expanded file), add those as children
-      if (node.codeStructure) {
-        node.codeStructure.forEach((codeNode) => {
-          const codeId = `${node.path}#${codeNode.name}`;
-          const flatCodeNode: FlatNode = {
-            id: codeId,
-            name: codeNode.name,
-            type: codeNode.type,
-            path: codeId,
-            group: depth + 1,
-            relevant: false, // Could be refined
-            data: codeNode,
-            x: 0,
-            y: 0
-          };
-          nodes.push(flatCodeNode);
-          links.push({ source: node.path, target: codeId });
-        });
-      }
-    };
-
-    traverse(root, null, 1);
-    return { nodes, links };
-  };
-
   useEffect(() => {
     const handleResize = () => {
       if (wrapperRef.current) {
@@ -242,7 +158,6 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
 
   useEffect(() => {
     if (!rootNode) return;
-    setExpandedDirectories(new Set([rootNode.path]));
     stablePositionsRef.current = new Map();
     setLayoutPositions({});
     setHoveredNodeId(null);
@@ -276,22 +191,15 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
     };
   }, []);
 
-  const { nodes, links } = useMemo(() => {
-    if (!rootNode) {
-      return { nodes: [], links: [] };
-    }
-    return flattenData(rootNode, expandedDirectories);
-  }, [rootNode, expandedDirectories, highlightedPaths]);
-
   const { filteredNodes, filteredLinks } = useMemo(() => {
     const shouldShowDirectoriesOnly = visibleNodeFilter === 'directories';
     const nextNodes = shouldShowDirectoriesOnly
-      ? nodes.filter(node => node.type === 'directory' || node.type === 'cluster')
-      : nodes;
+      ? graphNodes.filter(node => node.type === 'directory' || node.type === 'cluster')
+      : graphNodes;
     const filteredNodeIds = new Set(nextNodes.map(node => node.id));
-    const nextLinks = links.filter(link => filteredNodeIds.has(link.source as string) && filteredNodeIds.has(link.target as string));
+    const nextLinks = graphLinks.filter(link => filteredNodeIds.has(link.source as string) && filteredNodeIds.has(link.target as string));
     return { filteredNodes: nextNodes, filteredLinks: nextLinks };
-  }, [links, nodes, visibleNodeFilter]);
+  }, [graphLinks, graphNodes, visibleNodeFilter]);
 
   const graphHash = useMemo(() => buildGraphHash(filteredNodes, filteredLinks), [filteredLinks, filteredNodes]);
 
@@ -396,29 +304,21 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
         event.stopPropagation();
         if (d.type === 'cluster') {
           const { parentPath } = d.data as ClusterData;
-          onExpandNode(parentPath);
-          setExpandedDirectories(prev => {
-            const next = new Set(prev);
-            next.add(parentPath);
-            return next;
-          });
+          requestExpandNode?.(parentPath);
+          expandDirectory(parentPath);
           return;
         }
-        onNodeClick(d);
+        setSelectedNode(d);
       })
       .on("dblclick", (event, d) => {
         if (d.type === 'directory') {
           event.stopPropagation();
-          setExpandedDirectories(prev => {
-            const next = new Set(prev);
-            if (next.has(d.path)) {
-              next.delete(d.path);
-            } else {
-              onExpandNode(d.path);
-              next.add(d.path);
-            }
-            return next;
-          });
+          if (expandedDirectories.has(d.path)) {
+            toggleDirectory(d.path);
+          } else {
+            requestExpandNode?.(d.path);
+            toggleDirectory(d.path);
+          }
         }
       })
       .call(d3.drag<SVGGElement, FlatNode>()
@@ -519,7 +419,7 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
     return () => {
       g.remove();
     };
-  }, [rootNode, dimensions, highlightedPaths, onNodeClick, onExpandNode, visibleNodeFilter, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading]);
+  }, [rootNode, dimensions, visibleNodeFilter, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading, requestExpandNode, expandDirectory, toggleDirectory, setSelectedNode]);
 
   const updateNodePositions = useCallback(() => {
     const { width, height } = dimensions;
@@ -774,11 +674,11 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
       clickTimeoutRef.current = window.setTimeout(() => {
         if (node.type === 'cluster') {
           const { parentPath } = node.data as ClusterData;
-          onExpandNode(parentPath);
-          setExpandedDirectories(prev => new Set(prev).add(parentPath));
+          requestExpandNode?.(parentPath);
+          expandDirectory(parentPath);
           return;
         }
-        onNodeClick(node);
+        setSelectedNode(node);
       }, 150);
     };
 
@@ -790,16 +690,12 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
       const rect = canvas.getBoundingClientRect();
       const node = resolveNodeAtPosition(event.clientX - rect.left, event.clientY - rect.top);
       if (node?.type === 'directory') {
-        setExpandedDirectories(prev => {
-          const next = new Set(prev);
-          if (next.has(node.path)) {
-            next.delete(node.path);
-          } else {
-            onExpandNode(node.path);
-            next.add(node.path);
-          }
-          return next;
-        });
+        if (expandedDirectories.has(node.path)) {
+          toggleDirectory(node.path);
+        } else {
+          requestExpandNode?.(node.path);
+          toggleDirectory(node.path);
+        }
       }
     };
 
@@ -818,7 +714,7 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
       canvas.removeEventListener("click", handleClick);
       canvas.removeEventListener("dblclick", handleDoubleClick);
     };
-  }, [hoveredNodeId, onExpandNode, onNodeClick, resolveNodeAtPosition, useCanvasRenderer]);
+  }, [expandedDirectories, hoveredNodeId, requestExpandNode, resolveNodeAtPosition, setSelectedNode, toggleDirectory, useCanvasRenderer, expandDirectory]);
 
   useEffect(() => {
     if (!useCanvasRenderer) return;
