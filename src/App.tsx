@@ -15,7 +15,9 @@ const App: React.FC = () => {
     const [isPromptOpen, setIsPromptOpen] = useState(false);
 
     const rootNode = useGraphStore((state) => state.rootNode);
-    const selectedNode = useGraphStore((state) => state.selectedNode);
+    const selectedNode = useGraphStore((state) => (
+        state.selectedNodeId ? (state.nodesById[state.selectedNodeId] ?? null) : null
+    ));
     const loadingPaths = useGraphStore((state) => state.loadingPaths);
     const setRootNode = useGraphStore((state) => state.setRootNode);
     const updateRootNode = useGraphStore((state) => state.updateRootNode);

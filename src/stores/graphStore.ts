@@ -5,16 +5,16 @@ type GraphState = {
   rootNode: FileSystemNode | null;
   highlightedPaths: string[];
   loadingPaths: Set<string>;
-  selectedNode: FlatNode | null;
+  selectedNodeId: string | null;
   expandedDirectories: Set<string>;
-  graphNodes: FlatNode[];
-  graphLinks: Link[];
+  nodesById: Record<string, FlatNode>;
+  linksById: Record<string, Link>;
   requestExpandNode: ((path: string) => void) | null;
   setRootNode: (rootNode: FileSystemNode | null) => void;
   updateRootNode: (updater: (current: FileSystemNode | null) => FileSystemNode | null) => void;
   setHighlightedPaths: (paths: string[]) => void;
   setLoadingPaths: (paths: Set<string>) => void;
-  setSelectedNode: (node: FlatNode | null) => void;
+  setSelectedNode: (nodeId: string | null) => void;
   expandDirectory: (path: string) => void;
   toggleDirectory: (path: string) => void;
   setRequestExpandNode: (handler: ((path: string) => void) | null) => void;
@@ -24,15 +24,26 @@ const buildGraphHashData = (
   rootNode: FileSystemNode | null,
   highlightedPaths: string[],
   expanded: Set<string>
-): { nodes: FlatNode[]; links: Link[] } => {
-  if (!rootNode) return { nodes: [], links: [] };
-  const nodes: FlatNode[] = [];
-  const links: Link[] = [];
+): { nodesById: Record<string, FlatNode>; linksById: Record<string, Link> } => {
+  if (!rootNode) return { nodesById: {}, linksById: {} };
+  const nodesById: Record<string, FlatNode> = {};
+  const linksById: Record<string, Link> = {};
 
   const countDescendants = (node: FileSystemNode): number => {
     if (typeof node.descendantCount === 'number') return node.descendantCount;
     if (!node.children || node.children.length === 0) return 0;
     return node.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
+  };
+
+  const linkIdFor = (source: string, target: string) => `${source}-->${target}`;
+
+  const registerNode = (node: FlatNode) => {
+    nodesById[node.id] = node;
+  };
+
+  const registerLink = (source: string, target: string) => {
+    const linkId = linkIdFor(source, target);
+    linksById[linkId] = { source, target };
   };
 
   const addClusterNode = (node: FileSystemNode, depth: number) => {
@@ -52,8 +63,8 @@ const buildGraphHashData = (
       x: 0,
       y: 0
     };
-    nodes.push(clusterNode);
-    links.push({ source: node.path, target: clusterId });
+    registerNode(clusterNode);
+    registerLink(node.path, clusterId);
   };
 
   const traverse = (node: FileSystemNode, parentId: string | null, depth: number) => {
@@ -68,10 +79,10 @@ const buildGraphHashData = (
       x: 0,
       y: 0
     };
-    nodes.push(flatNode);
+    registerNode(flatNode);
 
     if (parentId) {
-      links.push({ source: parentId, target: node.path });
+      registerLink(parentId, node.path);
     }
 
     const hasChildren = (node.children && node.children.length > 0) || node.hasChildren;
@@ -86,26 +97,26 @@ const buildGraphHashData = (
 
     if (node.codeStructure) {
       node.codeStructure.forEach((codeNode) => {
-        const codeId = `${node.path}#${codeNode.name}`;
-        const flatCodeNode: FlatNode = {
-          id: codeId,
-          name: codeNode.name,
+      const codeId = `${node.path}#${codeNode.name}`;
+      const flatCodeNode: FlatNode = {
+        id: codeId,
+        name: codeNode.name,
           type: codeNode.type,
           path: codeId,
           group: depth + 1,
           relevant: false,
-          data: codeNode,
-          x: 0,
-          y: 0
-        };
-        nodes.push(flatCodeNode);
-        links.push({ source: node.path, target: codeId });
-      });
-    }
+        data: codeNode,
+        x: 0,
+        y: 0
+      };
+      registerNode(flatCodeNode);
+      registerLink(node.path, codeId);
+    });
+  }
   };
 
   traverse(rootNode, null, 1);
-  return { nodes, links };
+  return { nodesById, linksById };
 };
 
 const computeGraph = (
@@ -118,20 +129,20 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   rootNode: null,
   highlightedPaths: [],
   loadingPaths: new Set(),
-  selectedNode: null,
+  selectedNodeId: null,
   expandedDirectories: new Set(),
-  graphNodes: [],
-  graphLinks: [],
+  nodesById: {},
+  linksById: {},
   requestExpandNode: null,
   setRootNode: (rootNode) => {
     const expandedDirectories = rootNode ? new Set([rootNode.path]) : new Set();
-    const { nodes, links } = computeGraph(rootNode, get().highlightedPaths, expandedDirectories);
+    const { nodesById, linksById } = computeGraph(rootNode, get().highlightedPaths, expandedDirectories);
     set({
       rootNode,
       expandedDirectories,
-      graphNodes: nodes,
-      graphLinks: links,
-      selectedNode: null
+      nodesById,
+      linksById,
+      selectedNodeId: null
     });
   },
   updateRootNode: (updater) => {
@@ -140,22 +151,22 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const expandedDirectories = nextRoot
         ? (state.expandedDirectories.size ? state.expandedDirectories : new Set([nextRoot.path]))
         : new Set();
-      const { nodes, links } = computeGraph(nextRoot, state.highlightedPaths, expandedDirectories);
+      const { nodesById, linksById } = computeGraph(nextRoot, state.highlightedPaths, expandedDirectories);
       return {
         rootNode: nextRoot,
         expandedDirectories,
-        graphNodes: nodes,
-        graphLinks: links
+        nodesById,
+        linksById
       };
     });
   },
   setHighlightedPaths: (paths) => {
     const { rootNode, expandedDirectories } = get();
-    const { nodes, links } = computeGraph(rootNode, paths, expandedDirectories);
-    set({ highlightedPaths: paths, graphNodes: nodes, graphLinks: links });
+    const { nodesById, linksById } = computeGraph(rootNode, paths, expandedDirectories);
+    set({ highlightedPaths: paths, nodesById, linksById });
   },
   setLoadingPaths: (paths) => set({ loadingPaths: paths }),
-  setSelectedNode: (node) => set({ selectedNode: node }),
+  setSelectedNode: (nodeId) => set({ selectedNodeId: nodeId }),
   expandDirectory: (path) => {
     set((state) => {
       if (state.expandedDirectories.has(path)) {
@@ -163,8 +174,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
       const expandedDirectories = new Set(state.expandedDirectories);
       expandedDirectories.add(path);
-      const { nodes, links } = computeGraph(state.rootNode, state.highlightedPaths, expandedDirectories);
-      return { expandedDirectories, graphNodes: nodes, graphLinks: links };
+      const { nodesById, linksById } = computeGraph(state.rootNode, state.highlightedPaths, expandedDirectories);
+      return { expandedDirectories, nodesById, linksById };
     });
   },
   toggleDirectory: (path) => {
@@ -175,8 +186,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       } else {
         expandedDirectories.add(path);
       }
-      const { nodes, links } = computeGraph(state.rootNode, state.highlightedPaths, expandedDirectories);
-      return { expandedDirectories, graphNodes: nodes, graphLinks: links };
+      const { nodesById, linksById } = computeGraph(state.rootNode, state.highlightedPaths, expandedDirectories);
+      return { expandedDirectories, nodesById, linksById };
     });
   },
   setRequestExpandNode: (handler) => set({ requestExpandNode: handler })
