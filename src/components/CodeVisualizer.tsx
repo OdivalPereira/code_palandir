@@ -22,6 +22,8 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
   const workerRef = useRef<Worker | null>(null);
   const layoutRequestIdRef = useRef(0);
   const [layoutPositions, setLayoutPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const pendingLayoutRef = useRef<{ requestId: number; positions: Record<string, { x: number; y: number }> } | null>(null);
+  const layoutFrameRef = useRef<number | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const renderCanvasRef = useRef<() => void>(() => {});
   const dragStateRef = useRef<{ nodeId: string | null; isDragging: boolean }>({ nodeId: null, isDragging: false });
@@ -187,11 +189,23 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
 
     worker.onmessage = (event: MessageEvent<{ requestId: number; positions: Record<string, { x: number; y: number }> }>) => {
       if (event.data.requestId !== layoutRequestIdRef.current) return;
-      setLayoutPositions(event.data.positions);
-      stablePositionsRef.current = new Map(Object.entries(event.data.positions));
+      pendingLayoutRef.current = event.data;
+      if (layoutFrameRef.current !== null) return;
+      layoutFrameRef.current = window.requestAnimationFrame(() => {
+        layoutFrameRef.current = null;
+        const pending = pendingLayoutRef.current;
+        if (!pending) return;
+        pendingLayoutRef.current = null;
+        setLayoutPositions(pending.positions);
+        stablePositionsRef.current = new Map(Object.entries(pending.positions));
+      });
     };
 
     return () => {
+      if (layoutFrameRef.current !== null) {
+        window.cancelAnimationFrame(layoutFrameRef.current);
+        layoutFrameRef.current = null;
+      }
       worker.terminate();
       workerRef.current = null;
     };
