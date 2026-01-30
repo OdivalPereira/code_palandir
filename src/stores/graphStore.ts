@@ -1,7 +1,7 @@
 import { create } from './zustand';
 import { ClusterData, FileSystemNode, FlatNode, Link } from '../types';
 
-type GraphState = {
+export type GraphState = {
   rootNode: FileSystemNode | null;
   highlightedPaths: string[];
   loadingPaths: Set<string>;
