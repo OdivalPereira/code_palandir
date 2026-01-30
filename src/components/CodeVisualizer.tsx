@@ -15,6 +15,8 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
   const [visibleNodeFilter, setVisibleNodeFilter] = useState<'all' | 'directories'>('all');
   const zoomTransformRef = useRef(d3.zoomIdentity);
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set(['']));
+  const stablePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const stableTickCountRef = useRef(0);
 
   const isAggregateNode = (node: FlatNode) => node.type === 'directory' || node.type === 'cluster';
 
@@ -122,6 +124,7 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
   useEffect(() => {
     if (!rootNode) return;
     setExpandedDirectories(new Set([rootNode.path]));
+    stablePositionsRef.current = new Map();
   }, [rootNode]);
 
   useEffect(() => {
@@ -158,6 +161,18 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
       .force("charge", d3.forceManyBody().strength(-300))
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collide", d3.forceCollide().radius(40));
+    const stableAlphaThreshold = 0.03;
+    const stableTicksRequired = 20;
+    stableTickCountRef.current = 0;
+
+    filteredNodes.forEach(node => {
+      const savedPosition = stablePositionsRef.current.get(node.id);
+      if (savedPosition) {
+        node.x = savedPosition.x;
+        node.y = savedPosition.y;
+      }
+    });
+    simulation.alpha(1).restart();
 
     // Links
     const link = g.append("g")
@@ -254,6 +269,20 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
 
       node
         .attr("transform", d => `translate(${d.x},${d.y})`);
+
+      if (simulation.alpha() < stableAlphaThreshold) {
+        stableTickCountRef.current += 1;
+        if (stableTickCountRef.current >= stableTicksRequired) {
+          simulation.stop();
+          filteredNodes.forEach(d => {
+            if (typeof d.x === 'number' && typeof d.y === 'number') {
+              stablePositionsRef.current.set(d.id, { x: d.x, y: d.y });
+            }
+          });
+        }
+      } else {
+        stableTickCountRef.current = 0;
+      }
     });
 
     function dragstarted(event: any, d: FlatNode) {
@@ -263,16 +292,21 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
     }
 
     function dragged(event: any, d: FlatNode) {
+      stableTickCountRef.current = 0;
       d.fx = event.x;
       d.fy = event.y;
     }
 
     function dragended(event: any, d: FlatNode) {
       if (!event.active) simulation.alphaTarget(0);
+      stablePositionsRef.current.set(d.id, { x: event.x, y: event.y });
       d.fx = null;
       d.fy = null;
     }
 
+    return () => {
+      simulation.stop();
+    };
   }, [rootNode, dimensions, highlightedPaths, onNodeClick, visibleNodeFilter, expandedDirectories]);
 
   if (!rootNode) {
