@@ -15,50 +15,113 @@ const App: React.FC = () => {
     const [githubUrl, setGithubUrl] = useState('');
     const [isPromptOpen, setIsPromptOpen] = useState(false);
     const [selectedNode, setSelectedNode] = useState<FlatNode | null>(null);
+    const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const childrenIndexRef = useRef<Map<string, { path: string; name: string; type: 'directory' | 'file' }[]>>(new Map());
+    const descendantCountRef = useRef<Map<string, number>>(new Map());
+    const localFileHandlesRef = useRef<Map<string, File>>(new Map());
+    const allFilePathsRef = useRef<string[]>([]);
 
     // --- File Loading Logic ---
 
+    const buildChildrenIndex = (paths: string[]) => {
+        const index = new Map<string, Map<string, { path: string; name: string; type: 'directory' | 'file' }>>();
+
+        const addChild = (parentPath: string, entry: { path: string; name: string; type: 'directory' | 'file' }) => {
+            const bucket = index.get(parentPath) ?? new Map();
+            bucket.set(entry.path, entry);
+            index.set(parentPath, bucket);
+        };
+
+        paths.forEach((path) => {
+            const parts = path.split('/');
+            for (let i = 0; i < parts.length; i++) {
+                const name = parts[i];
+                const isFile = i === parts.length - 1;
+                const entryPath = parts.slice(0, i + 1).join('/');
+                const parentPath = i === 0 ? '' : parts.slice(0, i).join('/');
+                addChild(parentPath, { path: entryPath, name, type: isFile ? 'file' : 'directory' });
+            }
+        });
+
+        const normalizedIndex = new Map<string, { path: string; name: string; type: 'directory' | 'file' }[]>();
+        index.forEach((bucket, parentPath) => {
+            normalizedIndex.set(parentPath, Array.from(bucket.values()));
+        });
+        return normalizedIndex;
+    };
+
+    const computeDescendantCounts = (index: Map<string, { path: string; name: string; type: 'directory' | 'file' }[]>) => {
+        const cache = new Map<string, number>();
+        const countDescendants = (path: string): number => {
+            if (cache.has(path)) {
+                return cache.get(path)!;
+            }
+            const children = index.get(path) ?? [];
+            let total = 0;
+            for (const child of children) {
+                total += 1;
+                if (child.type === 'directory') {
+                    total += countDescendants(child.path);
+                }
+            }
+            cache.set(path, total);
+            return total;
+        };
+        for (const key of index.keys()) {
+            countDescendants(key);
+        }
+        return cache;
+    };
+
+    const buildChildNodes = (parentPath: string) => {
+        const entries = (childrenIndexRef.current.get(parentPath) ?? []).slice();
+        entries.sort((a, b) => {
+            if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+            return a.name.localeCompare(b.name);
+        });
+        return entries.map((entry) => ({
+            id: entry.path,
+            name: entry.name,
+            type: entry.type,
+            path: entry.path,
+            hasChildren: entry.type === 'directory' ? (childrenIndexRef.current.get(entry.path)?.length ?? 0) > 0 : false,
+            descendantCount: descendantCountRef.current.get(entry.path) ?? 0,
+            children: undefined
+        }));
+    };
+
     const processFiles = async (files: FileList) => {
         setStatus(AppStatus.LOADING_FILES);
-        const newFileMap = new Map<string, string>();
-        const root: FileSystemNode = { id: 'root', name: 'Project Root', type: 'directory', path: '', children: [] };
+        const newFileHandles = new Map<string, File>();
+        const allPaths: string[] = [];
 
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            // Skip hidden files/folders roughly
             if (file.webkitRelativePath.includes('/.') || file.name.startsWith('.')) continue;
-
-            const text = await file.text();
-            newFileMap.set(file.webkitRelativePath, text);
-
-            // Build tree
-            const parts = file.webkitRelativePath.split('/');
-            let current = root;
-
-            for (let j = 0; j < parts.length; j++) {
-                const part = parts[j];
-                const isFile = j === parts.length - 1;
-                const path = parts.slice(0, j + 1).join('/');
-
-                let child = current.children?.find(c => c.name === part);
-                if (!child) {
-                    child = {
-                        id: path,
-                        name: part,
-                        type: isFile ? 'file' : 'directory',
-                        path: path,
-                        children: isFile ? undefined : []
-                    };
-                    current.children = current.children || [];
-                    current.children.push(child);
-                }
-                current = child;
-            }
+            newFileHandles.set(file.webkitRelativePath, file);
+            allPaths.push(file.webkitRelativePath);
         }
 
-        setFileMap(newFileMap);
+        const childrenIndex = buildChildrenIndex(allPaths);
+        childrenIndexRef.current = childrenIndex;
+        descendantCountRef.current = computeDescendantCounts(childrenIndex);
+        localFileHandlesRef.current = newFileHandles;
+        allFilePathsRef.current = allPaths;
+
+        const rootChildren = buildChildNodes('');
+        const root: FileSystemNode = {
+            id: 'root',
+            name: 'Project Root',
+            type: 'directory',
+            path: '',
+            children: rootChildren,
+            hasChildren: rootChildren.length > 0,
+            descendantCount: descendantCountRef.current.get('') ?? rootChildren.length
+        };
+
+        setFileMap(new Map());
         setRootNode(root);
         setStatus(AppStatus.IDLE);
     };
@@ -84,43 +147,26 @@ const App: React.FC = () => {
             if (!treeRes.ok) throw new Error("Failed to fetch repo tree. Check if main branch exists or rate limit.");
             const treeData = await treeRes.json();
 
-            const newFileMap = new Map<string, string>();
-            const root: FileSystemNode = { id: 'root', name: repo, type: 'directory', path: '', children: [] };
+            const paths = treeData.tree.filter((item: { type: string }) => item.type === 'blob').map((item: { path: string }) => item.path);
+            const childrenIndex = buildChildrenIndex(paths);
+            childrenIndexRef.current = childrenIndex;
+            descendantCountRef.current = computeDescendantCounts(childrenIndex);
+            allFilePathsRef.current = paths;
+            localFileHandlesRef.current = new Map();
 
-            // We won't fetch ALL content immediately to avoid rate limits, 
-            // but we build the tree. Content will be fetched on demand or for small repos.
-            // For this demo, let's just build the tree structure.
-
-            for (const item of treeData.tree) {
-                if (item.type === 'blob') { // File
-                    // Build tree logic similar to local
-                    const parts = item.path.split('/');
-                    let current = root;
-                    for (let j = 0; j < parts.length; j++) {
-                        const part = parts[j];
-                        const isFile = j === parts.length - 1;
-                        const path = item.path.split('/').slice(0, j + 1).join('/'); // Reconstruct path for consistency
-
-                        let child = current.children?.find(c => c.name === part);
-                        if (!child) {
-                            child = {
-                                id: path,
-                                name: part,
-                                type: isFile ? 'file' : 'directory',
-                                path: path,
-                                children: isFile ? undefined : []
-                            };
-                            current.children = current.children || [];
-                            current.children.push(child);
-                        }
-                        current = child;
-                    }
-                }
-            }
+            const rootChildren = buildChildNodes('');
+            const root: FileSystemNode = {
+                id: 'root',
+                name: repo,
+                type: 'directory',
+                path: '',
+                children: rootChildren,
+                hasChildren: rootChildren.length > 0,
+                descendantCount: descendantCountRef.current.get('') ?? rootChildren.length
+            };
 
             setRootNode(root);
-            // Note: fileMap is empty for GitHub initially. We need to fetch on click.
-            setFileMap(newFileMap);
+            setFileMap(new Map());
             setStatus(AppStatus.IDLE);
 
         } catch (error) {
@@ -136,14 +182,7 @@ const App: React.FC = () => {
         if (!searchQuery.trim() || !rootNode) return;
         setStatus(AppStatus.ANALYZING_QUERY);
 
-        // Flatten paths for AI
-        const getAllPaths = (node: FileSystemNode): string[] => {
-            let paths: string[] = [];
-            if (node.type === 'file') paths.push(node.path);
-            if (node.children) node.children.forEach(c => paths = paths.concat(getAllPaths(c)));
-            return paths;
-        };
-        const allPaths = getAllPaths(rootNode);
+        const allPaths = allFilePathsRef.current.length > 0 ? allFilePathsRef.current : [];
 
         try {
             const relevantPaths = await findRelevantFiles(searchQuery, allPaths);
@@ -164,29 +203,43 @@ const App: React.FC = () => {
         }
     };
 
+    const ensureFileContent = async (path: string) => {
+        let content = fileMap.get(path);
+
+        if (!content && localFileHandlesRef.current.size > 0) {
+            const localFile = localFileHandlesRef.current.get(path);
+            if (localFile) {
+                content = await localFile.text();
+                setFileMap(prev => new Map(prev).set(path, content!));
+            }
+        }
+
+        if (!content && githubUrl) {
+            const match = githubUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+            if (match) {
+                const [_, owner, repo] = match;
+                try {
+                    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`);
+                    const data = await res.json();
+                    if (data.content) {
+                        content = atob(data.content);
+                        setFileMap(prev => new Map(prev).set(path, content!));
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch file content", e);
+                }
+            }
+        }
+
+        return content;
+    };
+
     const handleNodeClick = async (node: FlatNode) => {
         setSelectedNode(node);
 
         // If it's a file and we haven't analyzed it yet, let's try to analyze it
         if (node.type === 'file') {
-            // Check if we have content
-            let content = fileMap.get(node.path);
-
-            // If GitHub import, we might need to fetch content now
-            if (!content && githubUrl) {
-                const match = githubUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
-                if (match) {
-                    const [_, owner, repo] = match;
-                    try {
-                        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${node.path}`);
-                        const data = await res.json();
-                        if (data.content) {
-                            content = atob(data.content); // Decode Base64
-                            setFileMap(prev => new Map(prev).set(node.path, content!));
-                        }
-                    } catch (e) { console.error("Failed to fetch file content", e); }
-                }
-            }
+            const content = await ensureFileContent(node.path);
 
             if (content) {
                 // Analyze structure if not present
@@ -214,6 +267,37 @@ const App: React.FC = () => {
                 if (rootNode) updateTree(rootNode);
             }
         }
+    };
+
+    const handleExpandNode = (path: string) => {
+        if (!rootNode) return;
+        if (!childrenIndexRef.current.has(path)) return;
+        if (loadingPaths.has(path)) return;
+
+        const updateTree = (node: FileSystemNode): FileSystemNode => {
+            if (node.path === path) {
+                if (node.children && node.children.length > 0) {
+                    return node;
+                }
+                const nextChildren = buildChildNodes(path);
+                return { ...node, children: nextChildren };
+            }
+            if (!node.children) return node;
+            return {
+                ...node,
+                children: node.children.map(child => updateTree(child))
+            };
+        };
+
+        setLoadingPaths(prev => new Set(prev).add(path));
+        setRootNode(prev => (prev ? updateTree(prev) : prev));
+        window.setTimeout(() => {
+            setLoadingPaths(prev => {
+                const next = new Set(prev);
+                next.delete(path);
+                return next;
+            });
+        }, 250);
     };
 
     const addToPrompt = (title: string, content: string) => {
@@ -316,6 +400,8 @@ const App: React.FC = () => {
                             rootNode={rootNode}
                             highlightedPaths={highlightedPaths}
                             onNodeClick={handleNodeClick}
+                            onExpandNode={handleExpandNode}
+                            loadingPaths={loadingPaths}
                         />
                     )}
 
@@ -337,8 +423,8 @@ const App: React.FC = () => {
                                     </p>
                                     <div className="flex gap-2">
                                         <button
-                                            onClick={() => {
-                                                const content = fileMap.get(selectedNode.path);
+                                            onClick={async () => {
+                                                const content = await ensureFileContent(selectedNode.path);
                                                 if (content) addToPrompt(`File: ${selectedNode.name}`, content);
                                             }}
                                             className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded flex items-center justify-center gap-1"

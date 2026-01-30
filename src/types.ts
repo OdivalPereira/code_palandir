@@ -5,6 +5,8 @@ export interface FileSystemNode {
   path: string;
   content?: string;
   children?: FileSystemNode[];
+  hasChildren?: boolean;
+  descendantCount?: number;
   // Extended structure from analysis
   codeStructure?: CodeNode[];
 }

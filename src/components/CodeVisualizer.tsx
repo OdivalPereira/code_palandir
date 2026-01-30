@@ -6,9 +6,11 @@ interface CodeVisualizerProps {
   rootNode: FileSystemNode | null;
   highlightedPaths: string[];
   onNodeClick: (node: FlatNode) => void;
+  onExpandNode: (path: string) => void;
+  loadingPaths: Set<string>;
 }
 
-const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPaths, onNodeClick }) => {
+const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPaths, onNodeClick, onExpandNode, loadingPaths }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 1000, height: 800 });
@@ -30,6 +32,7 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
     const links: Link[] = [];
 
     const countDescendants = (node: FileSystemNode): number => {
+      if (typeof node.descendantCount === 'number') return node.descendantCount;
       if (!node.children || node.children.length === 0) return 0;
       return node.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
     };
@@ -73,9 +76,10 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
         links.push({ source: parentId, target: node.path });
       }
 
-      if (node.children && node.children.length > 0) {
+      const hasChildren = (node.children && node.children.length > 0) || node.hasChildren;
+      if (hasChildren) {
         const isExpanded = expanded.has(node.path);
-        if (isExpanded) {
+        if (isExpanded && node.children && node.children.length > 0) {
           node.children.forEach(child => traverse(child, node.path, depth + 1));
         } else {
           addClusterNode(node, depth);
@@ -184,6 +188,14 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
       .attr("stroke-width", d => isAggregateNode(d.target as FlatNode) ? 2 : 1);
 
     // Nodes
+    const isNodeLoading = (d: FlatNode) => {
+      if (d.type === 'cluster') {
+        const { parentPath } = d.data as ClusterData;
+        return loadingPaths.has(parentPath);
+      }
+      return loadingPaths.has(d.path);
+    };
+
     const node = g.append("g")
       .selectAll("g")
       .data(filteredNodes)
@@ -193,6 +205,7 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
         event.stopPropagation();
         if (d.type === 'cluster') {
           const { parentPath } = d.data as ClusterData;
+          onExpandNode(parentPath);
           setExpandedDirectories(prev => {
             const next = new Set(prev);
             next.add(parentPath);
@@ -210,6 +223,7 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
             if (next.has(d.path)) {
               next.delete(d.path);
             } else {
+              onExpandNode(d.path);
               next.add(d.path);
             }
             return next;
@@ -248,6 +262,24 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
       })
       .attr("stroke-width", d => d.type === 'cluster' ? 2.5 : 2)
       .attr("stroke-dasharray", d => d.type === 'cluster' ? "4 3" : "0");
+
+    node.filter(d => isNodeLoading(d))
+      .append("circle")
+      .attr("r", d => (d.type === 'cluster' || d.type === 'directory') ? 22 : 16)
+      .attr("fill", "none")
+      .attr("stroke", "#38bdf8")
+      .attr("stroke-width", 2)
+      .attr("class", "loading-ring");
+
+    node.filter(d => isNodeLoading(d))
+      .append("text")
+      .text("Carregando...")
+      .attr("x", 0)
+      .attr("y", d => d.type === 'directory' ? 40 : 34)
+      .attr("text-anchor", "middle")
+      .attr("fill", "#38bdf8")
+      .attr("font-size", "10px")
+      .style("pointer-events", "none");
 
     // Labels
     node.append("text")
@@ -307,7 +339,7 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({ rootNode, highlightedPa
     return () => {
       simulation.stop();
     };
-  }, [rootNode, dimensions, highlightedPaths, onNodeClick, visibleNodeFilter, expandedDirectories]);
+  }, [rootNode, dimensions, highlightedPaths, onNodeClick, onExpandNode, visibleNodeFilter, expandedDirectories, loadingPaths]);
 
   if (!rootNode) {
     return (
