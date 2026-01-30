@@ -73,8 +73,8 @@ const CodeVisualizer: React.FC = () => {
   const rootNode = useGraphStore((state) => state.rootNode);
   const loadingPaths = useGraphStore((state) => state.loadingPaths);
   const expandedDirectories = useGraphStore((state) => state.expandedDirectories);
-  const graphNodes = useGraphStore((state) => state.graphNodes);
-  const graphLinks = useGraphStore((state) => state.graphLinks);
+  const graphNodes = useGraphStore((state) => Object.values(state.nodesById));
+  const graphLinks = useGraphStore((state) => Object.values(state.linksById));
   const setSelectedNode = useGraphStore((state) => state.setSelectedNode);
   const expandDirectory = useGraphStore((state) => state.expandDirectory);
   const toggleDirectory = useGraphStore((state) => state.toggleDirectory);
@@ -308,7 +308,7 @@ const CodeVisualizer: React.FC = () => {
           expandDirectory(parentPath);
           return;
         }
-        setSelectedNode(d);
+        setSelectedNode(d.id);
       })
       .on("dblclick", (event, d) => {
         if (d.type === 'directory') {
@@ -678,7 +678,7 @@ const CodeVisualizer: React.FC = () => {
           expandDirectory(parentPath);
           return;
         }
-        setSelectedNode(node);
+        setSelectedNode(node.id);
       }, 150);
     };
 
