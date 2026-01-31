@@ -87,14 +87,13 @@ export const findRelevantFiles = async (
 
   // Batch paths if too many, but for now assume it fits
   const normalizedPaths = [...filePaths].sort();
-  const repoHash = await hashContent(normalizedPaths.join('\n'));
-  const cacheKey = await hashContent(`relevance:${query}:${repoHash}`);
-  const cached = await getCachedRelevantFiles(cacheKey, repoHash);
+  const pathsStr = normalizedPaths.join('\n');
+  const contentHash = await hashContent(pathsStr);
+  const cacheKey = await hashContent(`${contentHash}:${query}`);
+  const cached = await getCachedRelevantFiles(cacheKey, contentHash);
   if (cached) {
     return cached;
   }
-
-  const pathsStr = normalizedPaths.join('\n');
 
   try {
     const response = await ai.models.generateContent({
@@ -123,10 +122,10 @@ export const findRelevantFiles = async (
     if (response.text) {
       const result = JSON.parse(response.text);
       const relevantFiles = result.relevantFiles || [];
-      await setCachedRelevantFiles(cacheKey, relevantFiles, repoHash, options?.ttlMs);
+      await setCachedRelevantFiles(cacheKey, relevantFiles, contentHash, options?.ttlMs);
       return relevantFiles;
     }
-    await setCachedRelevantFiles(cacheKey, [], repoHash, options?.ttlMs);
+    await setCachedRelevantFiles(cacheKey, [], contentHash, options?.ttlMs);
     return [];
   } catch (error) {
     console.error("Relevance search failed", error);
