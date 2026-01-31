@@ -3,6 +3,7 @@ import CodeVisualizer from './components/CodeVisualizer';
 import PromptBuilder from './components/PromptBuilder';
 import { analyzeFileContent, findRelevantFiles } from './geminiService';
 import { getCachedFileContent, hashContent, setCachedFileContent } from './cacheRepository';
+import { fetchGitHubJson } from './githubClient';
 import { FileSystemNode, PromptItem, AppStatus, CodeNode } from './types';
 import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus } from 'lucide-react';
 import { useGraphStore } from './stores/graphStore';
@@ -161,9 +162,9 @@ const App: React.FC = () => {
             const [_, owner, repo] = match;
 
             // Fetch tree (recursive)
-            const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`);
-            if (!treeRes.ok) throw new Error("Failed to fetch repo tree. Check if main branch exists or rate limit.");
-            const treeData = await treeRes.json();
+            const treeData = await fetchGitHubJson<{ tree: { type: string; path: string }[] }>(
+                `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`
+            );
 
             const paths = treeData.tree.filter((item: { type: string }) => item.type === 'blob').map((item: { path: string }) => item.path);
             const childrenIndex = buildChildrenIndex(paths);
@@ -245,8 +246,9 @@ const App: React.FC = () => {
                         return content;
                     }
 
-                    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`);
-                    const data = await res.json();
+                    const data = await fetchGitHubJson<{ content?: string }>(
+                        `https://api.github.com/repos/${owner}/${repo}/contents/${path}`
+                    );
                     if (data.content) {
                         content = atob(data.content);
                         await setCachedFileContent(cacheKey, content);
