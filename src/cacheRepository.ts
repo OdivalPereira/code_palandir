@@ -23,10 +23,18 @@ type CachedFileContent = {
 };
 
 const DB_NAME = 'code-mind-ai-cache';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const ANALYSIS_STORE = 'analysis';
 const RELEVANCE_STORE = 'relevance';
 const FILE_CONTENT_STORE = 'file-content';
+const HTTP_CACHE_STORE = 'http-cache';
+
+type CachedHttpResponse = {
+  key: string;
+  etag: string | null;
+  data: unknown;
+  createdAt: number;
+};
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -46,6 +54,9 @@ const openDb = (): Promise<IDBDatabase> => {
       }
       if (!db.objectStoreNames.contains(FILE_CONTENT_STORE)) {
         db.createObjectStore(FILE_CONTENT_STORE, { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains(HTTP_CACHE_STORE)) {
+        db.createObjectStore(HTTP_CACHE_STORE, { keyPath: 'key' });
       }
     };
 
@@ -233,4 +244,40 @@ export const setCachedFileContent = async (
   });
 
   return contentHash;
+};
+
+export const getCachedHttpResponse = async (
+  key: string,
+): Promise<CachedHttpResponse | null> => {
+  const db = await openDb();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(HTTP_CACHE_STORE, 'readonly');
+    const store = transaction.objectStore(HTTP_CACHE_STORE);
+    const request = store.get(key);
+
+    request.onsuccess = () => {
+      const result = request.result as CachedHttpResponse | undefined;
+      resolve(result ?? null);
+    };
+
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const setCachedHttpResponse = async (
+  key: string,
+  data: unknown,
+  etag: string | null,
+): Promise<void> => {
+  const now = Date.now();
+
+  await withStore<void>(HTTP_CACHE_STORE, 'readwrite', (store) => {
+    store.put({
+      key,
+      etag,
+      data,
+      createdAt: now,
+    });
+  });
 };
