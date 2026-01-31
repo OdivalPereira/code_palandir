@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import CodeVisualizer from './components/CodeVisualizer';
 import PromptBuilder from './components/PromptBuilder';
 import { analyzeFileContent, findRelevantFiles } from './geminiService';
+import { getCachedFileContent, hashContent, setCachedFileContent } from './cacheRepository';
 import { FileSystemNode, PromptItem, AppStatus, CodeNode } from './types';
 import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus } from 'lucide-react';
 import { useGraphStore } from './stores/graphStore';
@@ -236,10 +237,19 @@ const App: React.FC = () => {
             if (match) {
                 const [_, owner, repo] = match;
                 try {
+                    const cacheKey = await hashContent(`file-content:${owner}/${repo}:${path}`);
+                    const cached = await getCachedFileContent(cacheKey);
+                    if (cached?.content) {
+                        content = cached.content;
+                        setFileMap(prev => new Map(prev).set(path, content!));
+                        return content;
+                    }
+
                     const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`);
                     const data = await res.json();
                     if (data.content) {
                         content = atob(data.content);
+                        await setCachedFileContent(cacheKey, content);
                         setFileMap(prev => new Map(prev).set(path, content!));
                     }
                 } catch (e) {
