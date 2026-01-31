@@ -15,10 +15,18 @@ type CachedRelevance = {
   repoHash: string;
 };
 
+type CachedFileContent = {
+  key: string;
+  content: string;
+  contentHash: string;
+  createdAt: number;
+};
+
 const DB_NAME = 'code-mind-ai-cache';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const ANALYSIS_STORE = 'analysis';
 const RELEVANCE_STORE = 'relevance';
+const FILE_CONTENT_STORE = 'file-content';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -35,6 +43,9 @@ const openDb = (): Promise<IDBDatabase> => {
       }
       if (!db.objectStoreNames.contains(RELEVANCE_STORE)) {
         db.createObjectStore(RELEVANCE_STORE, { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains(FILE_CONTENT_STORE)) {
+        db.createObjectStore(FILE_CONTENT_STORE, { keyPath: 'key' });
       }
     };
 
@@ -184,4 +195,42 @@ export const setCachedRelevantFiles = async (
       repoHash,
     });
   });
+};
+
+export const getCachedFileContent = async (
+  key: string,
+): Promise<CachedFileContent | null> => {
+  const db = await openDb();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(FILE_CONTENT_STORE, 'readonly');
+    const store = transaction.objectStore(FILE_CONTENT_STORE);
+    const request = store.get(key);
+
+    request.onsuccess = () => {
+      const result = request.result as CachedFileContent | undefined;
+      resolve(result ?? null);
+    };
+
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const setCachedFileContent = async (
+  key: string,
+  content: string,
+): Promise<string> => {
+  const contentHash = await hashContent(content);
+  const now = Date.now();
+
+  await withStore<void>(FILE_CONTENT_STORE, 'readwrite', (store) => {
+    store.put({
+      key,
+      content,
+      contentHash,
+      createdAt: now,
+    });
+  });
+
+  return contentHash;
 };
