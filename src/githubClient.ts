@@ -1,13 +1,19 @@
+import { getSessionAccessToken } from './authClient';
 import { getCachedHttpResponse, setCachedHttpResponse } from './cacheRepository';
 
 const GITHUB_ACCEPT_HEADER = 'application/vnd.github+json';
 
 export const fetchGitHubJson = async <T>(url: string): Promise<T> => {
   const cachedResponse = await getCachedHttpResponse(url);
+  const accessToken = await getSessionAccessToken();
 
   const headers: HeadersInit = {
     Accept: GITHUB_ACCEPT_HEADER,
   };
+
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
 
   if (cachedResponse?.etag) {
     headers['If-None-Match'] = cachedResponse.etag;
