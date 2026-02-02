@@ -4,9 +4,11 @@ import fs from 'fs/promises';
 import path from 'path';
 import { URL, fileURLToPath } from 'url';
 import { WebSocketServer } from 'ws';
+import { Type } from '@google/genai';
 import {
   AI_REQUEST_SCHEMA,
   createAiClient,
+  extractUsageTokens,
   generateJsonResponse,
   normalizeAiProvider,
 } from './ai-client.js';
@@ -44,6 +46,97 @@ Requisitos:
 - Produza um diagrama lógico em Mermaid usando flowchart TD.
 - Responda em pt-br.
 - Retorne apenas JSON válido conforme o schema, sem markdown ou explicações extras.`;
+
+const buildIntentPrompt = ({ uiSchema, existingInfrastructure }) => `You are a backend architect analyzing a React frontend component.
+
+COMPONENT: ${uiSchema.component}
+FIELDS: ${JSON.stringify(uiSchema.fields, null, 2)}
+ACTIONS: ${JSON.stringify(uiSchema.actions, null, 2)}
+DATA FLOW: ${JSON.stringify(uiSchema.dataFlow, null, 2)}
+HOOKS USED: ${(uiSchema.hooks ?? []).join(', ')}
+EXISTING INFRASTRUCTURE: ${existingInfrastructure.length > 0 ? existingInfrastructure.join(', ') : 'None detected'}
+
+Based on this frontend component, determine what backend infrastructure is needed to make it fully functional:
+
+1. **Database Tables**: What tables are needed? Include columns with types.
+2. **API Endpoints**: What endpoints are required? Include HTTP methods and paths.
+3. **Services**: What external services are needed? (auth, email, storage, etc.)
+
+Be practical and suggest ONLY what's necessary for this specific component to function.
+Use common conventions (e.g., REST paths, PostgreSQL types for Supabase).`;
+
+const getStackInstructions = (stack) => {
+  const instructions = {
+    supabase: `Use Supabase patterns:
+- Database: PostgreSQL with RLS policies
+- Auth: Supabase Auth with email/password
+- API: Supabase Edge Functions (Deno) or direct client calls
+- Storage: Supabase Storage for files`,
+    firebase: `Use Firebase patterns:
+- Database: Firestore with security rules
+- Auth: Firebase Auth with email/password
+- API: Cloud Functions (Node.js)
+- Storage: Firebase Storage for files`,
+    express: `Use Express.js patterns:
+- Database: PostgreSQL with Prisma ORM
+- Auth: JWT with bcrypt
+- API: Express routes with middleware
+- Validation: Zod schemas`,
+    nextjs: `Use Next.js patterns:
+- Database: Prisma with PostgreSQL
+- Auth: NextAuth.js or Clerk
+- API: API Routes or Server Actions
+- Validation: Zod schemas`,
+  };
+
+  return instructions[stack] || instructions.supabase;
+};
+
+const formatFields = (fields) => {
+  if (!Array.isArray(fields) || fields.length === 0) return '- No form fields detected';
+  return fields
+    .map(
+      (field) =>
+        `- **${field.name}** (${field.type})${field.required ? ' [required]' : ''}${field.validation ? ` [${field.validation}]` : ''}`,
+    )
+    .join('\n');
+};
+
+const formatActions = (actions) => {
+  if (!Array.isArray(actions) || actions.length === 0) return '- No actions detected';
+  return actions
+    .map(
+      (action) =>
+        `- **${action.type}**: ${action.handler}${action.label ? ` ("${action.label}")` : ''}${action.apiCall ? ` → ${action.apiCall}` : ''}`,
+    )
+    .join('\n');
+};
+
+const formatTables = (tables) => {
+  if (!Array.isArray(tables) || tables.length === 0) return '- No tables required';
+  return tables
+    .map((table) => {
+      const cols = Array.isArray(table.columns)
+        ? table.columns.map((col) => `${col.name}: ${col.type}`).join(', ')
+        : '';
+      return `- **${table.name}**: ${cols}`;
+    })
+    .join('\n');
+};
+
+const formatEndpoints = (endpoints) => {
+  if (!Array.isArray(endpoints) || endpoints.length === 0) return '- No endpoints required';
+  return endpoints
+    .map((endpoint) => `- \`${endpoint.method} ${endpoint.path}\`: ${endpoint.description || ''}`)
+    .join('\n');
+};
+
+const formatServices = (services) => {
+  if (!Array.isArray(services) || services.length === 0) return '- No additional services required';
+  return services
+    .map((service) => `- **${service.name}** (${service.type}): ${service.description}`)
+    .join('\n');
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -746,6 +839,260 @@ const handleAiProjectSummary = async (req, res, session) => {
   });
 };
 
+const handleAnalyzeIntent = async (req, res) => {
+  if (!aiClient) {
+    jsonResponse(res, 500, { error: 'AI client not configured.' });
+    return;
+  }
+  const payload = await getJsonPayload(req, res);
+  if (!payload) {
+    return;
+  }
+  const uiSchema = payload?.uiSchema;
+  const componentCode = payload?.componentCode;
+  const existingInfrastructure = Array.isArray(payload?.existingInfrastructure)
+    ? payload.existingInfrastructure.filter((item) => typeof item === 'string')
+    : [];
+
+  if (!uiSchema || typeof uiSchema !== 'object' || typeof componentCode !== 'string') {
+    jsonResponse(res, 400, { error: 'Invalid payload.' });
+    return;
+  }
+
+  const prompt = buildIntentPrompt({ uiSchema, existingInfrastructure });
+  const startedAt = Date.now();
+  let response = null;
+  let errorMessage = null;
+  try {
+    response = await aiClient.models.generateContent({
+      model: aiModelId,
+      contents: {
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { text: `COMPONENT CODE:\n${componentCode.slice(0, 12000)}` },
+        ],
+      },
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            tables: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  columns: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        name: { type: Type.STRING },
+                        type: { type: Type.STRING },
+                        constraints: {
+                          type: Type.ARRAY,
+                          items: { type: Type.STRING },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            endpoints: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  method: { type: Type.STRING },
+                  path: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                },
+              },
+            },
+            services: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  type: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : 'Unknown AI error';
+  }
+
+  let data = null;
+  if (response?.text) {
+    try {
+      data = JSON.parse(response.text);
+    } catch (error) {
+      data = null;
+      errorMessage = errorMessage ?? 'Failed to parse AI response.';
+    }
+  }
+
+  const latencyMs = Date.now() - startedAt;
+  const usage = extractUsageTokens(response);
+  const costUsd = estimateAiCostUsd(usage);
+  const success = Boolean(data);
+
+  await appendAiAuditLog({
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    requestType: 'analyzeIntent',
+    model: aiModelId,
+    provider: aiProvider,
+    latencyMs,
+    success,
+    error: errorMessage,
+    usage,
+    costUsd,
+  });
+
+  if (errorMessage) {
+    jsonResponse(res, 500, { error: 'Intent analysis failed.' });
+    return;
+  }
+
+  jsonResponse(res, 200, {
+    tables: Array.isArray(data?.tables) ? data.tables : [],
+    endpoints: Array.isArray(data?.endpoints) ? data.endpoints : [],
+    services: Array.isArray(data?.services) ? data.services : [],
+  });
+};
+
+const handleOptimizePrompt = async (req, res) => {
+  if (!aiClient) {
+    jsonResponse(res, 500, { error: 'AI client not configured.' });
+    return;
+  }
+  const payload = await getJsonPayload(req, res);
+  if (!payload) {
+    return;
+  }
+
+  const uiIntentSchema = payload?.uiIntentSchema;
+  const backendRequirements = payload?.backendRequirements;
+  const projectStructure = payload?.projectStructure;
+  const preferredStack = payload?.preferredStack || 'supabase';
+
+  if (
+    !uiIntentSchema
+    || typeof uiIntentSchema !== 'object'
+    || !backendRequirements
+    || typeof backendRequirements !== 'object'
+    || !projectStructure
+    || typeof projectStructure !== 'object'
+  ) {
+    jsonResponse(res, 400, { error: 'Invalid payload.' });
+    return;
+  }
+
+  const stackInstructions = getStackInstructions(preferredStack);
+  const systemPrompt = `You are a senior software architect creating detailed, actionable prompts for AI coding assistants (Cursor, Windsurf, GitHub Copilot).
+
+Your task is to generate a step-by-step implementation guide that another AI can follow to create backend infrastructure for a React frontend component.
+
+${stackInstructions}
+
+The output MUST be:
+1. **Prescriptive**: Include exact file names, function signatures, table schemas, and code snippets
+2. **Ordered by dependency**: Create database tables before API endpoints, services before components
+3. **Complete**: Include error handling, validation, and type definitions
+4. **Ready to copy-paste**: Format as clear markdown that works directly as an AI prompt
+
+Structure your response as:
+1. A brief summary of what will be created
+2. Step-by-step instructions with code blocks
+3. Verification steps at the end`;
+
+  const userPrompt = `Create a backend implementation prompt based on this analysis:
+
+## User Intent
+"${payload.userIntent}"
+
+## Analyzed Frontend Component: ${uiIntentSchema.component}
+
+### Form Fields
+${formatFields(uiIntentSchema.fields)}
+
+### Actions
+${formatActions(uiIntentSchema.actions)}
+
+### Data Flow
+- Direction: ${uiIntentSchema.dataFlow?.direction}
+- Inferred Entity: ${uiIntentSchema.dataFlow?.entityGuess} (${Math.round((uiIntentSchema.dataFlow?.confidence ?? 0) * 100)}% confidence)
+
+## Required Backend Infrastructure
+
+### Database Tables
+${formatTables(backendRequirements.tables)}
+
+### API Endpoints
+${formatEndpoints(backendRequirements.endpoints)}
+
+### Services
+${formatServices(backendRequirements.services)}
+
+## Current Project State
+- Has Backend: ${projectStructure.hasBackend ? 'Yes' : 'No'}
+- Current Stack: ${Array.isArray(projectStructure.stack) ? projectStructure.stack.join(', ') : '' || 'React/Vite only'}
+- Existing Endpoints: ${Array.isArray(projectStructure.existingEndpoints) ? projectStructure.existingEndpoints.join(', ') : '' || 'None'}
+
+Generate a comprehensive, copy-paste-ready prompt for implementing this backend with ${preferredStack}.`;
+
+  const startedAt = Date.now();
+  let response = null;
+  let errorMessage = null;
+  try {
+    response = await aiClient.models.generateContent({
+      model: aiModelId,
+      contents: [
+        { role: 'user', parts: [{ text: systemPrompt }] },
+        { role: 'user', parts: [{ text: userPrompt }] },
+      ],
+    });
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : 'Unknown AI error';
+  }
+
+  const prompt = typeof response?.text === 'string' ? response.text : '';
+  const latencyMs = Date.now() - startedAt;
+  const usage = extractUsageTokens(response);
+  const costUsd = estimateAiCostUsd(usage);
+  const success = Boolean(prompt);
+
+  await appendAiAuditLog({
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    requestType: 'optimizePrompt',
+    model: aiModelId,
+    provider: aiProvider,
+    latencyMs,
+    success,
+    error: errorMessage,
+    usage,
+    costUsd,
+  });
+
+  if (errorMessage) {
+    jsonResponse(res, 500, { error: 'Prompt optimization failed.' });
+    return;
+  }
+
+  jsonResponse(res, 200, { prompt });
+};
+
 const handleAiMetrics = async (req, res) => {
   const records = await readAiAuditLog();
   const totalRequests = records.length;
@@ -919,6 +1266,26 @@ const server = http.createServer(async (req, res) => {
     } catch (error) {
       console.error('AI summary error', error);
       jsonResponse(res, 500, { error: 'AI summary failed.' });
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/analyze-intent') {
+    try {
+      await handleAnalyzeIntent(req, res);
+    } catch (error) {
+      console.error('Intent analysis error', error);
+      jsonResponse(res, 500, { error: 'Intent analysis failed.' });
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/optimize-prompt') {
+    try {
+      await handleOptimizePrompt(req, res);
+    } catch (error) {
+      console.error('Prompt optimization error', error);
+      jsonResponse(res, 500, { error: 'Prompt optimization failed.' });
     }
     return;
   }

@@ -198,6 +198,7 @@ export {
   AI_REQUEST_SCHEMA,
   buildPromptParts,
   createAiClient,
+  extractUsageTokens,
   generateJsonResponse,
   normalizeAiProvider,
 };

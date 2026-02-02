@@ -1,27 +1,9 @@
-import { GoogleGenAI, Type } from '@google/genai';
 import {
     UIIntentSchema,
     BackendRequirements,
     MissingDependency,
 } from '../types';
-
-// Lazy initialization for Gemini AI - only initialize when needed
-let aiInstance: GoogleGenAI | null = null;
-const modelId = 'gemini-2.5-flash';
-
-function getAI(): GoogleGenAI {
-    if (!aiInstance) {
-        const apiKey = import.meta.env.VITE_API_KEY;
-        if (!apiKey) {
-            throw new Error('VITE_API_KEY environment variable is not set. Please configure your Gemini API key.');
-        }
-        aiInstance = new GoogleGenAI({
-            apiKey,
-            vertexai: true,
-        });
-    }
-    return aiInstance;
-}
+import { analyzeIntent } from './apiClient';
 
 /**
  * Analyze a frontend component and infer required backend infrastructure.
@@ -32,99 +14,12 @@ export async function analyzeBackendRequirements(
     componentCode: string,
     existingInfrastructure: string[] = []
 ): Promise<BackendRequirements> {
-    const prompt = `You are a backend architect analyzing a React frontend component.
-
-COMPONENT: ${uiSchema.component}
-FIELDS: ${JSON.stringify(uiSchema.fields, null, 2)}
-ACTIONS: ${JSON.stringify(uiSchema.actions, null, 2)}
-DATA FLOW: ${JSON.stringify(uiSchema.dataFlow, null, 2)}
-HOOKS USED: ${uiSchema.hooks.join(', ')}
-EXISTING INFRASTRUCTURE: ${existingInfrastructure.length > 0 ? existingInfrastructure.join(', ') : 'None detected'}
-
-Based on this frontend component, determine what backend infrastructure is needed to make it fully functional:
-
-1. **Database Tables**: What tables are needed? Include columns with types.
-2. **API Endpoints**: What endpoints are required? Include HTTP methods and paths.
-3. **Services**: What external services are needed? (auth, email, storage, etc.)
-
-Be practical and suggest ONLY what's necessary for this specific component to function.
-Use common conventions (e.g., REST paths, PostgreSQL types for Supabase).`;
-
     try {
-        const response = await getAI().models.generateContent({
-            model: modelId,
-            contents: {
-                role: 'user',
-                parts: [
-                    { text: prompt },
-                    { text: `COMPONENT CODE:\n${componentCode.slice(0, 12000)}` },
-                ],
-            },
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        tables: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    name: { type: Type.STRING },
-                                    columns: {
-                                        type: Type.ARRAY,
-                                        items: {
-                                            type: Type.OBJECT,
-                                            properties: {
-                                                name: { type: Type.STRING },
-                                                type: { type: Type.STRING },
-                                                constraints: {
-                                                    type: Type.ARRAY,
-                                                    items: { type: Type.STRING },
-                                                },
-                                            },
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                        endpoints: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    method: { type: Type.STRING },
-                                    path: { type: Type.STRING },
-                                    description: { type: Type.STRING },
-                                },
-                            },
-                        },
-                        services: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    name: { type: Type.STRING },
-                                    type: { type: Type.STRING },
-                                    description: { type: Type.STRING },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
+        return await analyzeIntent({
+            uiSchema,
+            componentCode,
+            existingInfrastructure,
         });
-
-        if (response.text) {
-            const result = JSON.parse(response.text);
-            return {
-                tables: result.tables || [],
-                endpoints: result.endpoints || [],
-                services: result.services || [],
-            };
-        }
-
-        return { tables: [], endpoints: [], services: [] };
     } catch (error) {
         console.error('Backend requirements analysis failed:', error);
         return { tables: [], endpoints: [], services: [] };

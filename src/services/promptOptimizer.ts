@@ -1,27 +1,10 @@
-import { GoogleGenAI } from '@google/genai';
 import {
     UIIntentSchema,
     BackendRequirements,
     PromptOptimizerPayload,
     MissingDependency,
 } from '../types';
-
-// Lazy initialization for Gemini AI - only initialize when needed
-let aiInstance: GoogleGenAI | null = null;
-
-function getAI(): GoogleGenAI {
-    if (!aiInstance) {
-        const apiKey = import.meta.env.VITE_API_KEY;
-        if (!apiKey) {
-            throw new Error('VITE_API_KEY environment variable is not set. Please configure your Gemini API key.');
-        }
-        aiInstance = new GoogleGenAI({
-            apiKey,
-            vertexai: true,
-        });
-    }
-    return aiInstance;
-}
+import { optimizePrompt } from './apiClient';
 
 /**
  * Generate a detailed, prescriptive prompt for external AI tools (Cursor, Windsurf, Copilot).
@@ -30,78 +13,15 @@ function getAI(): GoogleGenAI {
 export async function generateBackendPrompt(
     payload: PromptOptimizerPayload
 ): Promise<string> {
-    const stackInstructions = getStackInstructions(payload.preferredStack || 'supabase');
-
-    const systemPrompt = `You are a senior software architect creating detailed, actionable prompts for AI coding assistants (Cursor, Windsurf, GitHub Copilot).
-
-Your task is to generate a step-by-step implementation guide that another AI can follow to create backend infrastructure for a React frontend component.
-
-${stackInstructions}
-
-The output MUST be:
-1. **Prescriptive**: Include exact file names, function signatures, table schemas, and code snippets
-2. **Ordered by dependency**: Create database tables before API endpoints, services before components
-3. **Complete**: Include error handling, validation, and type definitions
-4. **Ready to copy-paste**: Format as clear markdown that works directly as an AI prompt
-
-Structure your response as:
-1. A brief summary of what will be created
-2. Step-by-step instructions with code blocks
-3. Verification steps at the end`;
-
-    const userPrompt = `Create a backend implementation prompt based on this analysis:
-
-## User Intent
-"${payload.userIntent}"
-
-## Analyzed Frontend Component: ${payload.uiIntentSchema.component}
-
-### Form Fields
-${formatFields(payload.uiIntentSchema.fields)}
-
-### Actions
-${formatActions(payload.uiIntentSchema.actions)}
-
-### Data Flow
-- Direction: ${payload.uiIntentSchema.dataFlow.direction}
-- Inferred Entity: ${payload.uiIntentSchema.dataFlow.entityGuess} (${Math.round(payload.uiIntentSchema.dataFlow.confidence * 100)}% confidence)
-
-## Required Backend Infrastructure
-
-### Database Tables
-${formatTables(payload.backendRequirements.tables)}
-
-### API Endpoints
-${formatEndpoints(payload.backendRequirements.endpoints)}
-
-### Services
-${formatServices(payload.backendRequirements.services)}
-
-## Current Project State
-- Has Backend: ${payload.projectStructure.hasBackend ? 'Yes' : 'No'}
-- Current Stack: ${payload.projectStructure.stack.join(', ') || 'React/Vite only'}
-- Existing Endpoints: ${payload.projectStructure.existingEndpoints.join(', ') || 'None'}
-
-Generate a comprehensive, copy-paste-ready prompt for implementing this backend with ${payload.preferredStack || 'Supabase'}.`;
-
     try {
-        const response = await getAI().models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: [
-                { role: 'user', parts: [{ text: systemPrompt }] },
-                { role: 'user', parts: [{ text: userPrompt }] },
-            ],
-        });
-
-        if (response.text) {
-            return formatOutputPrompt(response.text, payload);
+        const response = await optimizePrompt(payload);
+        if (response) {
+            return formatOutputPrompt(response, payload);
         }
-
-        return generateFallbackPrompt(payload);
     } catch (error) {
         console.error('Prompt generation failed:', error);
-        return generateFallbackPrompt(payload);
     }
+    return generateFallbackPrompt(payload);
 }
 
 /**
@@ -175,76 +95,6 @@ export function generateQuickPrompt(
     lines.push(`5. Update the frontend component to call these endpoints`);
 
     return lines.join('\n');
-}
-
-// ============================================
-// Helper Functions
-// ============================================
-
-function getStackInstructions(stack: string): string {
-    const instructions: Record<string, string> = {
-        supabase: `Use Supabase patterns:
-- Database: PostgreSQL with RLS policies
-- Auth: Supabase Auth with email/password
-- API: Supabase Edge Functions (Deno) or direct client calls
-- Storage: Supabase Storage for files`,
-        firebase: `Use Firebase patterns:
-- Database: Firestore with security rules
-- Auth: Firebase Auth with email/password
-- API: Cloud Functions (Node.js)
-- Storage: Firebase Storage for files`,
-        express: `Use Express.js patterns:
-- Database: PostgreSQL with Prisma ORM
-- Auth: JWT with bcrypt
-- API: Express routes with middleware
-- Validation: Zod schemas`,
-        nextjs: `Use Next.js patterns:
-- Database: Prisma with PostgreSQL
-- Auth: NextAuth.js or Clerk
-- API: API Routes or Server Actions
-- Validation: Zod schemas`,
-    };
-    return instructions[stack] || instructions.supabase;
-}
-
-function formatFields(fields: UIIntentSchema['fields']): string {
-    if (fields.length === 0) return '- No form fields detected';
-    return fields
-        .map(
-            (f) =>
-                `- **${f.name}** (${f.type})${f.required ? ' [required]' : ''}${f.validation ? ` [${f.validation}]` : ''}`
-        )
-        .join('\n');
-}
-
-function formatActions(actions: UIIntentSchema['actions']): string {
-    if (actions.length === 0) return '- No actions detected';
-    return actions
-        .map(
-            (a) =>
-                `- **${a.type}**: ${a.handler}${a.label ? ` ("${a.label}")` : ''}${a.apiCall ? ` → ${a.apiCall}` : ''}`
-        )
-        .join('\n');
-}
-
-function formatTables(tables: BackendRequirements['tables']): string {
-    if (tables.length === 0) return '- No tables required';
-    return tables
-        .map((t) => {
-            const cols = t.columns.map((c) => `${c.name}: ${c.type}`).join(', ');
-            return `- **${t.name}**: ${cols}`;
-        })
-        .join('\n');
-}
-
-function formatEndpoints(endpoints: BackendRequirements['endpoints']): string {
-    if (endpoints.length === 0) return '- No endpoints required';
-    return endpoints.map((e) => `- \`${e.method} ${e.path}\`: ${e.description || ''}`).join('\n');
-}
-
-function formatServices(services: BackendRequirements['services']): string {
-    if (services.length === 0) return '- No additional services required';
-    return services.map((s) => `- **${s.name}** (${s.type}): ${s.description}`).join('\n');
 }
 
 function formatOutputPrompt(aiResponse: string, payload: PromptOptimizerPayload): string {
