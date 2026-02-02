@@ -6,7 +6,7 @@ import { IntentPanel } from './components/IntentPanel';
 import { TemplateSidebar, BackendTemplate } from './components/TemplateSidebar';
 import { TemplateWizard } from './components/TemplateWizard';
 import ModuleRecommendations from './components/ModuleRecommendations';
-import { analyzeFileContent, findRelevantFiles, PROJECT_SUMMARY_PROMPT_BASE, summarizeProject } from './geminiService';
+import { analyzeFile, PROJECT_SUMMARY_PROMPT_BASE, projectSummary, relevantFiles } from './services/apiClient';
 import { getCachedFileContent, hashContent, setCachedFileContent } from './cacheRepository';
 import { fetchGitHubJson } from './githubClient';
 import { FileSystemNode, PromptItem, AppStatus, CodeNode, SESSION_SCHEMA_VERSION, SessionPayload, ProjectGraphInput, ProjectSummary, ModuleInput, SemanticLink, Link, MissingDependency, AiMetricsResponse, FlatNode } from './types';
@@ -435,7 +435,7 @@ const App: React.FC = () => {
         const allPaths = allFilePathsRef.current.length > 0 ? allFilePathsRef.current : [];
 
         try {
-            const relevantPaths = await findRelevantFiles(searchQuery, allPaths, { ttlMs: relevantCacheTtlMs });
+            const relevantPaths = await relevantFiles(searchQuery, allPaths, { ttlMs: relevantCacheTtlMs });
             setHighlightedPaths(relevantPaths);
 
             // Add context
@@ -551,7 +551,7 @@ const App: React.FC = () => {
                 if (n.path === selectedPath) {
                     if (!n.codeStructure) {
                         setStatus(AppStatus.ANALYZING_QUERY);
-                        analyzeFileContent(content, selectedName, { ttlMs: analysisCacheTtlMs }).then(structure => {
+                        analyzeFile(content, selectedName, { ttlMs: analysisCacheTtlMs }).then(structure => {
                             if (!isActive) return;
                             n.codeStructure = structure;
                             updateRootNode(prev => (prev ? { ...prev } : null));
@@ -739,7 +739,7 @@ const App: React.FC = () => {
             const context = promptItems
                 .filter((item) => item.type !== 'code')
                 .map((item) => `${item.title}: ${item.content}`);
-            const summary = await summarizeProject({
+            const summary = await projectSummary({
                 filePaths: allFilePathsRef.current,
                 graph,
                 context,
