@@ -22,6 +22,9 @@ export type GraphState = {
   linksById: Record<string, Link>;
   semanticLinksById: Record<string, SemanticLink>;
   graphViewMode: GraphViewMode;
+  flowQuery: { sourceId: string | null; targetId: string | null };
+  flowPathNodeIds: Set<string>;
+  flowPathLinkIds: Set<string>;
   requestExpandNode: ((path: string) => void) | null;
   setRootNode: (rootNode: FileSystemNode | null) => void;
   updateRootNode: (updater: (current: FileSystemNode | null) => FileSystemNode | null) => void;
@@ -36,6 +39,9 @@ export type GraphState = {
   setSessionLayout: (layout: { hash: string; positions: Record<string, { x: number; y: number }> } | null) => void;
   setSemanticLinks: (links: SemanticLink[], sourceIds?: Set<string>) => void;
   setGraphViewMode: (mode: GraphViewMode) => void;
+  setFlowQuery: (sourceId: string | null, targetId: string | null) => void;
+  setFlowHighlight: (nodeIds: string[], linkIds: string[]) => void;
+  clearFlowHighlight: () => void;
 };
 
 const buildGraphHashData = (
@@ -155,6 +161,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   linksById: {},
   semanticLinksById: {},
   graphViewMode: 'structural',
+  flowQuery: { sourceId: null, targetId: null },
+  flowPathNodeIds: new Set(),
+  flowPathLinkIds: new Set(),
   requestExpandNode: null,
   setRootNode: (rootNode) => {
     const expandedDirectories = rootNode ? new Set([rootNode.path]) : new Set();
@@ -167,7 +176,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       selectedNodeId: null,
       layoutCache: null,
       semanticLinksById: {},
-      graphViewMode: 'structural'
+      graphViewMode: 'structural',
+      flowQuery: { sourceId: null, targetId: null },
+      flowPathNodeIds: new Set(),
+      flowPathLinkIds: new Set()
     });
   },
   updateRootNode: (updater) => {
@@ -238,7 +250,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       selectedNodeId: nextSelected,
       layoutCache: null,
       semanticLinksById,
-      graphViewMode: graph.graphViewMode ?? 'structural'
+      graphViewMode: graph.graphViewMode ?? 'structural',
+      flowQuery: { sourceId: null, targetId: null },
+      flowPathNodeIds: new Set(),
+      flowPathLinkIds: new Set()
     });
   },
   setLayoutCache: (hash, positions) => set({ layoutCache: { hash, positions } }),
@@ -262,5 +277,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       return { semanticLinksById: nextLinks };
     });
   },
-  setGraphViewMode: (mode) => set({ graphViewMode: mode })
+  setGraphViewMode: (mode) => set({ graphViewMode: mode }),
+  setFlowQuery: (sourceId, targetId) => set({ flowQuery: { sourceId, targetId } }),
+  setFlowHighlight: (nodeIds, linkIds) => set({
+    flowPathNodeIds: new Set(nodeIds),
+    flowPathLinkIds: new Set(linkIds)
+  }),
+  clearFlowHighlight: () => set({
+    flowPathNodeIds: new Set(),
+    flowPathLinkIds: new Set()
+  })
 }));

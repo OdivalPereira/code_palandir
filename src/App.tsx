@@ -5,10 +5,10 @@ import ModuleRecommendations from './components/ModuleRecommendations';
 import { analyzeFileContent, findRelevantFiles, PROJECT_SUMMARY_PROMPT_BASE, summarizeProject } from './geminiService';
 import { getCachedFileContent, hashContent, setCachedFileContent } from './cacheRepository';
 import { fetchGitHubJson } from './githubClient';
-import { FileSystemNode, PromptItem, AppStatus, CodeNode, SESSION_SCHEMA_VERSION, SessionPayload, ProjectGraphInput, ProjectSummary, ModuleInput, SemanticLink } from './types';
-import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus, Save, Network, Lightbulb } from 'lucide-react';
+import { FileSystemNode, PromptItem, AppStatus, CodeNode, SESSION_SCHEMA_VERSION, SessionPayload, ProjectGraphInput, ProjectSummary, ModuleInput, SemanticLink, Link } from './types';
+import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus, Save, Network, Lightbulb, Route } from 'lucide-react';
 import { useGraphStore } from './stores/graphStore';
-import { selectLoadingPaths, selectRootNode, selectSelectedNode } from './stores/graphSelectors';
+import { selectGraphLinks, selectGraphNodes, selectLoadingPaths, selectRootNode, selectSelectedNode } from './stores/graphSelectors';
 import { openSession, saveSession } from './sessionService';
 import { buildSemanticLinksForFile, SymbolIndex } from './dependencyParser';
 
@@ -29,7 +29,7 @@ const App: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [githubUrl, setGithubUrl] = useState('');
     const [isPromptOpen, setIsPromptOpen] = useState(false);
-    const [sidebarTab, setSidebarTab] = useState<'prompt' | 'summary' | 'recommendations'>('prompt');
+    const [sidebarTab, setSidebarTab] = useState<'prompt' | 'summary' | 'recommendations' | 'flow'>('prompt');
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [projectSignature, setProjectSignature] = useState<string | null>(null);
     const [summaryPromptBase, setSummaryPromptBase] = useState(PROJECT_SUMMARY_PROMPT_BASE);
@@ -37,10 +37,15 @@ const App: React.FC = () => {
     const [summaryStatus, setSummaryStatus] = useState<'idle' | 'loading' | 'error'>('idle');
     const [summaryError, setSummaryError] = useState<string | null>(null);
     const [moduleInputs, setModuleInputs] = useState<ModuleInput[]>([]);
+    const [flowSourceId, setFlowSourceId] = useState('');
+    const [flowTargetId, setFlowTargetId] = useState('');
+    const [flowPathNodeIds, setFlowPathNodeIds] = useState<string[] | null>(null);
 
     const rootNode = useGraphStore(selectRootNode);
     const selectedNode = useGraphStore(selectSelectedNode);
     const loadingPaths = useGraphStore(selectLoadingPaths);
+    const graphNodes = useGraphStore(selectGraphNodes);
+    const graphLinks = useGraphStore(selectGraphLinks);
     const setRootNode = useGraphStore((state) => state.setRootNode);
     const updateRootNode = useGraphStore((state) => state.updateRootNode);
     const setHighlightedPaths = useGraphStore((state) => state.setHighlightedPaths);
@@ -55,6 +60,9 @@ const App: React.FC = () => {
     const graphViewMode = useGraphStore((state) => state.graphViewMode);
     const setSemanticLinks = useGraphStore((state) => state.setSemanticLinks);
     const setGraphViewMode = useGraphStore((state) => state.setGraphViewMode);
+    const setFlowQuery = useGraphStore((state) => state.setFlowQuery);
+    const setFlowHighlight = useGraphStore((state) => state.setFlowHighlight);
+    const clearFlowHighlight = useGraphStore((state) => state.clearFlowHighlight);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const childrenIndexRef = useRef<Map<string, { path: string; name: string; type: 'directory' | 'file' }[]>>(new Map());
@@ -62,6 +70,26 @@ const App: React.FC = () => {
     const localFileHandlesRef = useRef<Map<string, File>>(new Map());
     const allFilePathsRef = useRef<string[]>([]);
     const autoRestoreSignatureRef = useRef<string | null>(null);
+
+    const flowNodeOptions = React.useMemo(() => {
+        const options = graphNodes.map((node) => ({
+            id: node.id,
+            label: node.path ? `${node.name} (${node.path})` : node.name
+        }));
+        return options.sort((a, b) => a.label.localeCompare(b.label));
+    }, [graphNodes]);
+
+    const flowBreadcrumbs = React.useMemo(() => {
+        if (!flowPathNodeIds || flowPathNodeIds.length === 0) return [];
+        return flowPathNodeIds.map((id) => {
+            const node = graphNodesById[id];
+            return {
+                id,
+                label: node?.name ?? id,
+                detail: node?.path ?? id
+            };
+        });
+    }, [flowPathNodeIds, graphNodesById]);
 
     const loadStoredSessionMeta = () => {
         if (typeof window === 'undefined') return null;
@@ -428,6 +456,29 @@ const App: React.FC = () => {
         };
     }, [rootNode, selectedNode, updateRootNode]);
 
+    useEffect(() => {
+        setFlowQuery(flowSourceId || null, flowTargetId || null);
+        if (!flowSourceId || !flowTargetId) {
+            setFlowPathNodeIds(null);
+            clearFlowHighlight();
+            return;
+        }
+        if (flowSourceId === flowTargetId) {
+            setFlowPathNodeIds([]);
+            clearFlowHighlight();
+            return;
+        }
+        const nodeIds = new Set(graphNodes.map((node) => node.id));
+        const path = buildFlowPath(flowSourceId, flowTargetId, graphLinks, nodeIds);
+        if (!path) {
+            setFlowPathNodeIds([]);
+            clearFlowHighlight();
+            return;
+        }
+        setFlowHighlight(path.nodeIds, path.linkIds);
+        setFlowPathNodeIds(path.nodeIds);
+    }, [flowSourceId, flowTargetId, graphLinks, graphNodes, setFlowQuery, setFlowHighlight, clearFlowHighlight]);
+
     const addToPrompt = (title: string, content: string) => {
         setPromptItems(prev => [...prev, {
             id: Date.now().toString(),
@@ -488,6 +539,62 @@ const App: React.FC = () => {
         };
         return walk(root);
     }
+
+    const getLinkId = (link: Link) => {
+        const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
+        const targetId = typeof link.target === 'string' ? link.target : link.target.id;
+        return link.kind ? `${link.kind}:${sourceId}-->${targetId}` : `${sourceId}-->${targetId}`;
+    };
+
+    const buildFlowPath = (sourceId: string, targetId: string, links: Link[], nodeIds: Set<string>) => {
+        if (!nodeIds.has(sourceId) || !nodeIds.has(targetId)) return null;
+        const adjacency = new Map<string, { id: string; linkId: string }[]>();
+        const registerEdge = (from: string, to: string, linkId: string) => {
+            const neighbors = adjacency.get(from) ?? [];
+            neighbors.push({ id: to, linkId });
+            adjacency.set(from, neighbors);
+        };
+        links.forEach((link) => {
+            const source = typeof link.source === 'string' ? link.source : link.source.id;
+            const target = typeof link.target === 'string' ? link.target : link.target.id;
+            const linkId = getLinkId(link);
+            registerEdge(source, target, linkId);
+            registerEdge(target, source, linkId);
+        });
+        const queue: string[] = [sourceId];
+        const visited = new Set<string>([sourceId]);
+        const prevNode = new Map<string, string | null>();
+        const prevLink = new Map<string, string | null>();
+        prevNode.set(sourceId, null);
+        prevLink.set(sourceId, null);
+
+        while (queue.length > 0) {
+            const current = queue.shift()!;
+            if (current === targetId) break;
+            const neighbors = adjacency.get(current) ?? [];
+            neighbors.forEach((neighbor) => {
+                if (visited.has(neighbor.id)) return;
+                visited.add(neighbor.id);
+                prevNode.set(neighbor.id, current);
+                prevLink.set(neighbor.id, neighbor.linkId);
+                queue.push(neighbor.id);
+            });
+        }
+
+        if (!visited.has(targetId)) return null;
+        const nodePath: string[] = [];
+        const linkPath: string[] = [];
+        let current: string | null = targetId;
+        while (current) {
+            nodePath.push(current);
+            const linkId = prevLink.get(current);
+            if (linkId) {
+                linkPath.push(linkId);
+            }
+            current = prevNode.get(current) ?? null;
+        }
+        return { nodeIds: nodePath.reverse(), linkIds: linkPath.reverse() };
+    };
 
     const buildProjectGraphInput = (): ProjectGraphInput => {
         const nodes = Object.values(graphNodesById).map(node => ({
@@ -675,6 +782,16 @@ const App: React.FC = () => {
                     </button>
                     <button
                         onClick={() => {
+                            setIsPromptOpen((prev) => (prev && sidebarTab === 'flow' ? false : true));
+                            setSidebarTab('flow');
+                        }}
+                        className={`p-2 rounded-lg transition-colors ${isPromptOpen && sidebarTab === 'flow' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-400'}`}
+                        aria-label="Open flow query"
+                    >
+                        <Route size={20} />
+                    </button>
+                    <button
+                        onClick={() => {
                             setIsPromptOpen((prev) => (prev && sidebarTab === 'recommendations' ? false : true));
                             setSidebarTab('recommendations');
                         }}
@@ -837,6 +954,89 @@ const App: React.FC = () => {
                                             {projectSummary?.diagram || 'flowchart TD\n  A[Contexto] --> B[Resumo]\n  B --> C[Mermaid]'}
                                         </pre>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : sidebarTab === 'flow' ? (
+                        <div className="flex flex-col h-full bg-slate-800 border-l border-slate-700">
+                            <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
+                                <h2 className="font-semibold text-slate-100 flex items-center gap-2">
+                                    <Route size={18} className="text-amber-400" />
+                                    Consulta de fluxo
+                                </h2>
+                                <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-1 rounded-full">
+                                    {graphViewMode === 'semantic' ? 'Semântico' : 'Estrutural'}
+                                </span>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-xs uppercase tracking-wide text-slate-400">Entrypoint</label>
+                                    <select
+                                        value={flowSourceId}
+                                        onChange={(event) => setFlowSourceId(event.target.value)}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                                    >
+                                        <option value="">Selecione o ponto de entrada</option>
+                                        {flowNodeOptions.map((option) => (
+                                            <option key={option.id} value={option.id}>
+                                                {option.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs uppercase tracking-wide text-slate-400">Destino</label>
+                                    <select
+                                        value={flowTargetId}
+                                        onChange={(event) => setFlowTargetId(event.target.value)}
+                                        className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                                    >
+                                        <option value="">Selecione o destino</option>
+                                        {flowNodeOptions.map((option) => (
+                                            <option key={option.id} value={option.id}>
+                                                {option.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => {
+                                            setFlowSourceId('');
+                                            setFlowTargetId('');
+                                            setFlowPathNodeIds(null);
+                                            clearFlowHighlight();
+                                        }}
+                                        className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs py-2 rounded"
+                                    >
+                                        Limpar
+                                    </button>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs uppercase tracking-wide text-slate-400">Breadcrumbs</label>
+                                    {flowBreadcrumbs.length > 0 ? (
+                                        <div className="flex flex-wrap gap-2">
+                                            {flowBreadcrumbs.map((crumb) => (
+                                                <div key={crumb.id} className="bg-slate-950 border border-slate-700 rounded-full px-3 py-1 text-xs text-slate-200">
+                                                    <span className="font-semibold">{crumb.label}</span>
+                                                    <span className="text-slate-400 ml-1">{crumb.detail}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-slate-400">
+                                            {flowSourceId && flowTargetId
+                                                ? flowSourceId === flowTargetId
+                                                    ? 'Entrypoint e destino precisam ser diferentes.'
+                                                    : 'Nenhum caminho encontrado para a visão atual.'
+                                                : 'Defina entrypoint e destino para visualizar o caminho.'}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="text-xs text-slate-300 bg-slate-950 border border-slate-700 rounded p-3">
+                                    {flowBreadcrumbs.length > 0
+                                        ? `Caminho encontrado com ${flowBreadcrumbs.length} nós e ${flowBreadcrumbs.length - 1} passos.`
+                                        : 'A explicação do fluxo aparecerá aqui após definir a consulta.'}
                                 </div>
                             </div>
                         </div>
