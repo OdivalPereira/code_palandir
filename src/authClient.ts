@@ -1,3 +1,5 @@
+import { fetchSessionAccessToken } from './api/client';
+
 let cachedAccessToken: string | null | undefined;
 let pendingAccessTokenRequest: Promise<string | null> | null = null;
 
@@ -10,13 +12,9 @@ export const getSessionAccessToken = async (): Promise<string | null> => {
     return pendingAccessTokenRequest;
   }
 
-  pendingAccessTokenRequest = fetch('/api/session', { credentials: 'include' })
-    .then(async (response) => {
-      if (!response.ok) {
-        return null;
-      }
-      const data = (await response.json()) as { accessToken?: string | null };
-      cachedAccessToken = data.accessToken ?? null;
+  pendingAccessTokenRequest = fetchSessionAccessToken()
+    .then((accessToken) => {
+      cachedAccessToken = accessToken ?? null;
       return cachedAccessToken;
     })
     .catch(() => {

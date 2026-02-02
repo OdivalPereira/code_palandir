@@ -4,7 +4,7 @@ import {
     PromptOptimizerPayload,
     MissingDependency,
 } from '../types';
-import { optimizePrompt } from './apiClient';
+import { optimizePrompt } from '../api/client';
 
 /**
  * Generate a detailed, prescriptive prompt for external AI tools (Cursor, Windsurf, Copilot).

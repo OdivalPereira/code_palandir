@@ -1,5 +1,6 @@
 import { getSessionAccessToken } from './authClient';
 import { getCachedHttpResponse, setCachedHttpResponse } from './cacheRepository';
+import { requestResponse } from './api/client';
 
 const GITHUB_ACCEPT_HEADER = 'application/vnd.github+json';
 
@@ -19,17 +20,19 @@ export const fetchGitHubJson = async <T>(url: string): Promise<T> => {
     headers['If-None-Match'] = cachedResponse.etag;
   }
 
-  const response = await fetch(url, { headers });
+  let response: Response;
+  try {
+    response = await requestResponse(url, { headers }, { allowedStatuses: [304], credentials: 'omit' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Request failed.';
+    throw new Error(`GitHub request failed for ${url}. ${message}`);
+  }
 
   if (response.status === 304) {
     if (cachedResponse?.data) {
       return cachedResponse.data as T;
     }
     throw new Error(`GitHub returned 304 for ${url} without cached data.`);
-  }
-
-  if (!response.ok) {
-    throw new Error(`GitHub request failed (${response.status}) for ${url}.`);
   }
 
   const data = (await response.json()) as T;
