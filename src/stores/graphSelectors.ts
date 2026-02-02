@@ -8,22 +8,19 @@ export const selectExpandedDirectories = (state: GraphState) => state.expandedDi
 export const selectNodesById = (state: GraphState) => state.nodesById;
 export const selectLinksById = (state: GraphState) => state.linksById;
 export const selectSemanticLinksById = (state: GraphState) => state.semanticLinksById;
-export const selectSelectedNodeId = (state: GraphState) => state.selectedNodeId;
+export const selectSelectedNode = (state: GraphState) => state.selectedNode;
 export const selectRequestExpandNode = (state: GraphState) => state.requestExpandNode;
 export const selectGraphViewMode = (state: GraphState) => state.graphViewMode;
 export const selectFlowQuery = (state: GraphState) => state.flowQuery;
 export const selectFlowPathNodeIds = (state: GraphState) => state.flowPathNodeIds;
 export const selectFlowPathLinkIds = (state: GraphState) => state.flowPathLinkIds;
 
-export const selectSelectedNode = createSelector(
-  [selectNodesById, selectSelectedNodeId],
-  (nodesById: Record<string, FlatNode>, selectedNodeId: string | null) => (selectedNodeId ? nodesById[selectedNodeId] ?? null : null)
-);
+export const selectNodes = (state: GraphState) => state.nodes;
+export const selectLinks = (state: GraphState) => state.links;
 
 export const selectGraphNodes = createSelector(
-  [selectNodesById, selectSemanticLinksById, selectGraphViewMode],
-  (nodesById: Record<string, FlatNode>, semanticLinksById: Record<string, SemanticLink>, graphViewMode: GraphViewMode) => {
-    const nodes = Object.values(nodesById);
+  [selectNodes, selectSemanticLinksById, selectGraphViewMode],
+  (nodes: FlatNode[], semanticLinksById: Record<string, SemanticLink>, graphViewMode: GraphViewMode) => {
     if (graphViewMode === 'structural') {
       return nodes;
     }
@@ -39,8 +36,8 @@ export const selectGraphNodes = createSelector(
 );
 
 export const selectGraphLinks = createSelector(
-  [selectLinksById, selectSemanticLinksById, selectGraphViewMode],
-  (linksById: Record<string, Link>, semanticLinksById: Record<string, SemanticLink>, graphViewMode: GraphViewMode) => (
-    graphViewMode === 'structural' ? Object.values(linksById) : Object.values(semanticLinksById)
+  [selectLinks, selectSemanticLinksById, selectGraphViewMode],
+  (links: Link[], semanticLinksById: Record<string, SemanticLink>, graphViewMode: GraphViewMode) => (
+    graphViewMode === 'structural' ? links : Object.values(semanticLinksById)
   )
 );

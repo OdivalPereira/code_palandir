@@ -1,4 +1,5 @@
 import { create } from './zustand';
+import { optimizePrompt } from '../api/client';
 import {
   FileSystemNode,
   FlatNode,
@@ -7,15 +8,18 @@ import {
   SemanticLink,
   SessionGraphState,
   SessionSelectionState,
-  MissingDependency,
-  BackendRequirements
+  UIIntentSchema,
 } from '../types';
 
 export type GraphState = {
   rootNode: FileSystemNode | null;
   highlightedPaths: string[];
   loadingPaths: Set<string>;
-  selectedNodeId: string | null;
+  nodes: FlatNode[];
+  links: Link[];
+  selectedNode: FlatNode | null;
+  isLoading: boolean;
+  aiResponse: string | null;
   expandedDirectories: Set<string>;
   layoutCache: { hash: string; positions: Record<string, { x: number; y: number }> } | null;
   sessionLayout: { hash: string; positions: Record<string, { x: number; y: number }> } | null;
@@ -27,26 +31,17 @@ export type GraphState = {
   flowPathNodeIds: Set<string>;
   flowPathLinkIds: Set<string>;
   requestExpandNode: ((path: string) => void) | null;
-  // Ghost nodes for Reverse Dependency Mapping
-  ghostNodes: FlatNode[];
-  ghostLinks: Link[];
-  missingDependencies: MissingDependency[];
-  backendRequirements: BackendRequirements | null;
-  isAnalyzingIntent: boolean;
   // Actions
+  setGraphData: (nodes: FlatNode[], links: Link[]) => void;
   setRootNode: (rootNode: FileSystemNode | null) => void;
   updateRootNode: (updater: (current: FileSystemNode | null) => FileSystemNode | null) => void;
   setHighlightedPaths: (paths: string[]) => void;
   setLoadingPaths: (paths: Set<string>) => void;
-  setSelectedNode: (nodeId: string | null) => void;
+  selectNode: (nodeId: string | null) => void;
+  fetchAiOptimization: (nodeId: string, userIntent: string) => Promise<void>;
   expandDirectory: (path: string) => void;
   toggleDirectory: (path: string) => void;
   setRequestExpandNode: (handler: ((path: string) => void) | null) => void;
-  // Ghost node actions
-  setGhostNodes: (nodes: FlatNode[], links: Link[]) => void;
-  clearGhostNodes: () => void;
-  setMissingDependencies: (deps: MissingDependency[], requirements: BackendRequirements) => void;
-  setIsAnalyzingIntent: (isAnalyzing: boolean) => void;
   restoreSession: (graph: SessionGraphState, selection: SessionSelectionState) => void;
   setLayoutCache: (hash: string, positions: Record<string, { x: number; y: number }>) => void;
   setSessionLayout: (layout: { hash: string; positions: Record<string, { x: number; y: number }> } | null) => void;
@@ -61,8 +56,8 @@ const buildGraphHashData = (
   rootNode: FileSystemNode | null,
   highlightedPaths: string[],
   expanded: Set<string>
-): { nodesById: Record<string, FlatNode>; linksById: Record<string, Link> } => {
-  if (!rootNode) return { nodesById: {}, linksById: {} };
+): { nodes: FlatNode[]; links: Link[]; nodesById: Record<string, FlatNode>; linksById: Record<string, Link> } => {
+  if (!rootNode) return { nodes: [], links: [], nodesById: {}, linksById: {} };
   const nodesById: Record<string, FlatNode> = {};
   const linksById: Record<string, Link> = {};
 
@@ -135,7 +130,12 @@ const buildGraphHashData = (
   };
 
   traverse(rootNode, null, 1);
-  return { nodesById, linksById };
+  return {
+    nodes: Object.values(nodesById),
+    links: Object.values(linksById),
+    nodesById,
+    linksById,
+  };
 };
 
 const computeGraph = (
@@ -148,7 +148,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   rootNode: null,
   highlightedPaths: [],
   loadingPaths: new Set(),
-  selectedNodeId: null,
+  nodes: [],
+  links: [],
+  selectedNode: null,
+  isLoading: false,
+  aiResponse: null,
   expandedDirectories: new Set(),
   layoutCache: null,
   sessionLayout: null,
@@ -160,32 +164,44 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   flowPathNodeIds: new Set(),
   flowPathLinkIds: new Set(),
   requestExpandNode: null,
-  // Ghost node initial state
-  ghostNodes: [],
-  ghostLinks: [],
-  missingDependencies: [],
-  backendRequirements: null,
-  isAnalyzingIntent: false,
+  setGraphData: (nodes, links) => {
+    const nodesById: Record<string, FlatNode> = {};
+    nodes.forEach((node) => {
+      nodesById[node.id] = node;
+    });
+    const linksById: Record<string, Link> = {};
+    links.forEach((link) => {
+      const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
+      const targetId = typeof link.target === 'string' ? link.target : link.target.id;
+      const linkId = link.kind ? `${link.kind}:${sourceId}-->${targetId}` : `${sourceId}-->${targetId}`;
+      linksById[linkId] = { ...link, source: sourceId, target: targetId };
+    });
+    const selectedNodeId = get().selectedNode?.id ?? null;
+    set({
+      nodes,
+      links,
+      nodesById,
+      linksById,
+      selectedNode: selectedNodeId ? nodesById[selectedNodeId] ?? null : null,
+    });
+  },
   setRootNode: (rootNode) => {
     const expandedDirectories = rootNode ? new Set<string>([rootNode.path]) : new Set<string>();
-    const { nodesById, linksById } = computeGraph(rootNode, get().highlightedPaths, expandedDirectories);
+    const { nodes, links, nodesById, linksById } = computeGraph(rootNode, get().highlightedPaths, expandedDirectories);
     set({
       rootNode,
       expandedDirectories,
+      nodes,
+      links,
       nodesById,
       linksById,
-      selectedNodeId: null,
+      selectedNode: null,
       layoutCache: null,
       semanticLinksById: {},
       graphViewMode: 'structural',
       flowQuery: { sourceId: null, targetId: null },
       flowPathNodeIds: new Set(),
-      flowPathLinkIds: new Set(),
-      // Clear ghost nodes when changing root
-      ghostNodes: [],
-      ghostLinks: [],
-      missingDependencies: [],
-      backendRequirements: null,
+      flowPathLinkIds: new Set()
     });
   },
   updateRootNode: (updater) => {
@@ -194,22 +210,82 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const expandedDirectories = nextRoot
         ? (state.expandedDirectories.size ? state.expandedDirectories : new Set<string>([nextRoot.path]))
         : new Set<string>();
-      const { nodesById, linksById } = computeGraph(nextRoot, state.highlightedPaths, expandedDirectories);
+      const { nodes, links, nodesById, linksById } = computeGraph(nextRoot, state.highlightedPaths, expandedDirectories);
       return {
         rootNode: nextRoot,
         expandedDirectories,
+        nodes,
+        links,
         nodesById,
-        linksById
+        linksById,
+        selectedNode: state.selectedNode?.id ? nodesById[state.selectedNode.id] ?? null : null,
       };
     });
   },
   setHighlightedPaths: (paths) => {
     const { rootNode, expandedDirectories } = get();
-    const { nodesById, linksById } = computeGraph(rootNode, paths, expandedDirectories);
-    set({ highlightedPaths: paths, nodesById, linksById });
+    const { nodes, links, nodesById, linksById } = computeGraph(rootNode, paths, expandedDirectories);
+    set({ highlightedPaths: paths, nodes, links, nodesById, linksById });
   },
   setLoadingPaths: (paths) => set({ loadingPaths: paths }),
-  setSelectedNode: (nodeId) => set({ selectedNodeId: nodeId }),
+  selectNode: (nodeId) => {
+    const selectedNode = nodeId ? get().nodesById[nodeId] ?? null : null;
+    set({ selectedNode });
+  },
+  fetchAiOptimization: async (nodeId, userIntent) => {
+    const node = get().nodesById[nodeId];
+    if (!node) {
+      set({ aiResponse: 'Selecione um nó válido para otimizar.', isLoading: false });
+      return;
+    }
+    const fileContent = (node.data as FileSystemNode | undefined)?.content ?? '';
+    if (!fileContent) {
+      set({
+        aiResponse: 'Conteúdo do arquivo não disponível. Clique no arquivo para carregar primeiro.',
+        isLoading: false,
+      });
+      return;
+    }
+    const uiIntentSchema: UIIntentSchema = {
+      component: node.name,
+      fields: [],
+      actions: [],
+      dataFlow: {
+        direction: 'mixed',
+        entityGuess: node.name,
+        confidence: 0,
+      },
+      hooks: [],
+    };
+    set({ isLoading: true, aiResponse: null });
+    try {
+      const prompt = await optimizePrompt({
+        userIntent: userIntent.trim() || `Implementar funcionalidade para ${node.name}`,
+        fileContent,
+        selectedNode: {
+          id: node.id,
+          name: node.name,
+          path: node.path,
+          type: node.type,
+        },
+        uiIntentSchema,
+        projectStructure: {
+          hasBackend: false,
+          stack: [],
+          existingEndpoints: [],
+        },
+        backendRequirements: {
+          tables: [],
+          endpoints: [],
+          services: [],
+        },
+      });
+      set({ aiResponse: prompt, isLoading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao otimizar a resposta da IA.';
+      set({ aiResponse: message, isLoading: false });
+    }
+  },
   expandDirectory: (path) => {
     set((state) => {
       if (state.expandedDirectories.has(path)) {
@@ -217,8 +293,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
       const expandedDirectories = new Set(state.expandedDirectories);
       expandedDirectories.add(path);
-      const { nodesById, linksById } = computeGraph(state.rootNode, state.highlightedPaths, expandedDirectories);
-      return { expandedDirectories, nodesById, linksById };
+      const { nodes, links, nodesById, linksById } = computeGraph(state.rootNode, state.highlightedPaths, expandedDirectories);
+      return { expandedDirectories, nodes, links, nodesById, linksById };
     });
   },
   toggleDirectory: (path) => {
@@ -229,29 +305,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       } else {
         expandedDirectories.add(path);
       }
-      const { nodesById, linksById } = computeGraph(state.rootNode, state.highlightedPaths, expandedDirectories);
-      return { expandedDirectories, nodesById, linksById };
+      const { nodes, links, nodesById, linksById } = computeGraph(state.rootNode, state.highlightedPaths, expandedDirectories);
+      return { expandedDirectories, nodes, links, nodesById, linksById };
     });
   },
   setRequestExpandNode: (handler) => set({ requestExpandNode: handler }),
-  // Ghost node actions
-  setGhostNodes: (nodes, links) => set({ ghostNodes: nodes, ghostLinks: links }),
-  clearGhostNodes: () => set({
-    ghostNodes: [],
-    ghostLinks: [],
-    missingDependencies: [],
-    backendRequirements: null,
-  }),
-  setMissingDependencies: (deps, requirements) => set({
-    missingDependencies: deps,
-    backendRequirements: requirements,
-  }),
-  setIsAnalyzingIntent: (isAnalyzing) => set({ isAnalyzingIntent: isAnalyzing }),
   restoreSession: (graph, selection) => {
     const expandedDirectories = new Set(graph.expandedDirectories);
-    const { nodesById, linksById } = computeGraph(graph.rootNode, graph.highlightedPaths, expandedDirectories);
+    const { nodes, links, nodesById, linksById } = computeGraph(graph.rootNode, graph.highlightedPaths, expandedDirectories);
     const nextSelected = selection.selectedNodeId && nodesById[selection.selectedNodeId]
-      ? selection.selectedNodeId
+      ? nodesById[selection.selectedNodeId]
       : null;
     const semanticLinksById: Record<string, SemanticLink> = {};
     if (graph.semanticLinks) {
@@ -264,9 +327,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       rootNode: graph.rootNode,
       highlightedPaths: graph.highlightedPaths,
       expandedDirectories,
+      nodes,
+      links,
       nodesById,
       linksById,
-      selectedNodeId: nextSelected,
+      selectedNode: nextSelected,
       layoutCache: null,
       semanticLinksById,
       graphViewMode: graph.graphViewMode ?? 'structural',

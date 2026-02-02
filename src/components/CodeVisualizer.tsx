@@ -83,7 +83,15 @@ const filterLayoutPositions = (
   return Object.keys(next).length > 0 ? next : null;
 };
 
-const CodeVisualizer: React.FC = () => {
+type CodeVisualizerProps = {
+  ghostNodes?: FlatNode[];
+  ghostLinks?: Link[];
+};
+
+const CodeVisualizer: React.FC<CodeVisualizerProps> = ({
+  ghostNodes = [],
+  ghostLinks = [],
+}) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -92,12 +100,10 @@ const CodeVisualizer: React.FC = () => {
   const expandedDirectories = useGraphStore(selectExpandedDirectories);
   const graphNodes = useGraphStore(selectGraphNodes);
   const graphLinks = useGraphStore(selectGraphLinks);
-  const ghostNodes = useGraphStore((state) => state.ghostNodes);
-  const ghostLinks = useGraphStore((state) => state.ghostLinks);
   const nodesById = useGraphStore(selectNodesById);
   const flowPathNodeIds = useGraphStore(selectFlowPathNodeIds);
   const flowPathLinkIds = useGraphStore(selectFlowPathLinkIds);
-  const setSelectedNode = useGraphStore((state) => state.setSelectedNode);
+  const selectNode = useGraphStore((state) => state.selectNode);
   const selectedNode = useGraphStore(selectSelectedNode);
   const expandDirectory = useGraphStore((state) => state.expandDirectory);
   const toggleDirectory = useGraphStore((state) => state.toggleDirectory);
@@ -519,7 +525,7 @@ const CodeVisualizer: React.FC = () => {
           expandDirectory(parentPath);
           return;
         }
-        setSelectedNode(d.id);
+        selectNode(d.id);
       })
       .on("dblclick", (event, d) => {
         if (d.type === 'directory') {
@@ -657,7 +663,7 @@ const CodeVisualizer: React.FC = () => {
         expandDirectory(parentPath);
         return;
       }
-      setSelectedNode(d.id);
+      selectNode(d.id);
     });
 
     node.on("dblclick", (event, d) => {
@@ -744,7 +750,7 @@ const CodeVisualizer: React.FC = () => {
     return () => {
       g.remove();
     };
-  }, [rootNode, dimensions, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading, requestExpandNode, expandDirectory, toggleDirectory, setSelectedNode, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode, peerPresences]);
+  }, [rootNode, dimensions, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading, requestExpandNode, expandDirectory, toggleDirectory, selectNode, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode, peerPresences]);
 
   const updateNodePositions = useCallback(() => {
     const { width, height } = dimensions;
@@ -1039,7 +1045,7 @@ const CodeVisualizer: React.FC = () => {
           expandDirectory(parentPath);
           return;
         }
-        setSelectedNode(node.id);
+        selectNode(node.id);
       }, 150);
     };
 
@@ -1075,7 +1081,7 @@ const CodeVisualizer: React.FC = () => {
       canvas.removeEventListener("click", handleClick);
       canvas.removeEventListener("dblclick", handleDoubleClick);
     };
-  }, [expandedDirectories, hoveredNodeId, requestExpandNode, resolveNodeAtPosition, setSelectedNode, toggleDirectory, useCanvasRenderer, expandDirectory]);
+  }, [expandedDirectories, hoveredNodeId, requestExpandNode, resolveNodeAtPosition, selectNode, toggleDirectory, useCanvasRenderer, expandDirectory]);
 
   useEffect(() => {
     if (!useCanvasRenderer) return;
