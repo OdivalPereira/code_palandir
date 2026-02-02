@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3';
 import { ClusterData, FlatNode, Link } from '../types';
 import { useGraphStore } from '../stores/graphStore';
+import { usePresenceStore } from '../stores/presenceStore';
 import {
   selectExpandedDirectories,
   selectFlowPathLinkIds,
@@ -100,6 +101,7 @@ const CodeVisualizer: React.FC = () => {
   const expandedDirectories = useGraphStore(selectExpandedDirectories);
   const graphNodes = useGraphStore(selectGraphNodes);
   const graphLinks = useGraphStore(selectGraphLinks);
+  const nodesById = useGraphStore((state) => state.nodesById);
   const flowPathNodeIds = useGraphStore(selectFlowPathNodeIds);
   const flowPathLinkIds = useGraphStore(selectFlowPathLinkIds);
   const setSelectedNode = useGraphStore((state) => state.setSelectedNode);
@@ -109,6 +111,11 @@ const CodeVisualizer: React.FC = () => {
   const sessionLayout = useGraphStore((state) => state.sessionLayout);
   const setLayoutCache = useGraphStore((state) => state.setLayoutCache);
   const setSessionLayout = useGraphStore((state) => state.setSessionLayout);
+  const peerPresences = usePresenceStore((state) => Object.values(state.peers));
+  const connectionStatus = usePresenceStore((state) => state.connectionStatus);
+  const localProfile = usePresenceStore((state) => state.profile);
+  const localSelection = usePresenceStore((state) => state.localSelection);
+  const setLocalCursor = usePresenceStore((state) => state.setLocalCursor);
   const [dimensions, setDimensions] = useState({ width: 1000, height: 800 });
   const [visibleNodeFilter, setVisibleNodeFilter] = useState<'all' | 'directories'>('all');
   const zoomTransformRef = useRef(d3.zoomIdentity);
@@ -124,10 +131,26 @@ const CodeVisualizer: React.FC = () => {
   const renderCanvasRef = useRef<() => void>(() => {});
   const dragStateRef = useRef<{ nodeId: string | null; isDragging: boolean }>({ nodeId: null, isDragging: false });
   const clickTimeoutRef = useRef<number | null>(null);
+  const cursorFrameRef = useRef<number | null>(null);
 
   // VITE_GRAPH_RENDERER=canvas|webgl switches to the canvas-backed renderer (webgl currently uses canvas fallback).
   const renderMode = (import.meta.env.VITE_GRAPH_RENDERER ?? 'svg').toLowerCase();
   const useCanvasRenderer = renderMode === 'canvas' || renderMode === 'webgl';
+
+  const cursorEntries = useMemo(
+    () => peerPresences.filter((presence) => presence.cursor),
+    [peerPresences]
+  );
+  const presenceList = useMemo(() => {
+    return [
+      {
+        clientId: 'local',
+        profile: localProfile,
+        selection: localSelection
+      },
+      ...peerPresences
+    ];
+  }, [localProfile, localSelection, peerPresences]);
 
   const layoutPositionsRef = useRef(layoutPositions);
   useEffect(() => {
@@ -219,6 +242,41 @@ const CodeVisualizer: React.FC = () => {
     handleResize();
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    const updateCursor = (event: PointerEvent) => {
+      if (!wrapperRef.current) return;
+      if (cursorFrameRef.current) return;
+      const { clientX, clientY } = event;
+      cursorFrameRef.current = window.requestAnimationFrame(() => {
+        if (!wrapperRef.current) return;
+        const rect = wrapperRef.current.getBoundingClientRect();
+        setLocalCursor({
+          x: Math.max(0, Math.min(rect.width, clientX - rect.left)),
+          y: Math.max(0, Math.min(rect.height, clientY - rect.top))
+        });
+        cursorFrameRef.current = null;
+      });
+    };
+
+    const clearCursor = () => {
+      if (cursorFrameRef.current) {
+        window.cancelAnimationFrame(cursorFrameRef.current);
+        cursorFrameRef.current = null;
+      }
+      setLocalCursor(null);
+    };
+
+    wrapper.addEventListener('pointermove', updateCursor);
+    wrapper.addEventListener('pointerleave', clearCursor);
+    return () => {
+      wrapper.removeEventListener('pointermove', updateCursor);
+      wrapper.removeEventListener('pointerleave', clearCursor);
+    };
+  }, [setLocalCursor]);
 
   useEffect(() => {
     if (!rootNode) return;
@@ -365,6 +423,16 @@ const CodeVisualizer: React.FC = () => {
       node.x = savedPosition?.x ?? width / 2;
       node.y = savedPosition?.y ?? height / 2;
     });
+    const nodeById = new Map(filteredNodes.map(node => [node.id, node]));
+    const peerSelectionEntries = peerPresences
+      .map((presence) => {
+        const selectedId = presence.selection?.selectedNodeId ?? null;
+        if (!selectedId) return null;
+        const node = nodeById.get(selectedId);
+        if (!node) return null;
+        return { presence, node };
+      })
+      .filter((entry): entry is { presence: typeof peerPresences[number]; node: FlatNode } => Boolean(entry));
 
     // Links
     const link = g.append("g")
@@ -450,6 +518,17 @@ const CodeVisualizer: React.FC = () => {
       .style("pointer-events", "none")
       .style("text-shadow", "0 1px 2px rgba(0,0,0,0.8)");
 
+    const selectionGroup = g.append("g").attr("class", "presence-selections");
+    const selectionRing = selectionGroup
+      .selectAll("circle")
+      .data(peerSelectionEntries)
+      .join("circle")
+      .attr("fill", "none")
+      .attr("stroke", (d) => d.presence.profile.color)
+      .attr("stroke-width", 2)
+      .attr("stroke-dasharray", "4 2")
+      .attr("r", (d) => getNodeRadius(d.node) + 10);
+
     const updateLayout = () => {
       link
         .attr("x1", d => (d.source as FlatNode).x!)
@@ -459,6 +538,9 @@ const CodeVisualizer: React.FC = () => {
 
       node
         .attr("transform", d => `translate(${d.x},${d.y})`);
+      selectionRing
+        .attr("cx", (d) => d.node.x!)
+        .attr("cy", (d) => d.node.y!);
     };
 
     updateLayout();
@@ -486,7 +568,7 @@ const CodeVisualizer: React.FC = () => {
     return () => {
       g.remove();
     };
-  }, [rootNode, dimensions, visibleNodeFilter, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading, requestExpandNode, expandDirectory, toggleDirectory, setSelectedNode, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode]);
+  }, [rootNode, dimensions, visibleNodeFilter, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading, requestExpandNode, expandDirectory, toggleDirectory, setSelectedNode, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode, peerPresences]);
 
   const updateNodePositions = useCallback(() => {
     const { width, height } = dimensions;
@@ -635,6 +717,21 @@ const CodeVisualizer: React.FC = () => {
       }
     });
 
+    peerPresences.forEach((presence) => {
+      const selectedId = presence.selection?.selectedNodeId ?? null;
+      if (!selectedId) return;
+      const node = nodeById.get(selectedId);
+      const position = positions.get(selectedId);
+      if (!node || !position) return;
+      ctx.beginPath();
+      ctx.arc(position.x, position.y, getNodeRadius(node) + 10, 0, Math.PI * 2);
+      ctx.strokeStyle = presence.profile.color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 2]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    });
+
     filteredNodes.forEach(node => {
       if (!isNodeLoading(node)) return;
       const position = positions.get(node.id);
@@ -683,7 +780,7 @@ const CodeVisualizer: React.FC = () => {
     });
 
     ctx.restore();
-  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, isNodeLoading, updateNodePositions, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode]);
+  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, isNodeLoading, updateNodePositions, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode, peerPresences]);
 
   useEffect(() => {
     renderCanvasRef.current = renderCanvas;
@@ -808,7 +905,7 @@ const CodeVisualizer: React.FC = () => {
   useEffect(() => {
     if (!useCanvasRenderer) return;
     renderCanvasRef.current();
-  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, layoutPositions, loadingPaths, useCanvasRenderer, visibleNodeFilter, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode]);
+  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, layoutPositions, loadingPaths, useCanvasRenderer, visibleNodeFilter, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode, peerPresences]);
 
   useEffect(() => {
     return () => {
@@ -834,6 +931,59 @@ const CodeVisualizer: React.FC = () => {
       ) : (
         <svg ref={svgRef} width={dimensions.width} height={dimensions.height} className="w-full h-full" />
       )}
+
+      {cursorEntries.map((presence) => (
+        <div
+          key={presence.clientId}
+          className="absolute pointer-events-none flex items-center gap-2 text-xs"
+          style={{
+            left: presence.cursor?.x ?? 0,
+            top: presence.cursor?.y ?? 0,
+            transform: 'translate(8px, 8px)'
+          }}
+        >
+          <span
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ backgroundColor: presence.profile.color, boxShadow: `0 0 8px ${presence.profile.color}` }}
+          />
+          <span className="text-slate-200 bg-slate-900/80 px-2 py-0.5 rounded">
+            {presence.profile.name}
+          </span>
+        </div>
+      ))}
+
+      <div className="absolute top-4 right-4 bg-slate-900/90 backdrop-blur border border-slate-700 rounded-lg shadow-lg p-3 w-56">
+        <div className="flex items-center justify-between text-xs text-slate-300">
+          <span className="font-semibold text-slate-100">Presença</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+            connectionStatus === 'connected'
+              ? 'bg-emerald-500/20 text-emerald-300'
+              : connectionStatus === 'connecting'
+                ? 'bg-amber-500/20 text-amber-200'
+                : 'bg-slate-700 text-slate-300'
+          }`}>
+            {connectionStatus === 'connected' ? 'Online' : connectionStatus === 'connecting' ? 'Conectando' : 'Offline'}
+          </span>
+        </div>
+        <div className="mt-2 space-y-2">
+          {presenceList.map((presence) => {
+            const selectionId = presence.selection?.selectedNodeId ?? null;
+            const nodeName = selectionId ? nodesById[selectionId]?.name ?? selectionId : 'Nenhuma seleção';
+            return (
+              <div key={presence.clientId} className="flex items-start gap-2 text-xs">
+                <span
+                  className="mt-1 w-2 h-2 rounded-full"
+                  style={{ backgroundColor: presence.profile.color }}
+                />
+                <div>
+                  <div className="text-slate-200">{presence.profile.name}{presence.clientId === 'local' ? ' (você)' : ''}</div>
+                  <div className="text-slate-400">{nodeName}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="absolute bottom-4 left-4 bg-slate-900/80 backdrop-blur p-3 rounded-lg border border-slate-700 text-xs text-slate-300 shadow-lg">
         <div className="font-semibold mb-2 text-slate-200">Legend</div>

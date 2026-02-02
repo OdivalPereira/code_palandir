@@ -11,6 +11,8 @@ import { useGraphStore } from './stores/graphStore';
 import { selectGraphLinks, selectGraphNodes, selectLoadingPaths, selectRootNode, selectSelectedNode } from './stores/graphSelectors';
 import { openSession, saveSession } from './sessionService';
 import { buildSemanticLinksForFile, SymbolIndex } from './dependencyParser';
+import { usePresenceStore } from './stores/presenceStore';
+import { createRealtimeClient } from './realtimeClient';
 
 const LAST_SESSION_STORAGE_KEY = 'codemind:lastSession';
 const analysisCacheTtlEnv = Number(import.meta.env.VITE_ANALYSIS_CACHE_TTL_MS ?? '0');
@@ -63,6 +65,17 @@ const App: React.FC = () => {
     const setFlowQuery = useGraphStore((state) => state.setFlowQuery);
     const setFlowHighlight = useGraphStore((state) => state.setFlowHighlight);
     const clearFlowHighlight = useGraphStore((state) => state.clearFlowHighlight);
+    const selectedNodeId = useGraphStore((state) => state.selectedNodeId);
+
+    const presenceClientId = usePresenceStore((state) => state.clientId);
+    const presenceProfile = usePresenceStore((state) => state.profile);
+    const localCursor = usePresenceStore((state) => state.localCursor);
+    const localSelection = usePresenceStore((state) => state.localSelection);
+    const setLocalSelection = usePresenceStore((state) => state.setLocalSelection);
+    const setPeers = usePresenceStore((state) => state.setPeers);
+    const updatePeer = usePresenceStore((state) => state.updatePeer);
+    const removePeer = usePresenceStore((state) => state.removePeer);
+    const setConnectionStatus = usePresenceStore((state) => state.setConnectionStatus);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const childrenIndexRef = useRef<Map<string, { path: string; name: string; type: 'directory' | 'file' }[]>>(new Map());
@@ -70,6 +83,7 @@ const App: React.FC = () => {
     const localFileHandlesRef = useRef<Map<string, File>>(new Map());
     const allFilePathsRef = useRef<string[]>([]);
     const autoRestoreSignatureRef = useRef<string | null>(null);
+    const realtimeClientRef = useRef<ReturnType<typeof createRealtimeClient> | null>(null);
 
     const flowNodeOptions = React.useMemo(() => {
         const options = graphNodes.map((node) => ({
@@ -90,6 +104,55 @@ const App: React.FC = () => {
             };
         });
     }, [flowPathNodeIds, graphNodesById]);
+
+    const realtimeSessionId = sessionId ?? projectSignature ?? null;
+
+    useEffect(() => {
+        setLocalSelection(selectedNodeId ?? null);
+    }, [selectedNodeId, setLocalSelection]);
+
+    useEffect(() => {
+        if (!realtimeSessionId) {
+            realtimeClientRef.current?.close();
+            realtimeClientRef.current = null;
+            return;
+        }
+
+        realtimeClientRef.current?.close();
+        realtimeClientRef.current = createRealtimeClient({
+            sessionId: realtimeSessionId,
+            clientId: presenceClientId,
+            profile: presenceProfile,
+            onStateSync: (presence) => {
+                const peers = presence.filter((entry) => entry.clientId !== presenceClientId);
+                setPeers(peers);
+            },
+            onPresenceUpdate: (presence) => {
+                if (presence.clientId === presenceClientId) return;
+                updatePeer(presence);
+            },
+            onPresenceRemove: (clientId) => {
+                if (clientId === presenceClientId) return;
+                removePeer(clientId);
+            },
+            onConnectionChange: (status) => {
+                setConnectionStatus(status);
+            }
+        });
+
+        return () => {
+            realtimeClientRef.current?.close();
+            realtimeClientRef.current = null;
+        };
+    }, [presenceClientId, presenceProfile, realtimeSessionId, removePeer, setConnectionStatus, setPeers, updatePeer]);
+
+    useEffect(() => {
+        if (!realtimeSessionId || !realtimeClientRef.current) return;
+        realtimeClientRef.current.sendPresenceUpdate({
+            cursor: localCursor,
+            selection: localSelection
+        });
+    }, [localCursor, localSelection, realtimeSessionId]);
 
     const loadStoredSessionMeta = () => {
         if (typeof window === 'undefined') return null;
