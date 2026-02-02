@@ -105,11 +105,14 @@ const CodeVisualizer: React.FC = () => {
   const sessionLayout = useGraphStore((state) => state.sessionLayout);
   const setLayoutCache = useGraphStore((state) => state.setLayoutCache);
   const setSessionLayout = useGraphStore((state) => state.setSessionLayout);
-  const peerPresences = usePresenceStore((state) => Object.values(state.peers));
-  const connectionStatus = usePresenceStore((state) => state.connectionStatus);
-  const localProfile = usePresenceStore((state) => state.profile);
   const localSelection = usePresenceStore((state) => state.localSelection);
   const setLocalCursor = usePresenceStore((state) => state.setLocalCursor);
+
+  // Memoize peers to prevent new array creation on every render if peers haven't changed
+  const peers = usePresenceStore((state) => state.peers);
+  const peerPresences = useMemo(() => Object.values(peers), [peers]);
+  const connectionStatus = usePresenceStore((state) => state.connectionStatus);
+  const localProfile = usePresenceStore((state) => state.profile);
   const [dimensions, setDimensions] = useState({ width: 1000, height: 800 });
   // Removed: visibleNodeFilter - zoom should not filter nodes
   const zoomTransformRef = useRef(d3.zoomIdentity);
@@ -121,6 +124,7 @@ const CodeVisualizer: React.FC = () => {
   const layoutFrameRef = useRef<number | null>(null);
   const layoutCacheRef = useRef<Map<string, Record<string, { x: number; y: number }>>>(new Map());
   const layoutHashRef = useRef<string | null>(null);
+  const lastSavedLayoutRef = useRef<{ hash: string; positions: Record<string, { x: number; y: number }> } | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const renderCanvasRef = useRef<() => void>(() => { });
   const dragStateRef = useRef<{ nodeId: string | null; isDragging: boolean }>({ nodeId: null, isDragging: false });
@@ -417,8 +421,17 @@ const CodeVisualizer: React.FC = () => {
 
   useEffect(() => {
     if (!graphHash || Object.keys(layoutPositions).length === 0) return;
+
+    // Check if this layout was already saved to the store to prevent loops
+    if (lastSavedLayoutRef.current?.hash === graphHash &&
+      lastSavedLayoutRef.current?.positions === layoutPositions) {
+      return;
+    }
+
     layoutCacheRef.current.set(graphHash, layoutPositions);
     writeLayoutCache(graphHash, layoutPositions);
+
+    lastSavedLayoutRef.current = { hash: graphHash, positions: layoutPositions };
     setLayoutCache(graphHash, layoutPositions);
   }, [graphHash, layoutPositions, setLayoutCache]);
 

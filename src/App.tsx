@@ -536,18 +536,26 @@ const App: React.FC = () => {
     useEffect(() => {
         if (!selectedNode || selectedNode.type !== 'file') return;
         let isActive = true;
+        const selectedPath = selectedNode.path;
+        const selectedName = selectedNode.name;
+
         const analyzeSelectedFile = async () => {
-            const content = await ensureFileContent(selectedNode.path);
+            const content = await ensureFileContent(selectedPath);
             if (!content || !isActive) return;
+
+            // Use the latest rootNode from store state instead of dependency
+            const currentRoot = useGraphStore.getState().rootNode;
+            if (!currentRoot) return;
+
             const updateTree = (n: FileSystemNode): boolean => {
-                if (n.path === selectedNode.path) {
+                if (n.path === selectedPath) {
                     if (!n.codeStructure) {
                         setStatus(AppStatus.ANALYZING_QUERY);
-                        analyzeFileContent(content, n.name, { ttlMs: analysisCacheTtlMs }).then(structure => {
+                        analyzeFileContent(content, selectedName, { ttlMs: analysisCacheTtlMs }).then(structure => {
                             if (!isActive) return;
                             n.codeStructure = structure;
                             updateRootNode(prev => (prev ? { ...prev } : null));
-                            updateSemanticEdgesForFile(selectedNode.path, content, structure);
+                            updateSemanticEdgesForFile(selectedPath, content, structure);
                             setStatus(AppStatus.IDLE);
                         });
                     }
@@ -560,13 +568,13 @@ const App: React.FC = () => {
                 }
                 return false;
             };
-            if (rootNode) updateTree(rootNode);
+            updateTree(currentRoot);
         };
         analyzeSelectedFile();
         return () => {
             isActive = false;
         };
-    }, [rootNode, selectedNode, updateRootNode]);
+    }, [selectedNode, updateRootNode]);
 
     useEffect(() => {
         setFlowQuery(flowSourceId || null, flowTargetId || null);
