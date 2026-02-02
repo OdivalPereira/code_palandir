@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import CodeVisualizer from './components/CodeVisualizer';
 import PromptBuilder from './components/PromptBuilder';
+import ModuleRecommendations from './components/ModuleRecommendations';
 import { analyzeFileContent, findRelevantFiles, PROJECT_SUMMARY_PROMPT_BASE, summarizeProject } from './geminiService';
 import { getCachedFileContent, hashContent, setCachedFileContent } from './cacheRepository';
 import { fetchGitHubJson } from './githubClient';
-import { FileSystemNode, PromptItem, AppStatus, CodeNode, SESSION_SCHEMA_VERSION, SessionPayload, ProjectGraphInput, ProjectSummary } from './types';
-import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus, Save, Network } from 'lucide-react';
+import { FileSystemNode, PromptItem, AppStatus, CodeNode, SESSION_SCHEMA_VERSION, SessionPayload, ProjectGraphInput, ProjectSummary, ModuleInput } from './types';
+import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus, Save, Network, Lightbulb } from 'lucide-react';
 import { useGraphStore } from './stores/graphStore';
 import { selectLoadingPaths, selectRootNode, selectSelectedNode } from './stores/graphSelectors';
 import { openSession, saveSession } from './sessionService';
@@ -27,13 +28,14 @@ const App: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [githubUrl, setGithubUrl] = useState('');
     const [isPromptOpen, setIsPromptOpen] = useState(false);
-    const [sidebarTab, setSidebarTab] = useState<'prompt' | 'summary'>('prompt');
+    const [sidebarTab, setSidebarTab] = useState<'prompt' | 'summary' | 'recommendations'>('prompt');
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [projectSignature, setProjectSignature] = useState<string | null>(null);
     const [summaryPromptBase, setSummaryPromptBase] = useState(PROJECT_SUMMARY_PROMPT_BASE);
     const [projectSummary, setProjectSummary] = useState<ProjectSummary | null>(null);
     const [summaryStatus, setSummaryStatus] = useState<'idle' | 'loading' | 'error'>('idle');
     const [summaryError, setSummaryError] = useState<string | null>(null);
+    const [moduleInputs, setModuleInputs] = useState<ModuleInput[]>([]);
 
     const rootNode = useGraphStore(selectRootNode);
     const selectedNode = useGraphStore(selectSelectedNode);
@@ -214,6 +216,7 @@ const App: React.FC = () => {
 
         setFileMap(new Map());
         setRootNode(root);
+        setModuleInputs([]);
         setStatus(AppStatus.IDLE);
         setSessionLayout(null);
 
@@ -263,6 +266,7 @@ const App: React.FC = () => {
 
             setRootNode(root);
             setFileMap(new Map());
+            setModuleInputs([]);
             setStatus(AppStatus.IDLE);
             setSessionLayout(null);
 
@@ -603,6 +607,16 @@ const App: React.FC = () => {
                     >
                         <Network size={20} />
                     </button>
+                    <button
+                        onClick={() => {
+                            setIsPromptOpen((prev) => (prev && sidebarTab === 'recommendations' ? false : true));
+                            setSidebarTab('recommendations');
+                        }}
+                        className={`p-2 rounded-lg transition-colors ${isPromptOpen && sidebarTab === 'recommendations' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-400'}`}
+                        aria-label="Open module recommendations"
+                    >
+                        <Lightbulb size={20} />
+                    </button>
 
                     <div className="ml-2 flex items-center gap-2">
                         <button
@@ -692,7 +706,7 @@ const App: React.FC = () => {
                             onRemove={(id) => setPromptItems(prev => prev.filter(i => i.id !== id))}
                             onClear={() => setPromptItems([])}
                         />
-                    ) : (
+                    ) : sidebarTab === 'summary' ? (
                         <div className="flex flex-col h-full bg-slate-800 border-l border-slate-700">
                             <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
                                 <h2 className="font-semibold text-slate-100 flex items-center gap-2">
@@ -745,6 +759,12 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                         </div>
+                    ) : (
+                        <ModuleRecommendations
+                            modules={moduleInputs}
+                            allFiles={allFilePathsRef.current}
+                            onChange={setModuleInputs}
+                        />
                     )}
                 </div>
             </div>
