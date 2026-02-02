@@ -5,11 +5,12 @@ import ModuleRecommendations from './components/ModuleRecommendations';
 import { analyzeFileContent, findRelevantFiles, PROJECT_SUMMARY_PROMPT_BASE, summarizeProject } from './geminiService';
 import { getCachedFileContent, hashContent, setCachedFileContent } from './cacheRepository';
 import { fetchGitHubJson } from './githubClient';
-import { FileSystemNode, PromptItem, AppStatus, CodeNode, SESSION_SCHEMA_VERSION, SessionPayload, ProjectGraphInput, ProjectSummary, ModuleInput } from './types';
+import { FileSystemNode, PromptItem, AppStatus, CodeNode, SESSION_SCHEMA_VERSION, SessionPayload, ProjectGraphInput, ProjectSummary, ModuleInput, SemanticLink } from './types';
 import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus, Save, Network, Lightbulb } from 'lucide-react';
 import { useGraphStore } from './stores/graphStore';
 import { selectLoadingPaths, selectRootNode, selectSelectedNode } from './stores/graphSelectors';
 import { openSession, saveSession } from './sessionService';
+import { buildSemanticLinksForFile, SymbolIndex } from './dependencyParser';
 
 const LAST_SESSION_STORAGE_KEY = 'codemind:lastSession';
 const analysisCacheTtlEnv = Number(import.meta.env.VITE_ANALYSIS_CACHE_TTL_MS ?? '0');
@@ -50,6 +51,10 @@ const App: React.FC = () => {
     const setSessionLayout = useGraphStore((state) => state.setSessionLayout);
     const graphNodesById = useGraphStore((state) => state.nodesById);
     const graphLinksById = useGraphStore((state) => state.linksById);
+    const semanticLinksById = useGraphStore((state) => state.semanticLinksById);
+    const graphViewMode = useGraphStore((state) => state.graphViewMode);
+    const setSemanticLinks = useGraphStore((state) => state.setSemanticLinks);
+    const setGraphViewMode = useGraphStore((state) => state.setGraphViewMode);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const childrenIndexRef = useRef<Map<string, { path: string; name: string; type: 'directory' | 'file' }[]>>(new Map());
@@ -346,6 +351,10 @@ const App: React.FC = () => {
             }
         }
 
+        if (content) {
+            const existingStructure = findCodeStructureForPath(path);
+            updateSemanticEdgesForFile(path, content, existingStructure);
+        }
         return content;
     };
 
@@ -398,6 +407,7 @@ const App: React.FC = () => {
                             if (!isActive) return;
                             n.codeStructure = structure;
                             updateRootNode(prev => (prev ? { ...prev } : null));
+                            updateSemanticEdgesForFile(selectedNode.path, content, structure);
                             setStatus(AppStatus.IDLE);
                         });
                     }
@@ -428,6 +438,56 @@ const App: React.FC = () => {
         setIsPromptOpen(true);
         setSidebarTab('prompt');
     };
+
+    function buildSymbolIndex() {
+        const index: SymbolIndex = new Map();
+        Object.values(useGraphStore.getState().nodesById).forEach((node) => {
+            if (node.type === 'function' || node.type === 'class' || node.type === 'variable' || node.type === 'api_endpoint') {
+                const existing = index.get(node.name) ?? [];
+                existing.push(node.id);
+                index.set(node.name, existing);
+            }
+        });
+        return index;
+    }
+
+    function updateSemanticEdgesForFile(
+        path: string,
+        content: string,
+        codeStructure?: CodeNode[]
+    ) {
+        const filePaths = new Set(allFilePathsRef.current);
+        if (filePaths.size === 0) return;
+        const symbolIndex = buildSymbolIndex();
+        const { links, sourceIds } = buildSemanticLinksForFile({
+            sourcePath: path,
+            content,
+            codeStructure,
+            filePaths,
+            symbolIndex
+        });
+        const normalizedLinks: SemanticLink[] = links.map((link) => ({
+            ...link,
+            source: typeof link.source === 'string' ? link.source : link.source.id,
+            target: typeof link.target === 'string' ? link.target : link.target.id
+        }));
+        setSemanticLinks(normalizedLinks, sourceIds);
+    }
+
+    function findCodeStructureForPath(path: string) {
+        const root = useGraphStore.getState().rootNode;
+        const walk = (node: FileSystemNode | null): CodeNode[] | undefined => {
+            if (!node) return undefined;
+            if (node.path === path) return node.codeStructure;
+            if (!node.children) return undefined;
+            for (const child of node.children) {
+                const result = walk(child);
+                if (result) return result;
+            }
+            return undefined;
+        };
+        return walk(root);
+    }
 
     const buildProjectGraphInput = (): ProjectGraphInput => {
         const nodes = Object.values(graphNodesById).map(node => ({
@@ -475,7 +535,13 @@ const App: React.FC = () => {
             graph: {
                 rootNode: graphState.rootNode,
                 highlightedPaths: graphState.highlightedPaths,
-                expandedDirectories: Array.from(graphState.expandedDirectories)
+                expandedDirectories: Array.from(graphState.expandedDirectories),
+                semanticLinks: Object.values(graphState.semanticLinksById).map((link) => ({
+                    source: typeof link.source === 'string' ? link.source : link.source.id,
+                    target: typeof link.target === 'string' ? link.target : link.target.id,
+                    kind: link.kind
+                })),
+                graphViewMode: graphState.graphViewMode
             },
             selection: {
                 selectedNodeId: graphState.selectedNodeId
@@ -619,6 +685,20 @@ const App: React.FC = () => {
                     </button>
 
                     <div className="ml-2 flex items-center gap-2">
+                        <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-full p-1 text-xs">
+                            <button
+                                onClick={() => setGraphViewMode('structural')}
+                                className={`px-3 py-1 rounded-full transition-colors ${graphViewMode === 'structural' ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
+                            >
+                                Estrutural
+                            </button>
+                            <button
+                                onClick={() => setGraphViewMode('semantic')}
+                                className={`px-3 py-1 rounded-full transition-colors ${graphViewMode === 'semantic' ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
+                            >
+                                Semântico
+                            </button>
+                        </div>
                         <button
                             onClick={handleSaveSession}
                             className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors"
@@ -728,7 +808,8 @@ const App: React.FC = () => {
                                 </div>
                                 <div className="text-xs text-slate-400 space-y-1">
                                     <p>Arquivos carregados: <span className="text-slate-200">{allFilePathsRef.current.length}</span></p>
-                                    <p>Conexões do grafo: <span className="text-slate-200">{Object.keys(graphLinksById).length}</span></p>
+                                    <p>Conexões do grafo (estrutural): <span className="text-slate-200">{Object.keys(graphLinksById).length}</span></p>
+                                    <p>Conexões do grafo (semântico): <span className="text-slate-200">{Object.keys(semanticLinksById).length}</span></p>
                                 </div>
                                 <button
                                     onClick={handleGenerateSummary}

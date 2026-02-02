@@ -68,7 +68,7 @@ const buildGraphHash = (nodes: FlatNode[], links: Link[]) => {
     .map(node => `${node.id}:${node.type}`)
     .join('|');
   const linkParts = [...links]
-    .map(link => `${link.source}->${link.target}`)
+    .map(link => `${link.source}->${link.target}:${link.kind ?? 'structural'}`)
     .sort()
     .join('|');
   return hashString(`${nodeParts}::${linkParts}`);
@@ -156,6 +156,27 @@ const CodeVisualizer: React.FC = () => {
   };
   const getNodeStrokeWidth = (node: FlatNode) => (node.type === 'cluster' ? 2.5 : 2);
   const getNodeDash = (node: FlatNode) => (node.type === 'cluster' ? [4, 3] : []);
+  const getLinkStroke = (link: Link) => {
+    switch (link.kind) {
+      case 'import':
+        return '#38bdf8';
+      case 'call':
+        return '#4ade80';
+      default:
+        return '#475569';
+    }
+  };
+  const getLinkDash = (link: Link) => {
+    switch (link.kind) {
+      case 'import':
+        return [4, 3];
+      case 'call':
+        return [2, 2];
+      default:
+        return [];
+    }
+  };
+  const getLinkOpacity = (link: Link) => (link.kind ? 0.6 : 0.4);
   const isNodeLoading = useCallback((d: FlatNode) => {
     if (d.type === 'cluster') {
       const { parentPath } = d.data as ClusterData;
@@ -330,12 +351,13 @@ const CodeVisualizer: React.FC = () => {
 
     // Links
     const link = g.append("g")
-      .attr("stroke", "#475569")
-      .attr("stroke-opacity", 0.4)
       .selectAll("line")
       .data(filteredLinks)
       .join("line")
+      .attr("stroke", d => getLinkStroke(d))
+      .attr("stroke-opacity", d => getLinkOpacity(d))
       .attr("stroke-width", d => isAggregateNode(d.target as FlatNode) ? 2 : 1);
+    link.attr("stroke-dasharray", d => getLinkDash(d).join(' '));
 
     // Nodes
     const node = g.append("g")
@@ -529,25 +551,47 @@ const CodeVisualizer: React.FC = () => {
       }
     });
 
-    const drawLinksBatch = (batch: Link[], strokeWidth: number) => {
-      if (batch.length === 0) return;
-      ctx.beginPath();
-      batch.forEach(link => {
-        const sourcePos = positions.get(link.source as string);
-        const targetPos = positions.get(link.target as string);
-        if (!sourcePos || !targetPos) return;
-        ctx.moveTo(sourcePos.x, sourcePos.y);
-        ctx.lineTo(targetPos.x, targetPos.y);
-      });
-      ctx.strokeStyle = "#475569";
-      ctx.globalAlpha = 0.4;
-      ctx.lineWidth = strokeWidth;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
+    type LinkBatch = {
+      links: Link[];
+      stroke: string;
+      dash: number[];
+      opacity: number;
+      width: number;
     };
 
-    drawLinksBatch(normalLinks, 1);
-    drawLinksBatch(aggregateLinks, 2);
+    const renderLinkBatches = (links: Link[], strokeWidth: number) => {
+      const batches = new Map<string, LinkBatch>();
+      links.forEach((link) => {
+        const stroke = getLinkStroke(link);
+        const dash = getLinkDash(link);
+        const opacity = getLinkOpacity(link);
+        const key = `${stroke}|${dash.join(',')}|${opacity}|${strokeWidth}`;
+        const batch = batches.get(key) ?? { links: [], stroke, dash, opacity, width: strokeWidth };
+        batch.links.push(link);
+        batches.set(key, batch);
+      });
+      batches.forEach((batch) => {
+        if (batch.links.length === 0) return;
+        ctx.beginPath();
+        batch.links.forEach(link => {
+          const sourcePos = positions.get(link.source as string);
+          const targetPos = positions.get(link.target as string);
+          if (!sourcePos || !targetPos) return;
+          ctx.moveTo(sourcePos.x, sourcePos.y);
+          ctx.lineTo(targetPos.x, targetPos.y);
+        });
+        ctx.strokeStyle = batch.stroke;
+        ctx.globalAlpha = batch.opacity;
+        ctx.lineWidth = batch.width;
+        ctx.setLineDash(batch.dash);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.setLineDash([]);
+      });
+    };
+
+    renderLinkBatches(normalLinks, 1);
+    renderLinkBatches(aggregateLinks, 2);
 
     type NodeBatch = {
       nodes: FlatNode[];
