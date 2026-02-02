@@ -1247,6 +1247,8 @@ const App: React.FC = () => {
                         <ModuleRecommendations
                             modules={moduleInputs}
                             allFiles={allFilePathsRef.current}
+                            graphNodes={Object.values(graphNodesById)}
+                            semanticLinks={Object.values(semanticLinksById)}
                             onChange={setModuleInputs}
                         />
                     )}
