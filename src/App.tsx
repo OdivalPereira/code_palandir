@@ -1,8 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import CodeVisualizer from './components/CodeVisualizer';
 import PromptBuilder from './components/PromptBuilder';
+import { IntentPanel } from './components/IntentPanel';
+import { TemplateSidebar, BackendTemplate } from './components/TemplateSidebar';
+import { TemplateWizard } from './components/TemplateWizard';
 import { analyzeFileContent, findRelevantFiles } from './geminiService';
-import { FileSystemNode, PromptItem, AppStatus, CodeNode } from './types';
+import { FileSystemNode, PromptItem, AppStatus, CodeNode, FlatNode, Link, MissingDependency } from './types';
 import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus } from 'lucide-react';
 import { useGraphStore } from './stores/graphStore';
 
@@ -13,6 +16,7 @@ const App: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [githubUrl, setGithubUrl] = useState('');
     const [isPromptOpen, setIsPromptOpen] = useState(false);
+    const [wizardTemplate, setWizardTemplate] = useState<BackendTemplate | null>(null);
 
     const rootNode = useGraphStore((state) => state.rootNode);
     const selectedNode = useGraphStore((state) => state.selectedNode);
@@ -23,6 +27,8 @@ const App: React.FC = () => {
     const setLoadingPaths = useGraphStore((state) => state.setLoadingPaths);
     const setSelectedNode = useGraphStore((state) => state.setSelectedNode);
     const setRequestExpandNode = useGraphStore((state) => state.setRequestExpandNode);
+    const setGhostNodes = useGraphStore((state) => state.setGhostNodes);
+    const setMissingDependencies = useGraphStore((state) => state.setMissingDependencies);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const childrenIndexRef = useRef<Map<string, { path: string; name: string; type: 'directory' | 'file' }[]>>(new Map());
@@ -320,8 +326,48 @@ const App: React.FC = () => {
         setIsPromptOpen(true);
     };
 
+    const handleTemplateSelect = (template: BackendTemplate) => {
+        setWizardTemplate(template);
+    };
+
+    const handleTemplateDragStart = (template: BackendTemplate, event: React.DragEvent) => {
+        event.dataTransfer.setData('template', JSON.stringify(template));
+        event.dataTransfer.effectAllowed = 'copy';
+    };
+
+    const handleWizardApply = (ghostNodes: FlatNode[], ghostLinks: Link[], deps: MissingDependency[]) => {
+        setGhostNodes(ghostNodes, ghostLinks);
+        if (deps.length > 0 && ghostNodes.length > 0) {
+            // Use null for requirements since this is template-based
+            setMissingDependencies(deps, {
+                tables: deps.filter(d => d.type === 'table').map(d => ({
+                    name: d.name,
+                    description: d.description,
+                    columns: [],
+                })),
+                endpoints: deps.filter(d => d.type === 'endpoint').map(d => ({
+                    method: 'POST' as const,
+                    path: d.name,
+                    description: d.description,
+                })),
+                services: deps.filter(d => d.type === 'service' || d.type === 'auth').map(d => ({
+                    name: d.name,
+                    type: d.type as 'auth' | 'storage' | 'email' | 'payment' | 'other',
+                    description: d.description,
+                })),
+            });
+        }
+    };
+
     return (
         <div className="flex h-screen w-full bg-slate-950 text-slate-200 overflow-hidden font-sans">
+
+            {/* Left Sidebar: Backend Templates */}
+            <TemplateSidebar
+                onTemplateSelect={handleTemplateSelect}
+                onTemplateDragStart={handleTemplateDragStart}
+                className="w-64"
+            />
 
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col relative">
@@ -458,6 +504,9 @@ const App: React.FC = () => {
                 </div>
             </div>
 
+            {/* Right Sidebar: Intent Panel (Reverse Architect) */}
+            <IntentPanel className="w-80" />
+
             {/* Right Sidebar: Prompt Builder (Collapsible) */}
             <div
                 className={`bg-slate-900 border-l border-slate-800 transition-all duration-300 ease-in-out flex flex-col ${isPromptOpen ? 'w-96 translate-x-0' : 'w-0 translate-x-full opacity-0'
@@ -471,6 +520,16 @@ const App: React.FC = () => {
                     />
                 </div>
             </div>
+
+            {/* Template Wizard Modal */}
+            {wizardTemplate && (
+                <TemplateWizard
+                    template={wizardTemplate}
+                    targetComponent={selectedNode}
+                    onClose={() => setWizardTemplate(null)}
+                    onApply={handleWizardApply}
+                />
+            )}
 
         </div>
     );

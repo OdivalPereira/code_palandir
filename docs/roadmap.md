@@ -54,6 +54,29 @@ Transformar o protótipo atual em uma plataforma robusta de exploração de base
 
 ---
 
+### ✅ Feature Concluída: Reverse Dependency Mapping (Arquiteto Reverso)
+
+**Objetivo:** Habilitar desenvolvimento "Frontend-First" onde componentes React são analisados para inferir automaticamente a infraestrutura backend necessária.
+
+**Componentes Implementados:**
+- **TSX Parser** (`tsxParser.ts`): Extração de campos, handlers e hooks via regex.
+- **Intent Analyzer** (`intentAnalyzer.ts`): Inferência de tabelas, endpoints e serviços via Gemini AI.
+- **Prompt Optimizer** (`promptOptimizer.ts`): Geração de prompts prescritivos para Cursor/Windsurf.
+- **Ghost Node Visualization**: Dependências faltantes renderizadas como nós fantasma no grafo.
+- **Template Library** (`TemplateSidebar.tsx`): 7 templates prontos (Auth, CRUD, Email, Payment, etc.).
+- **Template Wizard** (`TemplateWizard.tsx`): Modal de customização com seletor de stack.
+
+**Stacks Suportados:** Supabase, Firebase, Express/Prisma
+
+**Workflow:**
+1. Selecionar componente TSX no grafo
+2. Descrever intenção (ex: "Cadastrar usuário e enviar email")
+3. IA infere backend necessário
+4. Ghost nodes aparecem no grafo
+5. Prompt é gerado para criar a infraestrutura
+
+---
+
 ### Longo Prazo (9–18 meses) — Diferenciação e Colaboração
 
 **Epic 7: Grafos Semânticos**

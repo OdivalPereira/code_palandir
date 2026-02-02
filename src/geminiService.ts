@@ -1,9 +1,23 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { CodeNode } from './types';
 
-// Note: In Vite, env vars must start with VITE_
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY || '', vertexai: true });
+// Lazy initialization for Gemini AI - only initialize when needed
+let aiInstance: GoogleGenAI | null = null;
 const modelId = 'gemini-2.5-flash';
+
+function getAI(): GoogleGenAI {
+  if (!aiInstance) {
+    const apiKey = import.meta.env.VITE_API_KEY;
+    if (!apiKey) {
+      throw new Error('VITE_API_KEY environment variable is not set. Please configure your Gemini API key.');
+    }
+    aiInstance = new GoogleGenAI({
+      apiKey,
+      vertexai: true,
+    });
+  }
+  return aiInstance;
+}
 
 // Analyze a single file's content to extract structure
 export const analyzeFileContent = async (code: string, filename: string): Promise<CodeNode[]> => {
@@ -15,7 +29,7 @@ export const analyzeFileContent = async (code: string, filename: string): Promis
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
       model: modelId,
       contents: {
         role: 'user',
@@ -66,7 +80,7 @@ export const findRelevantFiles = async (query: string, filePaths: string[]): Pro
   const pathsStr = filePaths.join('\n');
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
       model: modelId,
       contents: {
         role: 'user',

@@ -75,12 +75,15 @@ const CodeVisualizer: React.FC = () => {
   const expandedDirectories = useGraphStore((state) => state.expandedDirectories);
   const graphNodes = useGraphStore((state) => state.graphNodes);
   const graphLinks = useGraphStore((state) => state.graphLinks);
+  const ghostNodes = useGraphStore((state) => state.ghostNodes);
+  const ghostLinks = useGraphStore((state) => state.ghostLinks);
   const setSelectedNode = useGraphStore((state) => state.setSelectedNode);
+  const selectedNode = useGraphStore((state) => state.selectedNode);
   const expandDirectory = useGraphStore((state) => state.expandDirectory);
   const toggleDirectory = useGraphStore((state) => state.toggleDirectory);
   const requestExpandNode = useGraphStore((state) => state.requestExpandNode);
   const [dimensions, setDimensions] = useState({ width: 1000, height: 800 });
-  const [visibleNodeFilter, setVisibleNodeFilter] = useState<'all' | 'directories'>('all');
+  // Removed: visibleNodeFilter - zoom should not filter nodes
   const zoomTransformRef = useRef(d3.zoomIdentity);
   const stablePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const workerRef = useRef<Worker | null>(null);
@@ -91,7 +94,7 @@ const CodeVisualizer: React.FC = () => {
   const layoutCacheRef = useRef<Map<string, Record<string, { x: number; y: number }>>>(new Map());
   const layoutHashRef = useRef<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
-  const renderCanvasRef = useRef<() => void>(() => {});
+  const renderCanvasRef = useRef<() => void>(() => { });
   const dragStateRef = useRef<{ nodeId: string | null; isDragging: boolean }>({ nodeId: null, isDragging: false });
   const clickTimeoutRef = useRef<number | null>(null);
 
@@ -105,13 +108,42 @@ const CodeVisualizer: React.FC = () => {
   }, [layoutPositions]);
 
   const isAggregateNode = (node: FlatNode) => node.type === 'directory' || node.type === 'cluster';
+  const isGhostNode = (node: FlatNode) => node.isGhost || node.type.startsWith('ghost_');
+
   const getNodeRadius = (node: FlatNode) => {
     if (node.type === 'cluster') return 18;
     if (node.type === 'directory') return 15;
     if (node.type === 'file') return 10;
+    // Ghost nodes
+    if (node.type === 'ghost_table') return 14;
+    if (node.type === 'ghost_endpoint') return 12;
+    if (node.type === 'ghost_service') return 14;
     return 6;
   };
+
+  const getNodeColor = (node: FlatNode) => {
+    if (node.relevant) return "#facc15"; // Highlight
+    switch (node.type) {
+      case 'cluster': return "#0f172a";
+      case 'directory': return "#3b82f6";
+      case 'file': return "#64748b";
+      case 'function': return "#4ade80";
+      case 'class': return "#f472b6";
+      case 'api_endpoint': return "#a78bfa";
+      default: return "#94a3b8";
+    }
+  };
+
   const getNodeFill = (node: FlatNode) => {
+    // Ghost nodes have semi-transparent fills
+    if (isGhostNode(node)) {
+      switch (node.type) {
+        case 'ghost_table': return "rgba(59, 130, 246, 0.3)"; // Blue
+        case 'ghost_endpoint': return "rgba(34, 197, 94, 0.3)"; // Green
+        case 'ghost_service': return "rgba(168, 85, 247, 0.3)"; // Purple
+        default: return "rgba(239, 68, 68, 0.3)"; // Red for missing
+      }
+    }
     if (node.relevant) return "#facc15";
     switch (node.type) {
       case 'cluster': return "#0f172a";
@@ -123,13 +155,31 @@ const CodeVisualizer: React.FC = () => {
       default: return "#94a3b8";
     }
   };
+
   const getNodeStroke = (node: FlatNode) => {
+    // Ghost nodes have dashed colored strokes
+    if (isGhostNode(node)) {
+      switch (node.type) {
+        case 'ghost_table': return "#3b82f6"; // Blue
+        case 'ghost_endpoint': return "#22c55e"; // Green
+        case 'ghost_service': return "#a855f7"; // Purple
+        default: return "#ef4444"; // Red
+      }
+    }
     if (node.relevant) return "#ffffff";
     if (node.type === 'cluster') return "#38bdf8";
     return "transparent";
   };
-  const getNodeStrokeWidth = (node: FlatNode) => (node.type === 'cluster' ? 2.5 : 2);
-  const getNodeDash = (node: FlatNode) => (node.type === 'cluster' ? [4, 3] : []);
+
+  const getNodeStrokeWidth = (node: FlatNode) => {
+    if (isGhostNode(node)) return 2;
+    return (node.type === 'cluster' ? 2.5 : 2);
+  };
+
+  const getNodeDash = (node: FlatNode) => {
+    if (isGhostNode(node)) return [4, 4]; // Dashed for ghost nodes
+    return (node.type === 'cluster' ? [4, 3] : []);
+  };
   const isNodeLoading = useCallback((d: FlatNode) => {
     if (d.type === 'cluster') {
       const { parentPath } = d.data as ClusterData;
@@ -138,9 +188,7 @@ const CodeVisualizer: React.FC = () => {
     return loadingPaths.has(d.path);
   }, [loadingPaths]);
 
-  // Nodes are restricted to directories when zoomed out below this threshold.
-  // Adjust to change when file-level nodes become visible.
-  const DIRECTORY_ONLY_ZOOM_THRESHOLD = 0.7;
+  // Removed: DIRECTORY_ONLY_ZOOM_THRESHOLD - zoom should only scale, not filter nodes
 
   useEffect(() => {
     const handleResize = () => {
@@ -192,14 +240,17 @@ const CodeVisualizer: React.FC = () => {
   }, []);
 
   const { filteredNodes, filteredLinks } = useMemo(() => {
-    const shouldShowDirectoriesOnly = visibleNodeFilter === 'directories';
-    const nextNodes = shouldShowDirectoriesOnly
-      ? graphNodes.filter(node => node.type === 'directory' || node.type === 'cluster')
-      : graphNodes;
+    // Show all nodes - no zoom-based filtering
+    let nextNodes = [...graphNodes, ...ghostNodes];
+
     const filteredNodeIds = new Set(nextNodes.map(node => node.id));
-    const nextLinks = graphLinks.filter(link => filteredNodeIds.has(link.source as string) && filteredNodeIds.has(link.target as string));
+    let nextLinks = graphLinks.filter(link => filteredNodeIds.has(link.source as string) && filteredNodeIds.has(link.target as string));
+
+    // Add ghost links
+    nextLinks = [...nextLinks, ...ghostLinks];
+
     return { filteredNodes: nextNodes, filteredLinks: nextLinks };
-  }, [graphLinks, graphNodes, visibleNodeFilter]);
+  }, [graphLinks, graphNodes, ghostNodes, ghostLinks]);
 
   const graphHash = useMemo(() => buildGraphHash(filteredNodes, filteredLinks), [filteredLinks, filteredNodes]);
 
@@ -271,8 +322,7 @@ const CodeVisualizer: React.FC = () => {
       .scaleExtent([0.1, 4])
       .on("zoom", (event) => {
         zoomTransformRef.current = event.transform;
-        const nextFilter = event.transform.k < DIRECTORY_ONLY_ZOOM_THRESHOLD ? 'directories' : 'all';
-        setVisibleNodeFilter(current => (current === nextFilter ? current : nextFilter));
+        // Zoom only transforms - no node filtering
         g.attr("transform", event.transform);
       });
 
@@ -285,14 +335,22 @@ const CodeVisualizer: React.FC = () => {
       node.y = savedPosition?.y ?? height / 2;
     });
 
-    // Links
+    // Helper function to generate curved path between nodes
+    const linkPath = (source: { x: number; y: number }, target: { x: number; y: number }) => {
+      // Horizontal elbow connector (Bezier curve)
+      const midX = (source.x + target.x) / 2;
+      return `M ${source.x} ${source.y} C ${midX} ${source.y}, ${midX} ${target.y}, ${target.x} ${target.y}`;
+    };
+
+    // Links - using curved paths for mind map style
     const link = g.append("g")
-      .attr("stroke", "#475569")
-      .attr("stroke-opacity", 0.4)
-      .selectAll("line")
+      .attr("fill", "none")
+      .attr("stroke", "#64748b")
+      .attr("stroke-opacity", 0.6)
+      .selectAll("path")
       .data(filteredLinks)
-      .join("line")
-      .attr("stroke-width", d => isAggregateNode(d.target as FlatNode) ? 2 : 1);
+      .join("path")
+      .attr("stroke-width", d => isAggregateNode(d.target as FlatNode) ? 2 : 1.5);
 
     // Nodes
     const node = g.append("g")
@@ -354,47 +412,145 @@ const CodeVisualizer: React.FC = () => {
       .attr("stroke-width", d => d.type === 'cluster' ? 2.5 : 2)
       .attr("stroke-dasharray", d => d.type === 'cluster' ? "4 3" : "0");
 
-    node.filter(d => isNodeLoading(d))
-      .append("circle")
-      .attr("r", d => (d.type === 'cluster' || d.type === 'directory') ? 22 : 16)
-      .attr("fill", "none")
-      .attr("stroke", "#38bdf8")
-      .attr("stroke-width", 2)
-      .attr("class", "loading-ring");
+    node
+      .style("cursor", "pointer")
+      .each(function (d) {
+        const g = d3.select(this);
+        g.selectAll("*").remove();
 
-    node.filter(d => isNodeLoading(d))
-      .append("text")
-      .text("Carregando...")
-      .attr("x", 0)
-      .attr("y", d => d.type === 'directory' ? 40 : 34)
-      .attr("text-anchor", "middle")
-      .attr("fill", "#38bdf8")
-      .attr("font-size", "10px")
-      .style("pointer-events", "none");
+        // Circle background
+        g.append("circle")
+          .attr("r", getNodeRadius(d))
+          .attr("fill", getNodeColor(d))
+          .attr("stroke", d.id === selectedNode?.id ? "#f8fafc" : (d.id === hoveredNodeId ? "#bae6fd" : "none"))
+          .attr("stroke-width", d.id === selectedNode?.id ? 3 : 2)
+          .attr("stroke-dasharray", getNodeDash(d).join(","))
+          .style("filter", d.id === selectedNode?.id ? "drop-shadow(0 0 4px rgba(56, 189, 248, 0.5))" : "none");
 
-    // Labels
-    node.append("text")
-      .text(d => d.name)
-      .attr("x", 0)
-      .attr("y", d => d.type === 'directory' ? 25 : 20)
-      .attr("text-anchor", "middle")
-      .attr("fill", "#cbd5e1")
-      .attr("font-size", d => d.type === 'directory' ? "12px" : "10px")
-      .style("pointer-events", "none")
-      .style("text-shadow", "0 1px 2px rgba(0,0,0,0.8)");
+        // Loading indicator
+        if (isNodeLoading(d)) {
+          g.append("circle")
+            .attr("r", (d.type === 'cluster' || d.type === 'directory') ? 22 : 16)
+            .attr("fill", "none")
+            .attr("stroke", "#38bdf8")
+            .attr("stroke-width", 2)
+            .attr("class", "loading-ring");
+
+          g.append("text")
+            .text("Carregando...")
+            .attr("x", 0)
+            .attr("y", d.type === 'directory' ? 40 : 34)
+            .attr("text-anchor", "middle")
+            .attr("fill", "#38bdf8")
+            .attr("font-size", "10px")
+            .style("pointer-events", "none");
+        }
+
+        // Label
+        g.append("text")
+          .attr("dy", d.type === 'directory' || d.type === 'cluster' ? 25 : 20)
+          .attr("text-anchor", "middle")
+          .attr("fill", "#cbd5e1")
+          .attr("font-size", d.type === 'directory' ? "12px" : "10px")
+          .style("pointer-events", "none")
+          .style("text-shadow", "0 1px 2px rgba(0,0,0,0.8)")
+          .text(d.name);
+
+        // Expand/Collapse Button for Directories
+        if (d.type === 'directory') {
+          const hasChildren = (d.data as any)?.children?.length > 0 || (d.data as any)?.hasChildren;
+          if (hasChildren) {
+            const isCollapsed = !!d.collapsed;
+            const btnGroup = g.append("g")
+              .attr("class", "expand-btn")
+              .attr("transform", `translate(${getNodeRadius(d) + 6}, 0)`)
+              .attr("cursor", "pointer");
+
+            // Button circle
+            btnGroup.append("circle")
+              .attr("r", 8)
+              .attr("fill", "#1e293b")
+              .attr("stroke", "#475569")
+              .attr("stroke-width", 1.5);
+
+            // +/- Icon
+            btnGroup.append("text")
+              .attr("dy", 3.5)
+              .attr("text-anchor", "middle")
+              .attr("fill", "#f8fafc")
+              .attr("font-size", "10px")
+              .attr("font-weight", "bold")
+              .style("pointer-events", "none")
+              .text(isCollapsed ? "+" : "-");
+
+            // Badge for collapsed count
+            if (isCollapsed && d.childCount) {
+              g.append("text")
+                .attr("dx", getNodeRadius(d) + 18)
+                .attr("dy", 4)
+                .attr("text-anchor", "start")
+                .attr("fill", "#94a3b8")
+                .attr("font-size", "10px")
+                .text(`(${d.childCount} items)`);
+            }
+
+            // Click handler for button
+            btnGroup.on("click", (e) => {
+              e.stopPropagation();
+              toggleDirectory(d.path);
+            });
+          }
+        }
+      });
+
+    node.on("click", (event, d) => {
+      event.stopPropagation();
+      if (d.type === 'cluster') {
+        const { parentPath } = d.data as ClusterData;
+        requestExpandNode?.(parentPath);
+        expandDirectory(parentPath);
+        return;
+      }
+      setSelectedNode(d);
+    });
+
+    node.on("dblclick", (event, d) => {
+      if (d.type === 'directory') {
+        event.stopPropagation();
+        if (expandedDirectories.has(d.path)) {
+          toggleDirectory(d.path);
+        } else {
+          requestExpandNode?.(d.path);
+          toggleDirectory(d.path);
+        }
+      }
+    });
 
     const updateLayout = () => {
-      link
-        .attr("x1", d => (d.source as FlatNode).x!)
-        .attr("y1", d => (d.source as FlatNode).y!)
-        .attr("x2", d => (d.target as FlatNode).x!)
-        .attr("y2", d => (d.target as FlatNode).y!);
+      // Create a map for fast node lookup by ID
+      const nodeMap = new Map(filteredNodes.map(n => [n.id, n]));
+
+      // Update curved paths
+      link.attr("d", d => {
+        // Resolve source and target nodes. They might be string IDs or objects depending on D3 processing.
+        // Since we are not using forceSimulation which auto-converts, they are likely strings.
+        const sourceId = typeof d.source === 'object' ? (d.source as FlatNode).id : d.source as string;
+        const targetId = typeof d.target === 'object' ? (d.target as FlatNode).id : d.target as string;
+
+        const sourceNode = nodeMap.get(sourceId);
+        const targetNode = nodeMap.get(targetId);
+
+        if (!sourceNode || !targetNode) return ""; // Skip if nodes not found
+
+        return linkPath(
+          { x: sourceNode.x!, y: sourceNode.y! },
+          { x: targetNode.x!, y: targetNode.y! }
+        );
+      });
 
       node
         .attr("transform", d => `translate(${d.x},${d.y})`);
     };
-
-    updateLayout();
 
     function dragstarted(event: any, d: FlatNode) {
       d.fx = d.x;
@@ -416,10 +572,19 @@ const CodeVisualizer: React.FC = () => {
       setLayoutPositions(prev => ({ ...prev, [d.id]: { x: event.x, y: event.y } }));
     }
 
+    // Attach drag behavior
+    node.call(d3.drag<any, FlatNode>()
+      .filter((event) => !event.target.closest('.expand-btn'))
+      .on("start", dragstarted)
+      .on("drag", dragged)
+      .on("end", dragended));
+
+    updateLayout();
+
     return () => {
       g.remove();
     };
-  }, [rootNode, dimensions, visibleNodeFilter, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading, requestExpandNode, expandDirectory, toggleDirectory, setSelectedNode]);
+  }, [rootNode, dimensions, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading, requestExpandNode, expandDirectory, toggleDirectory, setSelectedNode]);
 
   const updateNodePositions = useCallback(() => {
     const { width, height } = dimensions;
@@ -608,8 +773,7 @@ const CodeVisualizer: React.FC = () => {
       .scaleExtent([0.1, 4])
       .on("zoom", (event) => {
         zoomTransformRef.current = event.transform;
-        const nextFilter = event.transform.k < DIRECTORY_ONLY_ZOOM_THRESHOLD ? 'directories' : 'all';
-        setVisibleNodeFilter(current => (current === nextFilter ? current : nextFilter));
+        // Zoom only transforms - no node filtering
         renderCanvasRef.current();
       });
 
@@ -719,7 +883,7 @@ const CodeVisualizer: React.FC = () => {
   useEffect(() => {
     if (!useCanvasRenderer) return;
     renderCanvasRef.current();
-  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, layoutPositions, loadingPaths, useCanvasRenderer, visibleNodeFilter]);
+  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, layoutPositions, loadingPaths, useCanvasRenderer]);
 
   useEffect(() => {
     return () => {
@@ -757,6 +921,16 @@ const CodeVisualizer: React.FC = () => {
           <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-purple-400"></span> API</div>
           <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-yellow-400"></span> Relevant</div>
         </div>
+        {ghostNodes.length > 0 && (
+          <>
+            <div className="font-semibold mb-2 mt-3 text-purple-300">🔮 Backend Necessário</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+              <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full border-2 border-dashed border-blue-400 bg-blue-500/30"></span> Tabela</div>
+              <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full border-2 border-dashed border-green-400 bg-green-500/30"></span> Endpoint</div>
+              <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full border-2 border-dashed border-purple-400 bg-purple-500/30"></span> Serviço</div>
+            </div>
+          </>
+        )}
         <div className="mt-2 text-[11px] text-slate-400">
           Double-click a directory to collapse/expand. Click a cluster to expand.
         </div>

@@ -1,5 +1,5 @@
 import { create } from './zustand';
-import { ClusterData, FileSystemNode, FlatNode, Link } from '../types';
+import { ClusterData, FileSystemNode, FlatNode, Link, MissingDependency, BackendRequirements } from '../types';
 
 type GraphState = {
   rootNode: FileSystemNode | null;
@@ -10,6 +10,13 @@ type GraphState = {
   graphNodes: FlatNode[];
   graphLinks: Link[];
   requestExpandNode: ((path: string) => void) | null;
+  // Ghost nodes for Reverse Dependency Mapping
+  ghostNodes: FlatNode[];
+  ghostLinks: Link[];
+  missingDependencies: MissingDependency[];
+  backendRequirements: BackendRequirements | null;
+  isAnalyzingIntent: boolean;
+  // Actions
   setRootNode: (rootNode: FileSystemNode | null) => void;
   updateRootNode: (updater: (current: FileSystemNode | null) => FileSystemNode | null) => void;
   setHighlightedPaths: (paths: string[]) => void;
@@ -18,6 +25,11 @@ type GraphState = {
   expandDirectory: (path: string) => void;
   toggleDirectory: (path: string) => void;
   setRequestExpandNode: (handler: ((path: string) => void) | null) => void;
+  // Ghost node actions
+  setGhostNodes: (nodes: FlatNode[], links: Link[]) => void;
+  clearGhostNodes: () => void;
+  setMissingDependencies: (deps: MissingDependency[], requirements: BackendRequirements) => void;
+  setIsAnalyzingIntent: (isAnalyzing: boolean) => void;
 };
 
 const buildGraphHashData = (
@@ -29,34 +41,19 @@ const buildGraphHashData = (
   const nodes: FlatNode[] = [];
   const links: Link[] = [];
 
-  const countDescendants = (node: FileSystemNode): number => {
-    if (typeof node.descendantCount === 'number') return node.descendantCount;
-    if (!node.children || node.children.length === 0) return 0;
-    return node.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
-  };
-
-  const addClusterNode = (node: FileSystemNode, depth: number) => {
-    const childCount = countDescendants(node);
-    const clusterId = `${node.path}::__cluster`;
-    const clusterNode: FlatNode = {
-      id: clusterId,
-      name: `${childCount} items`,
-      type: 'cluster',
-      path: clusterId,
-      group: depth + 1,
-      relevant: false,
-      data: {
-        parentPath: node.path,
-        childCount
-      } as ClusterData,
-      x: 0,
-      y: 0
-    };
-    nodes.push(clusterNode);
-    links.push({ source: node.path, target: clusterId });
-  };
-
   const traverse = (node: FileSystemNode, parentId: string | null, depth: number) => {
+    // Check if directory is collapsed (not in expanded set)
+    // Root is always expanded by default
+    const isExpanded = expanded.has(node.path) || node.path === '';
+    const hasChildren = (node.children && node.children.length > 0) || node.hasChildren;
+
+    // Calculate total descendants for badge
+    const countDescendants = (n: FileSystemNode): number => {
+      if (typeof n.descendantCount === 'number') return n.descendantCount;
+      if (!n.children || n.children.length === 0) return 0;
+      return n.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
+    };
+
     const flatNode: FlatNode = {
       id: node.path,
       name: node.name,
@@ -65,26 +62,24 @@ const buildGraphHashData = (
       group: depth,
       relevant: highlightedPaths.some(p => node.path.includes(p)),
       data: node,
+      collapsed: !isExpanded && hasChildren && node.type === 'directory',
+      childCount: hasChildren ? countDescendants(node) : 0,
       x: 0,
       y: 0
     };
     nodes.push(flatNode);
 
-    if (parentId) {
+    if (parentId !== null) {
       links.push({ source: parentId, target: node.path });
     }
 
-    const hasChildren = (node.children && node.children.length > 0) || node.hasChildren;
-    if (hasChildren) {
-      const isExpanded = expanded.has(node.path);
-      if (isExpanded && node.children && node.children.length > 0) {
+    if (hasChildren && isExpanded) {
+      if (node.children && node.children.length > 0) {
         node.children.forEach(child => traverse(child, node.path, depth + 1));
-      } else {
-        addClusterNode(node, depth);
       }
     }
 
-    if (node.codeStructure) {
+    if (node.codeStructure && isExpanded) {
       node.codeStructure.forEach((codeNode) => {
         const codeId = `${node.path}#${codeNode.name}`;
         const flatCodeNode: FlatNode = {
@@ -104,7 +99,12 @@ const buildGraphHashData = (
     }
   };
 
-  traverse(rootNode, null, 1);
+  if (rootNode) {
+    // Ensure root is in expanded set initially effectively
+    expanded.add(rootNode.path);
+    traverse(rootNode, null, 1);
+  }
+
   return { nodes, links };
 };
 
@@ -123,23 +123,34 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   graphNodes: [],
   graphLinks: [],
   requestExpandNode: null,
+  // Ghost node initial state
+  ghostNodes: [],
+  ghostLinks: [],
+  missingDependencies: [],
+  backendRequirements: null,
+  isAnalyzingIntent: false,
   setRootNode: (rootNode) => {
-    const expandedDirectories = rootNode ? new Set([rootNode.path]) : new Set();
+    const expandedDirectories = rootNode ? new Set<string>([rootNode.path]) : new Set<string>();
     const { nodes, links } = computeGraph(rootNode, get().highlightedPaths, expandedDirectories);
     set({
       rootNode,
       expandedDirectories,
       graphNodes: nodes,
       graphLinks: links,
-      selectedNode: null
+      selectedNode: null,
+      // Clear ghost nodes when changing root
+      ghostNodes: [],
+      ghostLinks: [],
+      missingDependencies: [],
+      backendRequirements: null,
     });
   },
   updateRootNode: (updater) => {
     set((state) => {
       const nextRoot = updater(state.rootNode);
       const expandedDirectories = nextRoot
-        ? (state.expandedDirectories.size ? state.expandedDirectories : new Set([nextRoot.path]))
-        : new Set();
+        ? (state.expandedDirectories.size ? state.expandedDirectories : new Set<string>([nextRoot.path]))
+        : new Set<string>();
       const { nodes, links } = computeGraph(nextRoot, state.highlightedPaths, expandedDirectories);
       return {
         rootNode: nextRoot,
@@ -179,5 +190,18 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       return { expandedDirectories, graphNodes: nodes, graphLinks: links };
     });
   },
-  setRequestExpandNode: (handler) => set({ requestExpandNode: handler })
+  setRequestExpandNode: (handler) => set({ requestExpandNode: handler }),
+  // Ghost node actions
+  setGhostNodes: (nodes, links) => set({ ghostNodes: nodes, ghostLinks: links }),
+  clearGhostNodes: () => set({
+    ghostNodes: [],
+    ghostLinks: [],
+    missingDependencies: [],
+    backendRequirements: null,
+  }),
+  setMissingDependencies: (deps, requirements) => set({
+    missingDependencies: deps,
+    backendRequirements: requirements,
+  }),
+  setIsAnalyzingIntent: (isAnalyzing) => set({ isAnalyzingIntent: isAnalyzing }),
 }));
