@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3';
 import { ClusterData, FlatNode, Link } from '../types';
 import { useGraphStore } from '../stores/graphStore';
+import { usePresenceStore } from '../stores/presenceStore';
+import { selectGraphLinks, selectGraphNodes, selectLoadingPaths, selectRootNode, selectSelectedNode, selectExpandedDirectories, selectFlowPathNodeIds, selectFlowPathLinkIds, selectRequestExpandNode, selectNodesById } from '../stores/graphSelectors';
 
 const LAYOUT_DB_NAME = 'graphLayoutCache';
 const LAYOUT_STORE_NAME = 'positions';
@@ -60,28 +62,54 @@ const buildGraphHash = (nodes: FlatNode[], links: Link[]) => {
     .map(node => `${node.id}:${node.type}`)
     .join('|');
   const linkParts = [...links]
-    .map(link => `${link.source}->${link.target}`)
+    .map(link => `${link.source}->${link.target}:${link.kind ?? 'structural'}`)
     .sort()
     .join('|');
   return hashString(`${nodeParts}::${linkParts}`);
+};
+
+const filterLayoutPositions = (
+  positions: Record<string, { x: number; y: number }> | null | undefined,
+  nodes: FlatNode[]
+): Record<string, { x: number; y: number }> | null => {
+  if (!positions) return null;
+  const nodeIds = new Set(nodes.map(node => node.id));
+  const next: Record<string, { x: number; y: number }> = {};
+  Object.entries(positions).forEach(([id, position]) => {
+    if (!nodeIds.has(id)) return;
+    if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return;
+    next[id] = { x: position.x, y: position.y };
+  });
+  return Object.keys(next).length > 0 ? next : null;
 };
 
 const CodeVisualizer: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const rootNode = useGraphStore((state) => state.rootNode);
-  const loadingPaths = useGraphStore((state) => state.loadingPaths);
-  const expandedDirectories = useGraphStore((state) => state.expandedDirectories);
-  const graphNodes = useGraphStore((state) => state.graphNodes);
-  const graphLinks = useGraphStore((state) => state.graphLinks);
+  const rootNode = useGraphStore(selectRootNode);
+  const loadingPaths = useGraphStore(selectLoadingPaths);
+  const expandedDirectories = useGraphStore(selectExpandedDirectories);
+  const graphNodes = useGraphStore(selectGraphNodes);
+  const graphLinks = useGraphStore(selectGraphLinks);
   const ghostNodes = useGraphStore((state) => state.ghostNodes);
   const ghostLinks = useGraphStore((state) => state.ghostLinks);
+  const nodesById = useGraphStore(selectNodesById);
+  const flowPathNodeIds = useGraphStore(selectFlowPathNodeIds);
+  const flowPathLinkIds = useGraphStore(selectFlowPathLinkIds);
   const setSelectedNode = useGraphStore((state) => state.setSelectedNode);
-  const selectedNode = useGraphStore((state) => state.selectedNode);
+  const selectedNode = useGraphStore(selectSelectedNode);
   const expandDirectory = useGraphStore((state) => state.expandDirectory);
   const toggleDirectory = useGraphStore((state) => state.toggleDirectory);
-  const requestExpandNode = useGraphStore((state) => state.requestExpandNode);
+  const requestExpandNode = useGraphStore(selectRequestExpandNode);
+  const sessionLayout = useGraphStore((state) => state.sessionLayout);
+  const setLayoutCache = useGraphStore((state) => state.setLayoutCache);
+  const setSessionLayout = useGraphStore((state) => state.setSessionLayout);
+  const peerPresences = usePresenceStore((state) => Object.values(state.peers));
+  const connectionStatus = usePresenceStore((state) => state.connectionStatus);
+  const localProfile = usePresenceStore((state) => state.profile);
+  const localSelection = usePresenceStore((state) => state.localSelection);
+  const setLocalCursor = usePresenceStore((state) => state.setLocalCursor);
   const [dimensions, setDimensions] = useState({ width: 1000, height: 800 });
   // Removed: visibleNodeFilter - zoom should not filter nodes
   const zoomTransformRef = useRef(d3.zoomIdentity);
@@ -97,10 +125,26 @@ const CodeVisualizer: React.FC = () => {
   const renderCanvasRef = useRef<() => void>(() => { });
   const dragStateRef = useRef<{ nodeId: string | null; isDragging: boolean }>({ nodeId: null, isDragging: false });
   const clickTimeoutRef = useRef<number | null>(null);
+  const cursorFrameRef = useRef<number | null>(null);
 
   // VITE_GRAPH_RENDERER=canvas|webgl switches to the canvas-backed renderer (webgl currently uses canvas fallback).
   const renderMode = (import.meta.env.VITE_GRAPH_RENDERER ?? 'svg').toLowerCase();
   const useCanvasRenderer = renderMode === 'canvas' || renderMode === 'webgl';
+
+  const cursorEntries = useMemo(
+    () => peerPresences.filter((presence) => presence.cursor),
+    [peerPresences]
+  );
+  const presenceList = useMemo(() => {
+    return [
+      {
+        clientId: 'local',
+        profile: localProfile,
+        selection: localSelection
+      },
+      ...peerPresences
+    ];
+  }, [localProfile, localSelection, peerPresences]);
 
   const layoutPositionsRef = useRef(layoutPositions);
   useEffect(() => {
@@ -120,8 +164,16 @@ const CodeVisualizer: React.FC = () => {
     if (node.type === 'ghost_service') return 14;
     return 6;
   };
+  const isFlowNode = useCallback((node: FlatNode) => flowPathNodeIds.has(node.id), [flowPathNodeIds]);
+  const getLinkId = useCallback((link: Link) => {
+    const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
+    const targetId = typeof link.target === 'string' ? link.target : link.target.id;
+    return link.kind ? `${link.kind}:${sourceId}-->${targetId}` : `${sourceId}-->${targetId}`;
+  }, []);
+  const isFlowLink = useCallback((link: Link) => flowPathLinkIds.has(getLinkId(link)), [flowPathLinkIds, getLinkId]);
 
   const getNodeColor = (node: FlatNode) => {
+    if (isFlowNode(node)) return "#f97316";
     if (node.relevant) return "#facc15"; // Highlight
     switch (node.type) {
       case 'cluster': return "#0f172a";
@@ -135,6 +187,7 @@ const CodeVisualizer: React.FC = () => {
   };
 
   const getNodeFill = (node: FlatNode) => {
+    if (isFlowNode(node)) return "#f97316";
     // Ghost nodes have semi-transparent fills
     if (isGhostNode(node)) {
       switch (node.type) {
@@ -157,6 +210,7 @@ const CodeVisualizer: React.FC = () => {
   };
 
   const getNodeStroke = (node: FlatNode) => {
+    if (isFlowNode(node)) return "#fdba74";
     // Ghost nodes have dashed colored strokes
     if (isGhostNode(node)) {
       switch (node.type) {
@@ -170,8 +224,8 @@ const CodeVisualizer: React.FC = () => {
     if (node.type === 'cluster') return "#38bdf8";
     return "transparent";
   };
-
   const getNodeStrokeWidth = (node: FlatNode) => {
+    if (isFlowNode(node)) return 3;
     if (isGhostNode(node)) return 2;
     return (node.type === 'cluster' ? 2.5 : 2);
   };
@@ -180,6 +234,29 @@ const CodeVisualizer: React.FC = () => {
     if (isGhostNode(node)) return [4, 4]; // Dashed for ghost nodes
     return (node.type === 'cluster' ? [4, 3] : []);
   };
+
+  const getLinkStroke = (link: Link) => {
+    if (isFlowLink(link)) return '#f97316';
+    switch (link.kind) {
+      case 'import':
+        return '#38bdf8';
+      case 'call':
+        return '#4ade80';
+      default:
+        return '#475569';
+    }
+  };
+  const getLinkDash = (link: Link) => {
+    switch (link.kind) {
+      case 'import':
+        return [4, 3];
+      case 'call':
+        return [2, 2];
+      default:
+        return [];
+    }
+  };
+  const getLinkOpacity = (link: Link) => (isFlowLink(link) ? 0.9 : (link.kind ? 0.6 : 0.4));
   const isNodeLoading = useCallback((d: FlatNode) => {
     if (d.type === 'cluster') {
       const { parentPath } = d.data as ClusterData;
@@ -203,6 +280,41 @@ const CodeVisualizer: React.FC = () => {
     handleResize();
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    const updateCursor = (event: PointerEvent) => {
+      if (!wrapperRef.current) return;
+      if (cursorFrameRef.current) return;
+      const { clientX, clientY } = event;
+      cursorFrameRef.current = window.requestAnimationFrame(() => {
+        if (!wrapperRef.current) return;
+        const rect = wrapperRef.current.getBoundingClientRect();
+        setLocalCursor({
+          x: Math.max(0, Math.min(rect.width, clientX - rect.left)),
+          y: Math.max(0, Math.min(rect.height, clientY - rect.top))
+        });
+        cursorFrameRef.current = null;
+      });
+    };
+
+    const clearCursor = () => {
+      if (cursorFrameRef.current) {
+        window.cancelAnimationFrame(cursorFrameRef.current);
+        cursorFrameRef.current = null;
+      }
+      setLocalCursor(null);
+    };
+
+    wrapper.addEventListener('pointermove', updateCursor);
+    wrapper.addEventListener('pointerleave', clearCursor);
+    return () => {
+      wrapper.removeEventListener('pointermove', updateCursor);
+      wrapper.removeEventListener('pointerleave', clearCursor);
+    };
+  }, [setLocalCursor]);
 
   useEffect(() => {
     if (!rootNode) return;
@@ -265,7 +377,7 @@ const CodeVisualizer: React.FC = () => {
       setLayoutPositions(positions);
     };
 
-    const memoryCache = layoutCacheRef.current.get(graphHash);
+    const memoryCache = filterLayoutPositions(layoutCacheRef.current.get(graphHash) ?? null, filteredNodes);
     if (memoryCache) {
       applyPositions(memoryCache);
       return () => {
@@ -277,21 +389,38 @@ const CodeVisualizer: React.FC = () => {
     setLayoutPositions({});
 
     readLayoutCache(graphHash).then((cached) => {
-      if (!cached) return;
-      layoutCacheRef.current.set(graphHash, cached);
-      applyPositions(cached);
+      const compatible = filterLayoutPositions(cached, filteredNodes);
+      if (!compatible) return;
+      layoutCacheRef.current.set(graphHash, compatible);
+      applyPositions(compatible);
     });
 
     return () => {
       isActive = false;
     };
-  }, [graphHash, rootNode]);
+  }, [graphHash, rootNode, filteredNodes]);
+
+  useEffect(() => {
+    if (!rootNode || !sessionLayout) return;
+    if (sessionLayout.hash !== graphHash) return;
+    const compatible = filterLayoutPositions(sessionLayout.positions, filteredNodes);
+    if (!compatible) {
+      setSessionLayout(null);
+      return;
+    }
+    stablePositionsRef.current = new Map(Object.entries(compatible));
+    setLayoutPositions(compatible);
+    layoutCacheRef.current.set(graphHash, compatible);
+    writeLayoutCache(graphHash, compatible);
+    setSessionLayout(null);
+  }, [filteredNodes, graphHash, rootNode, sessionLayout, setSessionLayout]);
 
   useEffect(() => {
     if (!graphHash || Object.keys(layoutPositions).length === 0) return;
     layoutCacheRef.current.set(graphHash, layoutPositions);
     writeLayoutCache(graphHash, layoutPositions);
-  }, [graphHash, layoutPositions]);
+    setLayoutCache(graphHash, layoutPositions);
+  }, [graphHash, layoutPositions, setLayoutCache]);
 
   useEffect(() => {
     if (!rootNode || !workerRef.current) return;
@@ -334,6 +463,16 @@ const CodeVisualizer: React.FC = () => {
       node.x = savedPosition?.x ?? width / 2;
       node.y = savedPosition?.y ?? height / 2;
     });
+    const nodeById = new Map(filteredNodes.map(node => [node.id, node]));
+    const peerSelectionEntries = peerPresences
+      .map((presence) => {
+        const selectedId = presence.selection?.selectedNodeId ?? null;
+        if (!selectedId) return null;
+        const node = nodeById.get(selectedId);
+        if (!node) return null;
+        return { presence, node };
+      })
+      .filter((entry): entry is { presence: typeof peerPresences[number]; node: FlatNode } => Boolean(entry));
 
     // Helper function to generate curved path between nodes
     const linkPath = (source: { x: number; y: number }, target: { x: number; y: number }) => {
@@ -345,12 +484,13 @@ const CodeVisualizer: React.FC = () => {
     // Links - using curved paths for mind map style
     const link = g.append("g")
       .attr("fill", "none")
-      .attr("stroke", "#64748b")
-      .attr("stroke-opacity", 0.6)
       .selectAll("path")
       .data(filteredLinks)
       .join("path")
-      .attr("stroke-width", d => isAggregateNode(d.target as FlatNode) ? 2 : 1.5);
+      .attr("stroke", (d: any) => getLinkStroke(d))
+      .attr("stroke-opacity", (d: any) => getLinkOpacity(d))
+      .attr("stroke-width", (d: any) => isAggregateNode(d.target as FlatNode) ? 2 : 1.5)
+      .attr("stroke-dasharray", (d: any) => getLinkDash(d).join(' '));
 
     // Nodes
     const node = g.append("g")
@@ -366,7 +506,7 @@ const CodeVisualizer: React.FC = () => {
           expandDirectory(parentPath);
           return;
         }
-        setSelectedNode(d);
+        setSelectedNode(d.id);
       })
       .on("dblclick", (event, d) => {
         if (d.type === 'directory') {
@@ -392,25 +532,10 @@ const CodeVisualizer: React.FC = () => {
         if (d.type === 'file') return 10;
         return 6;
       })
-      .attr("fill", d => {
-        if (d.relevant) return "#facc15"; // Highlight
-        switch (d.type) {
-          case 'cluster': return "#0f172a";
-          case 'directory': return "#3b82f6";
-          case 'file': return "#64748b";
-          case 'function': return "#4ade80";
-          case 'class': return "#f472b6";
-          case 'api_endpoint': return "#a78bfa";
-          default: return "#94a3b8";
-        }
-      })
-      .attr("stroke", d => {
-        if (d.relevant) return "#ffffff";
-        if (d.type === 'cluster') return "#38bdf8";
-        return "none";
-      })
-      .attr("stroke-width", d => d.type === 'cluster' ? 2.5 : 2)
-      .attr("stroke-dasharray", d => d.type === 'cluster' ? "4 3" : "0");
+      .attr("fill", d => getNodeFill(d))
+      .attr("stroke", d => getNodeStroke(d))
+      .attr("stroke-width", d => getNodeStrokeWidth(d))
+      .attr("stroke-dasharray", d => getNodeDash(d).join(' '));
 
     node
       .style("cursor", "pointer")
@@ -511,7 +636,7 @@ const CodeVisualizer: React.FC = () => {
         expandDirectory(parentPath);
         return;
       }
-      setSelectedNode(d);
+      setSelectedNode(d.id);
     });
 
     node.on("dblclick", (event, d) => {
@@ -525,6 +650,17 @@ const CodeVisualizer: React.FC = () => {
         }
       }
     });
+
+    const selectionGroup = g.append("g").attr("class", "presence-selections");
+    const selectionRing = selectionGroup
+      .selectAll("circle")
+      .data(peerSelectionEntries)
+      .join("circle")
+      .attr("fill", "none")
+      .attr("stroke", (d) => d.presence.profile.color)
+      .attr("stroke-width", 2)
+      .attr("stroke-dasharray", "4 2")
+      .attr("r", (d) => getNodeRadius(d.node) + 10);
 
     const updateLayout = () => {
       // Create a map for fast node lookup by ID
@@ -550,9 +686,12 @@ const CodeVisualizer: React.FC = () => {
 
       node
         .attr("transform", d => `translate(${d.x},${d.y})`);
+      selectionRing
+        .attr("cx", (d) => d.node.x!)
+        .attr("cy", (d) => d.node.y!);
     };
 
-    function dragstarted(event: any, d: FlatNode) {
+    function dragstarted(_event: any, d: FlatNode) {
       d.fx = d.x;
       d.fy = d.y;
     }
@@ -584,7 +723,7 @@ const CodeVisualizer: React.FC = () => {
     return () => {
       g.remove();
     };
-  }, [rootNode, dimensions, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading, requestExpandNode, expandDirectory, toggleDirectory, setSelectedNode]);
+  }, [rootNode, dimensions, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading, requestExpandNode, expandDirectory, toggleDirectory, setSelectedNode, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode, peerPresences]);
 
   const updateNodePositions = useCallback(() => {
     const { width, height } = dimensions;
@@ -651,25 +790,47 @@ const CodeVisualizer: React.FC = () => {
       }
     });
 
-    const drawLinksBatch = (batch: Link[], strokeWidth: number) => {
-      if (batch.length === 0) return;
-      ctx.beginPath();
-      batch.forEach(link => {
-        const sourcePos = positions.get(link.source as string);
-        const targetPos = positions.get(link.target as string);
-        if (!sourcePos || !targetPos) return;
-        ctx.moveTo(sourcePos.x, sourcePos.y);
-        ctx.lineTo(targetPos.x, targetPos.y);
-      });
-      ctx.strokeStyle = "#475569";
-      ctx.globalAlpha = 0.4;
-      ctx.lineWidth = strokeWidth;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
+    type LinkBatch = {
+      links: Link[];
+      stroke: string;
+      dash: number[];
+      opacity: number;
+      width: number;
     };
 
-    drawLinksBatch(normalLinks, 1);
-    drawLinksBatch(aggregateLinks, 2);
+    const renderLinkBatches = (links: Link[], strokeWidth: number) => {
+      const batches = new Map<string, LinkBatch>();
+      links.forEach((link) => {
+        const stroke = getLinkStroke(link);
+        const dash = getLinkDash(link);
+        const opacity = getLinkOpacity(link);
+        const key = `${stroke}|${dash.join(',')}|${opacity}|${strokeWidth}`;
+        const batch = batches.get(key) ?? { links: [], stroke, dash, opacity, width: strokeWidth };
+        batch.links.push(link);
+        batches.set(key, batch);
+      });
+      batches.forEach((batch) => {
+        if (batch.links.length === 0) return;
+        ctx.beginPath();
+        batch.links.forEach(link => {
+          const sourcePos = positions.get(link.source as string);
+          const targetPos = positions.get(link.target as string);
+          if (!sourcePos || !targetPos) return;
+          ctx.moveTo(sourcePos.x, sourcePos.y);
+          ctx.lineTo(targetPos.x, targetPos.y);
+        });
+        ctx.strokeStyle = batch.stroke;
+        ctx.globalAlpha = batch.opacity;
+        ctx.lineWidth = batch.width;
+        ctx.setLineDash(batch.dash);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.setLineDash([]);
+      });
+    };
+
+    renderLinkBatches(normalLinks, 1);
+    renderLinkBatches(aggregateLinks, 2);
 
     type NodeBatch = {
       nodes: FlatNode[];
@@ -709,6 +870,21 @@ const CodeVisualizer: React.FC = () => {
         ctx.setLineDash(batch.dash);
         ctx.stroke();
       }
+    });
+
+    peerPresences.forEach((presence) => {
+      const selectedId = presence.selection?.selectedNodeId ?? null;
+      if (!selectedId) return;
+      const node = nodeById.get(selectedId);
+      const position = positions.get(selectedId);
+      if (!node || !position) return;
+      ctx.beginPath();
+      ctx.arc(position.x, position.y, getNodeRadius(node) + 10, 0, Math.PI * 2);
+      ctx.strokeStyle = presence.profile.color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 2]);
+      ctx.stroke();
+      ctx.setLineDash([]);
     });
 
     filteredNodes.forEach(node => {
@@ -759,7 +935,7 @@ const CodeVisualizer: React.FC = () => {
     });
 
     ctx.restore();
-  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, isNodeLoading, updateNodePositions]);
+  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, isNodeLoading, updateNodePositions, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode, peerPresences]);
 
   useEffect(() => {
     renderCanvasRef.current = renderCanvas;
@@ -842,7 +1018,7 @@ const CodeVisualizer: React.FC = () => {
           expandDirectory(parentPath);
           return;
         }
-        setSelectedNode(node);
+        setSelectedNode(node.id);
       }, 150);
     };
 
@@ -883,7 +1059,7 @@ const CodeVisualizer: React.FC = () => {
   useEffect(() => {
     if (!useCanvasRenderer) return;
     renderCanvasRef.current();
-  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, layoutPositions, loadingPaths, useCanvasRenderer]);
+  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, layoutPositions, loadingPaths, useCanvasRenderer, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode, peerPresences]);
 
   useEffect(() => {
     return () => {
@@ -909,6 +1085,58 @@ const CodeVisualizer: React.FC = () => {
       ) : (
         <svg ref={svgRef} width={dimensions.width} height={dimensions.height} className="w-full h-full" />
       )}
+
+      {cursorEntries.map((presence) => (
+        <div
+          key={presence.clientId}
+          className="absolute pointer-events-none flex items-center gap-2 text-xs"
+          style={{
+            left: presence.cursor?.x ?? 0,
+            top: presence.cursor?.y ?? 0,
+            transform: 'translate(8px, 8px)'
+          }}
+        >
+          <span
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ backgroundColor: presence.profile.color, boxShadow: `0 0 8px ${presence.profile.color}` }}
+          />
+          <span className="text-slate-200 bg-slate-900/80 px-2 py-0.5 rounded">
+            {presence.profile.name}
+          </span>
+        </div>
+      ))}
+
+      <div className="absolute top-4 right-4 bg-slate-900/90 backdrop-blur border border-slate-700 rounded-lg shadow-lg p-3 w-56">
+        <div className="flex items-center justify-between text-xs text-slate-300">
+          <span className="font-semibold text-slate-100">Presença</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] ${connectionStatus === 'connected'
+            ? 'bg-emerald-500/20 text-emerald-300'
+            : connectionStatus === 'connecting'
+              ? 'bg-amber-500/20 text-amber-200'
+              : 'bg-slate-700 text-slate-300'
+            }`}>
+            {connectionStatus === 'connected' ? 'Online' : connectionStatus === 'connecting' ? 'Conectando' : 'Offline'}
+          </span>
+        </div>
+        <div className="mt-2 space-y-2">
+          {presenceList.map((presence) => {
+            const selectionId = presence.selection?.selectedNodeId ?? null;
+            const nodeName = selectionId ? nodesById[selectionId]?.name ?? selectionId : 'Nenhuma seleção';
+            return (
+              <div key={presence.clientId} className="flex items-start gap-2 text-xs">
+                <span
+                  className="mt-1 w-2 h-2 rounded-full"
+                  style={{ backgroundColor: presence.profile.color }}
+                />
+                <div>
+                  <div className="text-slate-200">{presence.profile.name}{presence.clientId === 'local' ? ' (você)' : ''}</div>
+                  <div className="text-slate-400">{nodeName}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="absolute bottom-4 left-4 bg-slate-900/80 backdrop-blur p-3 rounded-lg border border-slate-700 text-xs text-slate-300 shadow-lg">
         <div className="font-semibold mb-2 text-slate-200">Legend</div>

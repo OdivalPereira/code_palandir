@@ -1,14 +1,31 @@
 import { create } from './zustand';
-import { ClusterData, FileSystemNode, FlatNode, Link, MissingDependency, BackendRequirements } from '../types';
+import {
+  FileSystemNode,
+  FlatNode,
+  Link,
+  GraphViewMode,
+  SemanticLink,
+  SessionGraphState,
+  SessionSelectionState,
+  MissingDependency,
+  BackendRequirements
+} from '../types';
 
-type GraphState = {
+export type GraphState = {
   rootNode: FileSystemNode | null;
   highlightedPaths: string[];
   loadingPaths: Set<string>;
-  selectedNode: FlatNode | null;
+  selectedNodeId: string | null;
   expandedDirectories: Set<string>;
-  graphNodes: FlatNode[];
-  graphLinks: Link[];
+  layoutCache: { hash: string; positions: Record<string, { x: number; y: number }> } | null;
+  sessionLayout: { hash: string; positions: Record<string, { x: number; y: number }> } | null;
+  nodesById: Record<string, FlatNode>;
+  linksById: Record<string, Link>;
+  semanticLinksById: Record<string, SemanticLink>;
+  graphViewMode: GraphViewMode;
+  flowQuery: { sourceId: string | null; targetId: string | null };
+  flowPathNodeIds: Set<string>;
+  flowPathLinkIds: Set<string>;
   requestExpandNode: ((path: string) => void) | null;
   // Ghost nodes for Reverse Dependency Mapping
   ghostNodes: FlatNode[];
@@ -21,7 +38,7 @@ type GraphState = {
   updateRootNode: (updater: (current: FileSystemNode | null) => FileSystemNode | null) => void;
   setHighlightedPaths: (paths: string[]) => void;
   setLoadingPaths: (paths: Set<string>) => void;
-  setSelectedNode: (node: FlatNode | null) => void;
+  setSelectedNode: (nodeId: string | null) => void;
   expandDirectory: (path: string) => void;
   toggleDirectory: (path: string) => void;
   setRequestExpandNode: (handler: ((path: string) => void) | null) => void;
@@ -30,29 +47,47 @@ type GraphState = {
   clearGhostNodes: () => void;
   setMissingDependencies: (deps: MissingDependency[], requirements: BackendRequirements) => void;
   setIsAnalyzingIntent: (isAnalyzing: boolean) => void;
+  restoreSession: (graph: SessionGraphState, selection: SessionSelectionState) => void;
+  setLayoutCache: (hash: string, positions: Record<string, { x: number; y: number }>) => void;
+  setSessionLayout: (layout: { hash: string; positions: Record<string, { x: number; y: number }> } | null) => void;
+  setSemanticLinks: (links: SemanticLink[], sourceIds?: Set<string>) => void;
+  setGraphViewMode: (mode: GraphViewMode) => void;
+  setFlowQuery: (sourceId: string | null, targetId: string | null) => void;
+  setFlowHighlight: (nodeIds: string[], linkIds: string[]) => void;
+  clearFlowHighlight: () => void;
 };
 
 const buildGraphHashData = (
   rootNode: FileSystemNode | null,
   highlightedPaths: string[],
   expanded: Set<string>
-): { nodes: FlatNode[]; links: Link[] } => {
-  if (!rootNode) return { nodes: [], links: [] };
-  const nodes: FlatNode[] = [];
-  const links: Link[] = [];
+): { nodesById: Record<string, FlatNode>; linksById: Record<string, Link> } => {
+  if (!rootNode) return { nodesById: {}, linksById: {} };
+  const nodesById: Record<string, FlatNode> = {};
+  const linksById: Record<string, Link> = {};
+
+  const countDescendants = (node: FileSystemNode): number => {
+    if (typeof node.descendantCount === 'number') return node.descendantCount;
+    if (!node.children || node.children.length === 0) return 0;
+    return node.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
+  };
+
+  const linkIdFor = (source: string, target: string) => `${source}-->${target}`;
+
+  const registerNode = (node: FlatNode) => {
+    nodesById[node.id] = node;
+  };
+
+  const registerLink = (source: string, target: string) => {
+    const linkId = linkIdFor(source, target);
+    linksById[linkId] = { source, target, kind: 'structural' };
+  };
 
   const traverse = (node: FileSystemNode, parentId: string | null, depth: number) => {
     // Check if directory is collapsed (not in expanded set)
     // Root is always expanded by default
     const isExpanded = expanded.has(node.path) || node.path === '';
     const hasChildren = (node.children && node.children.length > 0) || node.hasChildren;
-
-    // Calculate total descendants for badge
-    const countDescendants = (n: FileSystemNode): number => {
-      if (typeof n.descendantCount === 'number') return n.descendantCount;
-      if (!n.children || n.children.length === 0) return 0;
-      return n.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
-    };
 
     const flatNode: FlatNode = {
       id: node.path,
@@ -67,10 +102,10 @@ const buildGraphHashData = (
       x: 0,
       y: 0
     };
-    nodes.push(flatNode);
+    registerNode(flatNode);
 
-    if (parentId !== null) {
-      links.push({ source: parentId, target: node.path });
+    if (parentId) {
+      registerLink(parentId, node.path);
     }
 
     if (hasChildren && isExpanded) {
@@ -93,19 +128,14 @@ const buildGraphHashData = (
           x: 0,
           y: 0
         };
-        nodes.push(flatCodeNode);
-        links.push({ source: node.path, target: codeId });
+        registerNode(flatCodeNode);
+        registerLink(node.path, codeId);
       });
     }
   };
 
-  if (rootNode) {
-    // Ensure root is in expanded set initially effectively
-    expanded.add(rootNode.path);
-    traverse(rootNode, null, 1);
-  }
-
-  return { nodes, links };
+  traverse(rootNode, null, 1);
+  return { nodesById, linksById };
 };
 
 const computeGraph = (
@@ -118,10 +148,17 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   rootNode: null,
   highlightedPaths: [],
   loadingPaths: new Set(),
-  selectedNode: null,
+  selectedNodeId: null,
   expandedDirectories: new Set(),
-  graphNodes: [],
-  graphLinks: [],
+  layoutCache: null,
+  sessionLayout: null,
+  nodesById: {},
+  linksById: {},
+  semanticLinksById: {},
+  graphViewMode: 'structural',
+  flowQuery: { sourceId: null, targetId: null },
+  flowPathNodeIds: new Set(),
+  flowPathLinkIds: new Set(),
   requestExpandNode: null,
   // Ghost node initial state
   ghostNodes: [],
@@ -131,13 +168,19 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   isAnalyzingIntent: false,
   setRootNode: (rootNode) => {
     const expandedDirectories = rootNode ? new Set<string>([rootNode.path]) : new Set<string>();
-    const { nodes, links } = computeGraph(rootNode, get().highlightedPaths, expandedDirectories);
+    const { nodesById, linksById } = computeGraph(rootNode, get().highlightedPaths, expandedDirectories);
     set({
       rootNode,
       expandedDirectories,
-      graphNodes: nodes,
-      graphLinks: links,
-      selectedNode: null,
+      nodesById,
+      linksById,
+      selectedNodeId: null,
+      layoutCache: null,
+      semanticLinksById: {},
+      graphViewMode: 'structural',
+      flowQuery: { sourceId: null, targetId: null },
+      flowPathNodeIds: new Set(),
+      flowPathLinkIds: new Set(),
       // Clear ghost nodes when changing root
       ghostNodes: [],
       ghostLinks: [],
@@ -151,22 +194,22 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       const expandedDirectories = nextRoot
         ? (state.expandedDirectories.size ? state.expandedDirectories : new Set<string>([nextRoot.path]))
         : new Set<string>();
-      const { nodes, links } = computeGraph(nextRoot, state.highlightedPaths, expandedDirectories);
+      const { nodesById, linksById } = computeGraph(nextRoot, state.highlightedPaths, expandedDirectories);
       return {
         rootNode: nextRoot,
         expandedDirectories,
-        graphNodes: nodes,
-        graphLinks: links
+        nodesById,
+        linksById
       };
     });
   },
   setHighlightedPaths: (paths) => {
     const { rootNode, expandedDirectories } = get();
-    const { nodes, links } = computeGraph(rootNode, paths, expandedDirectories);
-    set({ highlightedPaths: paths, graphNodes: nodes, graphLinks: links });
+    const { nodesById, linksById } = computeGraph(rootNode, paths, expandedDirectories);
+    set({ highlightedPaths: paths, nodesById, linksById });
   },
   setLoadingPaths: (paths) => set({ loadingPaths: paths }),
-  setSelectedNode: (node) => set({ selectedNode: node }),
+  setSelectedNode: (nodeId) => set({ selectedNodeId: nodeId }),
   expandDirectory: (path) => {
     set((state) => {
       if (state.expandedDirectories.has(path)) {
@@ -174,8 +217,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
       const expandedDirectories = new Set(state.expandedDirectories);
       expandedDirectories.add(path);
-      const { nodes, links } = computeGraph(state.rootNode, state.highlightedPaths, expandedDirectories);
-      return { expandedDirectories, graphNodes: nodes, graphLinks: links };
+      const { nodesById, linksById } = computeGraph(state.rootNode, state.highlightedPaths, expandedDirectories);
+      return { expandedDirectories, nodesById, linksById };
     });
   },
   toggleDirectory: (path) => {
@@ -186,8 +229,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       } else {
         expandedDirectories.add(path);
       }
-      const { nodes, links } = computeGraph(state.rootNode, state.highlightedPaths, expandedDirectories);
-      return { expandedDirectories, graphNodes: nodes, graphLinks: links };
+      const { nodesById, linksById } = computeGraph(state.rootNode, state.highlightedPaths, expandedDirectories);
+      return { expandedDirectories, nodesById, linksById };
     });
   },
   setRequestExpandNode: (handler) => set({ requestExpandNode: handler }),
@@ -204,4 +247,63 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     backendRequirements: requirements,
   }),
   setIsAnalyzingIntent: (isAnalyzing) => set({ isAnalyzingIntent: isAnalyzing }),
+  restoreSession: (graph, selection) => {
+    const expandedDirectories = new Set(graph.expandedDirectories);
+    const { nodesById, linksById } = computeGraph(graph.rootNode, graph.highlightedPaths, expandedDirectories);
+    const nextSelected = selection.selectedNodeId && nodesById[selection.selectedNodeId]
+      ? selection.selectedNodeId
+      : null;
+    const semanticLinksById: Record<string, SemanticLink> = {};
+    if (graph.semanticLinks) {
+      graph.semanticLinks.forEach((link) => {
+        const id = `${link.kind}:${link.source}-->${link.target}`;
+        semanticLinksById[id] = { ...link };
+      });
+    }
+    set({
+      rootNode: graph.rootNode,
+      highlightedPaths: graph.highlightedPaths,
+      expandedDirectories,
+      nodesById,
+      linksById,
+      selectedNodeId: nextSelected,
+      layoutCache: null,
+      semanticLinksById,
+      graphViewMode: graph.graphViewMode ?? 'structural',
+      flowQuery: { sourceId: null, targetId: null },
+      flowPathNodeIds: new Set(),
+      flowPathLinkIds: new Set()
+    });
+  },
+  setLayoutCache: (hash, positions) => set({ layoutCache: { hash, positions } }),
+  setSessionLayout: (layout) => set({ sessionLayout: layout }),
+  setSemanticLinks: (links, sourceIds) => {
+    set((state) => {
+      const nextLinks = { ...state.semanticLinksById };
+      if (sourceIds && sourceIds.size > 0) {
+        Object.entries(nextLinks).forEach(([id, link]) => {
+          if (sourceIds.has(link.source as string)) {
+            delete nextLinks[id];
+          }
+        });
+      }
+      links.forEach((link) => {
+        const source = typeof link.source === 'string' ? link.source : link.source.id;
+        const target = typeof link.target === 'string' ? link.target : link.target.id;
+        const id = `${link.kind}:${source}-->${target}`;
+        nextLinks[id] = { ...link, source, target };
+      });
+      return { semanticLinksById: nextLinks };
+    });
+  },
+  setGraphViewMode: (mode) => set({ graphViewMode: mode }),
+  setFlowQuery: (sourceId, targetId) => set({ flowQuery: { sourceId, targetId } }),
+  setFlowHighlight: (nodeIds, linkIds) => set({
+    flowPathNodeIds: new Set(nodeIds),
+    flowPathLinkIds: new Set(linkIds)
+  }),
+  clearFlowHighlight: () => set({
+    flowPathNodeIds: new Set(),
+    flowPathLinkIds: new Set()
+  })
 }));

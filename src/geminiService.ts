@@ -1,65 +1,57 @@
-import { GoogleGenAI, Type } from '@google/genai';
-import { CodeNode } from './types';
+import { CodeNode, ProjectGraphInput, ProjectSummary } from './types';
+import {
+  getCachedAnalysis,
+  getCachedRelevantFiles,
+  hashContent,
+  setCachedAnalysis,
+  setCachedRelevantFiles,
+} from './cacheRepository';
 
-// Lazy initialization for Gemini AI - only initialize when needed
-let aiInstance: GoogleGenAI | null = null;
-const modelId = 'gemini-2.5-flash';
+const requestAi = async <T>(path: string, payload: Record<string, unknown>): Promise<T> => {
+  const response = await fetch(`/api/ai/${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
 
-function getAI(): GoogleGenAI {
-  if (!aiInstance) {
-    const apiKey = import.meta.env.VITE_API_KEY;
-    if (!apiKey) {
-      throw new Error('VITE_API_KEY environment variable is not set. Please configure your Gemini API key.');
-    }
-    aiInstance = new GoogleGenAI({
-      apiKey,
-      vertexai: true,
-    });
+  if (!response.ok) {
+    throw new Error(`AI request failed (${response.status}).`);
   }
-  return aiInstance;
-}
+
+  return (await response.json()) as T;
+};
+
+export const PROJECT_SUMMARY_PROMPT_BASE = `Você é um arquiteto de software. Com base nos inputs fornecidos (arquivos e grafo),
+gere uma visão geral do projeto.
+
+Requisitos:
+- Produza um resumo claro (até 8 frases) descrevendo propósito, módulos principais e fluxos críticos.
+- Produza um diagrama lógico em Mermaid usando flowchart TD.
+- Responda em pt-br.
+- Retorne apenas JSON válido conforme o schema, sem markdown ou explicações extras.`;
 
 // Analyze a single file's content to extract structure
-export const analyzeFileContent = async (code: string, filename: string): Promise<CodeNode[]> => {
-  const prompt = `
-    Analyze the source code of ${filename}.
-    Extract the top-level structure: classes, functions, exported variables, and API endpoints.
-    Return a list of these elements.
-    For each, provide a brief description and the signature/snippet.
-  `;
-
+export const analyzeFileContent = async (
+  code: string,
+  filename: string,
+  options?: { ttlMs?: number },
+): Promise<CodeNode[]> => {
+  const key = await hashContent(`${filename}:${code}`);
+  const cached = await getCachedAnalysis(key);
+  if (cached) {
+    return cached;
+  }
   try {
-    const response = await getAI().models.generateContent({
-      model: modelId,
-      contents: {
-        role: 'user',
-        parts: [
-          { text: prompt },
-          { text: `CODE:\n${code.slice(0, 20000)}` } // Limit context window usage
-        ]
-      },
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              id: { type: Type.STRING },
-              name: { type: Type.STRING },
-              type: { type: Type.STRING, enum: ['function', 'class', 'variable', 'api_endpoint'] },
-              codeSnippet: { type: Type.STRING },
-              description: { type: Type.STRING }
-            }
-          }
-        }
-      }
+    const result = await requestAi<{ nodes: CodeNode[] }>('analyze-file', {
+      code,
+      filename,
     });
-
-    if (response.text) {
-      return JSON.parse(response.text) as CodeNode[];
-    }
-    return [];
+    const nodes = Array.isArray(result.nodes) ? result.nodes : [];
+    await setCachedAnalysis(key, nodes, options?.ttlMs);
+    return nodes;
   } catch (error) {
     console.error("File analysis failed", error);
     return [];
@@ -67,49 +59,48 @@ export const analyzeFileContent = async (code: string, filename: string): Promis
 };
 
 // Identify relevant files in the project based on a user query
-export const findRelevantFiles = async (query: string, filePaths: string[]): Promise<string[]> => {
-  const prompt = `
-    I have a project with the following file structure.
-    User Query: "${query}"
-    
-    Identify which files are likely to contain the logic relevant to the query.
-    Return a list of file paths.
-  `;
-
-  // Batch paths if too many, but for now assume it fits
-  const pathsStr = filePaths.join('\n');
+export const findRelevantFiles = async (
+  query: string,
+  filePaths: string[],
+  options?: { ttlMs?: number },
+): Promise<string[]> => {
+  const normalizedPaths = [...filePaths].sort();
+  const pathsStr = normalizedPaths.join('\n');
+  const contentHash = await hashContent(pathsStr);
+  const cacheKey = await hashContent(`${contentHash}:${query}`);
+  const cached = await getCachedRelevantFiles(cacheKey, contentHash);
+  if (cached) {
+    return cached;
+  }
 
   try {
-    const response = await getAI().models.generateContent({
-      model: modelId,
-      contents: {
-        role: 'user',
-        parts: [
-          { text: prompt },
-          { text: `FILES:\n${pathsStr}` }
-        ]
-      },
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            relevantFiles: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            }
-          }
-        }
-      }
+    const result = await requestAi<{ relevantFiles: string[] }>('relevant-files', {
+      query,
+      filePaths: normalizedPaths,
     });
-
-    if (response.text) {
-      const result = JSON.parse(response.text);
-      return result.relevantFiles || [];
-    }
-    return [];
+    const relevantFiles = Array.isArray(result.relevantFiles) ? result.relevantFiles : [];
+    await setCachedRelevantFiles(cacheKey, relevantFiles, contentHash, options?.ttlMs);
+    return relevantFiles;
   } catch (error) {
     console.error("Relevance search failed", error);
     return [];
   }
+};
+
+export const summarizeProject = async (inputs: {
+  filePaths: string[];
+  graph: ProjectGraphInput;
+  context?: string[];
+  promptBase?: string;
+}): Promise<ProjectSummary> => {
+  const result = await requestAi<ProjectSummary>('project-summary', {
+    promptBase: inputs.promptBase ?? PROJECT_SUMMARY_PROMPT_BASE,
+    filePaths: inputs.filePaths,
+    graph: inputs.graph,
+    context: inputs.context ?? [],
+  });
+  return {
+    summary: typeof result.summary === 'string' ? result.summary : '',
+    diagram: typeof result.diagram === 'string' ? result.diagram : '',
+  };
 };

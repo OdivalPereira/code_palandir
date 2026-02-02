@@ -1,13 +1,12 @@
 import React, { useState, useCallback } from 'react';
 import { Sparkles, Loader2, Copy, Check, Database, Server, Shield, RefreshCw } from 'lucide-react';
 import { useGraphStore } from '../stores/graphStore';
-import { FileSystemNode, FlatNode, BackendRequirements, MissingDependency } from '../types';
+import { FileSystemNode, FlatNode, MissingDependency } from '../types';
+import { selectSelectedNode } from '../stores/graphSelectors';
 import {
     parseComponentIntent,
     analyzeBackendRequirements,
     detectMissingDependencies,
-    generateRequirementsSummary,
-    generateQuickPrompt,
     generateBackendPrompt,
 } from '../services';
 
@@ -16,10 +15,9 @@ interface IntentPanelProps {
 }
 
 export const IntentPanel: React.FC<IntentPanelProps> = ({ className = '' }) => {
-    const selectedNode = useGraphStore((state) => state.selectedNode);
+    const selectedNode = useGraphStore(selectSelectedNode);
     const isAnalyzingIntent = useGraphStore((state) => state.isAnalyzingIntent);
     const missingDependencies = useGraphStore((state) => state.missingDependencies);
-    const backendRequirements = useGraphStore((state) => state.backendRequirements);
     const setGhostNodes = useGraphStore((state) => state.setGhostNodes);
     const setMissingDependencies = useGraphStore((state) => state.setMissingDependencies);
     const setIsAnalyzingIntent = useGraphStore((state) => state.setIsAnalyzingIntent);
@@ -156,8 +154,8 @@ export const IntentPanel: React.FC<IntentPanelProps> = ({ className = '' }) => {
                             <button
                                 onClick={() => setPreferredStack('supabase')}
                                 className={`flex-1 py-2 px-3 rounded text-xs font-medium transition-colors ${preferredStack === 'supabase'
-                                        ? 'bg-green-600 text-white'
-                                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                    ? 'bg-green-600 text-white'
+                                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                                     }`}
                             >
                                 Supabase
@@ -165,8 +163,8 @@ export const IntentPanel: React.FC<IntentPanelProps> = ({ className = '' }) => {
                             <button
                                 onClick={() => setPreferredStack('firebase')}
                                 className={`flex-1 py-2 px-3 rounded text-xs font-medium transition-colors ${preferredStack === 'firebase'
-                                        ? 'bg-orange-600 text-white'
-                                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                    ? 'bg-orange-600 text-white'
+                                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                                     }`}
                             >
                                 Firebase

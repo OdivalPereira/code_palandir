@@ -2,7 +2,6 @@ import { useSyncExternalStore } from 'react';
 
 type SetState<T> = (partial: Partial<T> | ((state: T) => Partial<T>), replace?: boolean) => void;
 type GetState<T> = () => T;
-type Subscribe = (listener: () => void) => () => void;
 type StateCreator<T> = (set: SetState<T>, get: GetState<T>) => T;
 
 type StoreHook<T> = {

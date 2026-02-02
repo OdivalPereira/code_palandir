@@ -7,7 +7,8 @@
         "dev": "vite",
         "build": "tsc -b && vite build",
         "lint": "eslint .",
-        "preview": "vite preview"
+        "preview": "vite preview",
+        "server": "node server/index.js"
     },
     "dependencies": {
         "@google/genai": "latest",
@@ -15,8 +16,10 @@
         "lucide-react": "^0.363.0",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
+        "reselect": "^5.1.1",
         "clsx": "^2.1.0",
-        "tailwind-merge": "^2.2.2"
+        "tailwind-merge": "^2.2.2",
+        "ws": "^8.18.0"
     },
     "devDependencies": {
         "@types/d3": "^7.4.3",

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { X, Check, Database, Server, Shield, ChevronRight, Sparkles } from 'lucide-react';
 import { BackendTemplate, TemplateComponent } from './TemplateSidebar';
-import { useGraphStore } from '../stores/graphStore';
 import { FlatNode, Link, MissingDependency } from '../types';
 
 interface TemplateWizardProps {
@@ -69,9 +68,9 @@ export const TemplateWizard: React.FC<TemplateWizardProps> = ({
                     id: `template_${template.id}_${idx}`,
                     name: customName,
                     type: comp.type,
-                    status: 'missing' as const,
                     description: comp.description,
-                    suggestedPath: getSuggestedPath(comp, preferredStack),
+                    suggestedStack: preferredStack === 'supabase' ? 'supabase' : preferredStack === 'firebase' ? 'firebase' : 'custom',
+                    requiredBy: [targetComponent?.id].filter(Boolean) as string[],
                 },
                 x: baseX + 150 + (idx % 3) * 100,
                 y: baseY + Math.floor(idx / 3) * 80,
@@ -93,9 +92,9 @@ export const TemplateWizard: React.FC<TemplateWizardProps> = ({
             id: `template_${template.id}_${idx}`,
             name: customNames[template.components.indexOf(comp)] || comp.name,
             type: comp.type,
-            status: 'missing' as const,
             description: comp.description,
-            suggestedPath: getSuggestedPath(comp, preferredStack),
+            suggestedStack: preferredStack === 'supabase' ? 'supabase' : preferredStack === 'firebase' ? 'firebase' : 'custom',
+            requiredBy: [targetComponent?.id].filter(Boolean) as string[],
         }));
 
         onApply(ghostNodes, ghostLinks, deps);
@@ -104,23 +103,6 @@ export const TemplateWizard: React.FC<TemplateWizardProps> = ({
         setTimeout(() => {
             onClose();
         }, 1500);
-    };
-
-    const getSuggestedPath = (comp: TemplateComponent, stack: string): string => {
-        switch (stack) {
-            case 'supabase':
-                if (comp.type === 'table') return `supabase/migrations/${comp.name}.sql`;
-                if (comp.type === 'endpoint') return `supabase/functions/${comp.name.replace(/\//g, '_')}/index.ts`;
-                return `src/services/${comp.name}.ts`;
-            case 'firebase':
-                if (comp.type === 'table') return `firestore.rules`;
-                if (comp.type === 'endpoint') return `functions/src/${comp.name.replace(/\//g, '_')}.ts`;
-                return `src/services/${comp.name}.ts`;
-            default:
-                if (comp.type === 'table') return `prisma/schema.prisma`;
-                if (comp.type === 'endpoint') return `src/routes/${comp.name.replace(/\//g, '_')}.ts`;
-                return `src/services/${comp.name}.ts`;
-        }
     };
 
     return (
@@ -155,8 +137,8 @@ export const TemplateWizard: React.FC<TemplateWizardProps> = ({
                                             key={stack}
                                             onClick={() => setPreferredStack(stack)}
                                             className={`flex-1 py-2 px-3 rounded text-xs font-medium transition-colors capitalize ${preferredStack === stack
-                                                    ? 'bg-indigo-600 text-white'
-                                                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                                                 }`}
                                         >
                                             {stack}
@@ -175,8 +157,8 @@ export const TemplateWizard: React.FC<TemplateWizardProps> = ({
                                         <div
                                             key={idx}
                                             className={`p-3 rounded border transition-colors cursor-pointer ${selectedComponents.has(idx)
-                                                    ? 'bg-slate-700/50 border-indigo-500'
-                                                    : 'bg-slate-900/50 border-slate-700 opacity-50'
+                                                ? 'bg-slate-700/50 border-indigo-500'
+                                                : 'bg-slate-900/50 border-slate-700 opacity-50'
                                                 }`}
                                             onClick={() => toggleComponent(idx)}
                                         >

@@ -2,9 +2,6 @@ import { GoogleGenAI, Type } from '@google/genai';
 import {
     UIIntentSchema,
     BackendRequirements,
-    TableRequirement,
-    EndpointRequirement,
-    ServiceRequirement,
     MissingDependency,
 } from '../types';
 

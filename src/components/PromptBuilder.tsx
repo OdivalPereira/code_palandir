@@ -1,46 +1,98 @@
-import React from 'react';
-import { PromptItem } from '../types';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ModuleInput, PromptItem } from '../types';
 import { Trash2, Copy, MessageSquarePlus } from 'lucide-react';
 
 interface PromptBuilderProps {
   items: PromptItem[];
+  modules: ModuleInput[];
   onRemove: (id: string) => void;
   onClear: () => void;
 }
 
-const PromptBuilder: React.FC<PromptBuilderProps> = ({ items, onRemove, onClear }) => {
-  
-  const generateFinalPrompt = () => {
-    let prompt = "I need help understanding and modifying this code.\n\n";
-    
-    const contextItems = items.filter(i => i.type === 'context');
+const buildModulesSection = (modules: ModuleInput[]) => {
+  if (modules.length === 0) {
+    return 'MÓDULOS IMPACTADOS:\n- (defina os módulos impactados ou use a aba de recomendações)\n';
+  }
+
+  const moduleLines = modules.flatMap((module) => {
+    const files = module.files.length > 0 ? module.files : ['(arquivos pendentes)'];
+    const dependencies = module.dependencies.length > 0 ? module.dependencies : ['(dependências pendentes)'];
+    return [
+      `- ${module.name || 'Sem nome'}`,
+      `  Arquivos: ${files.join(', ')}`,
+      `  Dependências: ${dependencies.join(', ')}`
+    ];
+  });
+
+  return ['MÓDULOS IMPACTADOS:', ...moduleLines, ''].join('\n');
+};
+
+const buildPlanSection = () =>
+  [
+    'PLANO SUGERIDO:',
+    '1) Confirmar objetivo da mudança e critérios de aceite.',
+    '2) Mapear fluxos e contratos afetados (API, UI, integrações).',
+    '3) Implementar ajustes incrementais com validações locais.',
+    '4) Atualizar testes/documentação e revisar impactos indiretos.',
+    '',
+    'RISCOS & CHECKPOINTS:',
+    '- Risco: regressões em fluxos críticos. Checkpoint: executar testes e revisar monitoramento.',
+    '- Risco: impacto em dependências ocultas. Checkpoint: validar integrações e dependências externas.',
+    '- Risco: divergência de requisitos. Checkpoint: alinhar requisitos com exemplos de uso.'
+  ].join('\n');
+
+const PromptBuilder: React.FC<PromptBuilderProps> = ({ items, modules, onRemove, onClear }) => {
+  const generateFinalPrompt = useCallback(() => {
+    let prompt = 'Preciso de ajuda para entender e modificar este código.\n\n';
+
+    const contextItems = items.filter((item) => item.type === 'context');
     if (contextItems.length > 0) {
-        prompt += "CONTEXT:\n" + contextItems.map(i => `- ${i.content}`).join('\n') + "\n\n";
+      prompt += 'CONTEXTO:\n' + contextItems.map((item) => `- ${item.content}`).join('\n') + '\n\n';
     }
 
-    const codeItems = items.filter(i => i.type === 'code');
+    prompt += `${buildModulesSection(modules)}\n`;
+
+    const codeItems = items.filter((item) => item.type === 'code');
     if (codeItems.length > 0) {
-        prompt += "RELEVANT CODE SNIPPETS:\n";
-        codeItems.forEach(item => {
-            prompt += `\n// ${item.title}\n${item.content}\n`;
-        });
-    }
-    
-    const comments = items.filter(i => i.type === 'comment');
-    if (comments.length > 0) {
-        prompt += "\nMY QUESTIONS/COMMENTS:\n";
-        comments.forEach(item => {
-            prompt += `- ${item.content}\n`;
-        });
+      prompt += 'TRECHOS CHAVE:\n';
+      codeItems.forEach((item) => {
+        prompt += `\n// ${item.title}\n${item.content}\n`;
+      });
+      prompt += '\n';
     }
 
-    return prompt;
-  };
+    const comments = items.filter((item) => item.type === 'comment');
+    if (comments.length > 0) {
+      prompt += 'OBSERVAÇÕES/PERGUNTAS:\n';
+      comments.forEach((item) => {
+        prompt += `- ${item.content}\n`;
+      });
+      prompt += '\n';
+    }
+
+    prompt += `${buildPlanSection()}\n`;
+
+    return prompt.trimEnd();
+  }, [items, modules]);
+
+  const generatedPrompt = useMemo(() => generateFinalPrompt(), [generateFinalPrompt]);
+  const [editablePrompt, setEditablePrompt] = useState(generatedPrompt);
+  const [isDirty, setIsDirty] = useState(false);
+
+  useEffect(() => {
+    if (!isDirty) {
+      setEditablePrompt(generatedPrompt);
+    }
+  }, [generatedPrompt, isDirty]);
 
   const handleCopy = () => {
-    const text = generateFinalPrompt();
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(editablePrompt);
     alert("Prompt copied to clipboard!");
+  };
+
+  const handleReset = () => {
+    setEditablePrompt(generatedPrompt);
+    setIsDirty(false);
   };
 
   return (
@@ -55,7 +107,7 @@ const PromptBuilder: React.FC<PromptBuilderProps> = ({ items, onRemove, onClear 
         </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {items.length === 0 ? (
           <div className="text-center text-slate-500 mt-10 text-sm">
             <p>Your prompt basket is empty.</p>
@@ -92,12 +144,34 @@ const PromptBuilder: React.FC<PromptBuilderProps> = ({ items, onRemove, onClear 
             </div>
           ))
         )}
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs uppercase tracking-wide text-slate-400">Prompt final (editável)</label>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="text-[11px] text-indigo-300 hover:text-indigo-200"
+              disabled={items.length === 0 && modules.length === 0}
+            >
+              Atualizar
+            </button>
+          </div>
+          <textarea
+            value={editablePrompt}
+            onChange={(event) => {
+              setEditablePrompt(event.target.value);
+              setIsDirty(true);
+            }}
+            className="w-full h-64 bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+          />
+        </div>
       </div>
 
       <div className="p-4 border-t border-slate-700 bg-slate-900/50 space-y-2">
         <button 
           onClick={handleCopy}
-          disabled={items.length === 0}
+          disabled={editablePrompt.length === 0}
           className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white py-2.5 rounded-lg font-medium transition-colors"
         >
           <Copy size={16} />
