@@ -60,7 +60,7 @@ const requestAi = async <T>(path: string, payload: Record<string, unknown>): Pro
 export const analyzeIntent = async (
   payload: AnalyzeIntentPayload,
 ): Promise<BackendRequirements> => {
-  const result = await requestApi<BackendRequirements>('/api/analyze-intent', {
+  const result = await requestApi<BackendRequirements>('/api/analyze', {
     fileContent: payload.fileContent,
     selectedNode: payload.selectedNode,
     userIntent: payload.userIntent ?? '',
@@ -76,7 +76,7 @@ export const analyzeIntent = async (
 };
 
 export const optimizePrompt = async (payload: PromptOptimizerPayload): Promise<string> => {
-  const result = await requestApi<{ prompt?: string }>('/api/optimize-prompt', {
+  const result = await requestApi<{ prompt?: string }>('/api/optimize', {
     fileContent: payload.fileContent ?? payload.componentCode ?? '',
     selectedNode: payload.selectedNode,
     userIntent: payload.userIntent,
