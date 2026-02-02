@@ -25,6 +25,8 @@ const aiRequestLimit = Number(process.env.AI_RATE_LIMIT_MAX ?? '30');
 const aiRequestWindowMs = Number(process.env.AI_RATE_LIMIT_WINDOW_MS ?? '300000');
 const indexingPollIntervalMs = Number(process.env.INDEXING_POLL_INTERVAL_MS ?? '5000');
 const indexingJobDurationMs = Number(process.env.INDEXING_JOB_DURATION_MS ?? '1000');
+const aiPromptCostPer1k = Number(process.env.AI_COST_PROMPT_PER_1K ?? '0');
+const aiOutputCostPer1k = Number(process.env.AI_COST_OUTPUT_PER_1K ?? '0');
 
 const sessions = new Map();
 const rateLimits = new Map();
@@ -47,6 +49,56 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const indexingStorePath = path.join(__dirname, 'indexing-store.json');
 const sessionStorePath = path.join(__dirname, 'session-store.json');
+const aiAuditLogPath = path.join(__dirname, 'ai-audit-log.jsonl');
+
+const isFiniteNumber = (value) => Number.isFinite(value);
+
+const estimateAiCostUsd = (usage) => {
+  if (!usage) return null;
+  const promptTokens = usage.promptTokens ?? 0;
+  const outputTokens = usage.outputTokens ?? 0;
+  if (!isFiniteNumber(promptTokens) && !isFiniteNumber(outputTokens)) return null;
+  const promptCost = isFiniteNumber(promptTokens)
+    ? (promptTokens / 1000) * aiPromptCostPer1k
+    : 0;
+  const outputCost = isFiniteNumber(outputTokens)
+    ? (outputTokens / 1000) * aiOutputCostPer1k
+    : 0;
+  const total = promptCost + outputCost;
+  return Number.isFinite(total) ? Number(total.toFixed(6)) : null;
+};
+
+const appendAiAuditLog = async (record) => {
+  try {
+    await fs.appendFile(aiAuditLogPath, `${JSON.stringify(record)}\n`);
+  } catch (error) {
+    console.error('Failed to append AI audit log', error);
+  }
+};
+
+const readAiAuditLog = async () => {
+  try {
+    const content = await fs.readFile(aiAuditLogPath, 'utf-8');
+    return content
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch (error) {
+          return null;
+        }
+      })
+      .filter(Boolean);
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return [];
+    }
+    console.error('Failed to read AI audit log', error);
+    return [];
+  }
+};
 
 const readIndexingStore = async () => {
   try {
@@ -501,17 +553,49 @@ const handleAiAnalyzeFile = async (req, res, session) => {
     return;
   }
 
-  const nodes = await generateJsonResponse({
-    client: aiClient,
+  const requestType = AI_REQUEST_SCHEMA.analyzeFile.prompt.id;
+  const startedAt = Date.now();
+  let response = null;
+  let errorMessage = null;
+  try {
+    response = await generateJsonResponse({
+      client: aiClient,
+      model: aiModelId,
+      type: requestType,
+      params: {
+        filename,
+        code: code.slice(0, 20000),
+      },
+    });
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : 'Unknown AI error';
+  }
+
+  const data = response?.data ?? null;
+  const meta = response?.meta ?? null;
+  const latencyMs = meta?.latencyMs ?? Date.now() - startedAt;
+  const usage = meta?.usage ?? null;
+  const costUsd = estimateAiCostUsd(usage);
+  const success = Boolean(data);
+
+  await appendAiAuditLog({
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    requestType,
     model: aiModelId,
-    type: AI_REQUEST_SCHEMA.analyzeFile.prompt.id,
-    params: {
-      filename,
-      code: code.slice(0, 20000),
-    },
+    provider: aiProvider,
+    latencyMs,
+    success,
+    error: errorMessage,
+    usage,
+    costUsd,
   });
 
-  jsonResponse(res, 200, { nodes: Array.isArray(nodes) ? nodes : [] });
+  if (errorMessage) {
+    throw new Error(errorMessage);
+  }
+
+  jsonResponse(res, 200, { nodes: Array.isArray(data) ? data : [] });
 };
 
 const handleAiRelevantFiles = async (req, res, session) => {
@@ -534,17 +618,49 @@ const handleAiRelevantFiles = async (req, res, session) => {
     return;
   }
 
-  const parsed = await generateJsonResponse({
-    client: aiClient,
+  const requestType = AI_REQUEST_SCHEMA.relevantFiles.prompt.id;
+  const startedAt = Date.now();
+  let response = null;
+  let errorMessage = null;
+  try {
+    response = await generateJsonResponse({
+      client: aiClient,
+      model: aiModelId,
+      type: requestType,
+      params: {
+        query,
+        filePaths,
+      },
+    });
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : 'Unknown AI error';
+  }
+
+  const data = response?.data ?? null;
+  const meta = response?.meta ?? null;
+  const latencyMs = meta?.latencyMs ?? Date.now() - startedAt;
+  const usage = meta?.usage ?? null;
+  const costUsd = estimateAiCostUsd(usage);
+  const success = Boolean(data);
+
+  await appendAiAuditLog({
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    requestType,
     model: aiModelId,
-    type: AI_REQUEST_SCHEMA.relevantFiles.prompt.id,
-    params: {
-      query,
-      filePaths,
-    },
+    provider: aiProvider,
+    latencyMs,
+    success,
+    error: errorMessage,
+    usage,
+    costUsd,
   });
 
-  jsonResponse(res, 200, { relevantFiles: parsed?.relevantFiles ?? [] });
+  if (errorMessage) {
+    throw new Error(errorMessage);
+  }
+
+  jsonResponse(res, 200, { relevantFiles: data?.relevantFiles ?? [] });
 };
 
 const handleAiProjectSummary = async (req, res, session) => {
@@ -580,21 +696,86 @@ const handleAiProjectSummary = async (req, res, session) => {
     edges: Array.isArray(graph.edges) ? graph.edges.slice(0, 800) : [],
   };
 
-  const parsed = await generateJsonResponse({
-    client: aiClient,
+  const requestType = AI_REQUEST_SCHEMA.projectSummary.prompt.id;
+  const startedAt = Date.now();
+  let response = null;
+  let errorMessage = null;
+  try {
+    response = await generateJsonResponse({
+      client: aiClient,
+      model: aiModelId,
+      type: requestType,
+      params: {
+        promptBase,
+        filePaths: trimmedPaths,
+        graph: graphSnapshot,
+        context,
+      },
+    });
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : 'Unknown AI error';
+  }
+
+  const data = response?.data ?? null;
+  const meta = response?.meta ?? null;
+  const latencyMs = meta?.latencyMs ?? Date.now() - startedAt;
+  const usage = meta?.usage ?? null;
+  const costUsd = estimateAiCostUsd(usage);
+  const success = Boolean(data);
+
+  await appendAiAuditLog({
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    requestType,
     model: aiModelId,
-    type: AI_REQUEST_SCHEMA.projectSummary.prompt.id,
-    params: {
-      promptBase,
-      filePaths: trimmedPaths,
-      graph: graphSnapshot,
-      context,
-    },
+    provider: aiProvider,
+    latencyMs,
+    success,
+    error: errorMessage,
+    usage,
+    costUsd,
   });
 
+  if (errorMessage) {
+    throw new Error(errorMessage);
+  }
+
   jsonResponse(res, 200, {
-    summary: parsed?.summary ?? '',
-    diagram: parsed?.diagram ?? '',
+    summary: data?.summary ?? '',
+    diagram: data?.diagram ?? '',
+  });
+};
+
+const handleAiMetrics = async (req, res) => {
+  const records = await readAiAuditLog();
+  const totalRequests = records.length;
+  const successCount = records.filter((record) => record?.success).length;
+  const errorCount = totalRequests - successCount;
+  const totalLatency = records.reduce(
+    (sum, record) => sum + (isFiniteNumber(record?.latencyMs) ? record.latencyMs : 0),
+    0,
+  );
+  const totalCost = records.reduce(
+    (sum, record) => sum + (isFiniteNumber(record?.costUsd) ? record.costUsd : 0),
+    0,
+  );
+  const averageLatencyMs = totalRequests > 0 ? totalLatency / totalRequests : 0;
+  const averageCostUsd = totalRequests > 0 ? totalCost / totalRequests : 0;
+  const hitRate = totalRequests > 0 ? successCount / totalRequests : 0;
+  const recent = records.slice(-15).reverse();
+
+  jsonResponse(res, 200, {
+    summary: {
+      totalRequests,
+      successCount,
+      errorCount,
+      hitRate,
+      averageLatencyMs,
+      totalCostUsd: totalCost,
+      averageCostUsd,
+      lastUpdated: new Date().toISOString(),
+    },
+    recent,
   });
 };
 
@@ -738,6 +919,16 @@ const server = http.createServer(async (req, res) => {
     } catch (error) {
       console.error('AI summary error', error);
       jsonResponse(res, 500, { error: 'AI summary failed.' });
+    }
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/ai/metrics') {
+    try {
+      await handleAiMetrics(req, res);
+    } catch (error) {
+      console.error('AI metrics error', error);
+      jsonResponse(res, 500, { error: 'Failed to load AI metrics.' });
     }
     return;
   }

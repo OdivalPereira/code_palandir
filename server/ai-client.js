@@ -105,6 +105,59 @@ const buildPromptParts = (type, params) => {
   }
 };
 
+const extractUsageTokens = (response) => {
+  const usage =
+    response?.usageMetadata
+    ?? response?.usage
+    ?? response?.metadata?.usage
+    ?? response?.meta?.usage
+    ?? null;
+  if (!usage || typeof usage !== 'object') return null;
+  const promptTokens = Number(
+    usage.promptTokenCount
+      ?? usage.promptTokens
+      ?? usage.inputTokens
+      ?? usage.input_token_count
+      ?? usage.input_tokens
+      ?? null,
+  );
+  const outputTokens = Number(
+    usage.candidatesTokenCount
+      ?? usage.outputTokens
+      ?? usage.output_token_count
+      ?? usage.output_tokens
+      ?? null,
+  );
+  const totalTokens = Number(
+    usage.totalTokenCount
+      ?? usage.totalTokens
+      ?? usage.total_token_count
+      ?? null,
+  );
+
+  const normalizedPrompt = Number.isFinite(promptTokens) ? promptTokens : null;
+  const normalizedOutput = Number.isFinite(outputTokens) ? outputTokens : null;
+  const normalizedTotal = Number.isFinite(totalTokens)
+    ? totalTokens
+    : Number.isFinite(normalizedPrompt) || Number.isFinite(normalizedOutput)
+      ? (normalizedPrompt ?? 0) + (normalizedOutput ?? 0)
+      : null;
+
+  if (
+    normalizedPrompt === null
+    && normalizedOutput === null
+    && normalizedTotal === null
+  ) {
+    return null;
+  }
+
+  return {
+    promptTokens: normalizedPrompt,
+    outputTokens: normalizedOutput,
+    totalTokens: normalizedTotal,
+  };
+};
+
 const generateJsonResponse = async ({ client, model, type, params }) => {
   if (!client) return null;
   const requestSchema = AI_REQUEST_SCHEMA[type];
@@ -113,6 +166,7 @@ const generateJsonResponse = async ({ client, model, type, params }) => {
   }
 
   const promptParts = buildPromptParts(type, params);
+  const startedAt = Date.now();
   const response = await client.models.generateContent({
     model,
     contents: {
@@ -124,13 +178,19 @@ const generateJsonResponse = async ({ client, model, type, params }) => {
       responseSchema: requestSchema.response,
     },
   });
+  const latencyMs = Date.now() - startedAt;
 
-  if (!response.text) return null;
+  if (!response.text) {
+    return { data: null, meta: { latencyMs, usage: extractUsageTokens(response) } };
+  }
 
   try {
-    return JSON.parse(response.text);
+    return {
+      data: JSON.parse(response.text),
+      meta: { latencyMs, usage: extractUsageTokens(response) },
+    };
   } catch (error) {
-    return null;
+    return { data: null, meta: { latencyMs, usage: extractUsageTokens(response) } };
   }
 };
 

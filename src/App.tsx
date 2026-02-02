@@ -5,8 +5,8 @@ import ModuleRecommendations from './components/ModuleRecommendations';
 import { analyzeFileContent, findRelevantFiles, PROJECT_SUMMARY_PROMPT_BASE, summarizeProject } from './geminiService';
 import { getCachedFileContent, hashContent, setCachedFileContent } from './cacheRepository';
 import { fetchGitHubJson } from './githubClient';
-import { FileSystemNode, PromptItem, AppStatus, CodeNode, SESSION_SCHEMA_VERSION, SessionPayload, ProjectGraphInput, ProjectSummary, ModuleInput, SemanticLink, Link } from './types';
-import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus, Save, Network, Lightbulb, Route } from 'lucide-react';
+import { FileSystemNode, PromptItem, AppStatus, CodeNode, SESSION_SCHEMA_VERSION, SessionPayload, ProjectGraphInput, ProjectSummary, ModuleInput, SemanticLink, Link, AiMetricsResponse } from './types';
+import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus, Save, Network, Lightbulb, Route, BarChart3 } from 'lucide-react';
 import { useGraphStore } from './stores/graphStore';
 import { selectGraphLinks, selectGraphNodes, selectLoadingPaths, selectRootNode, selectSelectedNode } from './stores/graphSelectors';
 import { openSession, saveSession } from './sessionService';
@@ -31,13 +31,16 @@ const App: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [githubUrl, setGithubUrl] = useState('');
     const [isPromptOpen, setIsPromptOpen] = useState(false);
-    const [sidebarTab, setSidebarTab] = useState<'prompt' | 'summary' | 'recommendations' | 'flow'>('prompt');
+    const [sidebarTab, setSidebarTab] = useState<'prompt' | 'summary' | 'recommendations' | 'flow' | 'metrics'>('prompt');
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [projectSignature, setProjectSignature] = useState<string | null>(null);
     const [summaryPromptBase, setSummaryPromptBase] = useState(PROJECT_SUMMARY_PROMPT_BASE);
     const [projectSummary, setProjectSummary] = useState<ProjectSummary | null>(null);
     const [summaryStatus, setSummaryStatus] = useState<'idle' | 'loading' | 'error'>('idle');
     const [summaryError, setSummaryError] = useState<string | null>(null);
+    const [aiMetrics, setAiMetrics] = useState<AiMetricsResponse | null>(null);
+    const [aiMetricsStatus, setAiMetricsStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+    const [aiMetricsError, setAiMetricsError] = useState<string | null>(null);
     const [moduleInputs, setModuleInputs] = useState<ModuleInput[]>([]);
     const [flowSourceId, setFlowSourceId] = useState('');
     const [flowTargetId, setFlowTargetId] = useState('');
@@ -153,6 +156,40 @@ const App: React.FC = () => {
             selection: localSelection
         });
     }, [localCursor, localSelection, realtimeSessionId]);
+
+    const formatCurrency = (value: number) =>
+        new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: 4,
+            maximumFractionDigits: 4
+        }).format(value);
+
+    const formatPercent = (value: number) =>
+        `${(value * 100).toFixed(1)}%`;
+
+    const refreshAiMetrics = async () => {
+        setAiMetricsStatus('loading');
+        setAiMetricsError(null);
+        try {
+            const response = await fetch('/api/ai/metrics', { credentials: 'include' });
+            if (!response.ok) {
+                throw new Error('Falha ao carregar métricas.');
+            }
+            const payload = await response.json() as AiMetricsResponse;
+            setAiMetrics(payload);
+            setAiMetricsStatus('idle');
+        } catch (error) {
+            console.error(error);
+            setAiMetricsStatus('error');
+            setAiMetricsError(error instanceof Error ? error.message : 'Falha ao carregar métricas.');
+        }
+    };
+
+    useEffect(() => {
+        if (!isPromptOpen || sidebarTab !== 'metrics') return;
+        refreshAiMetrics();
+    }, [isPromptOpen, sidebarTab]);
 
     const loadStoredSessionMeta = () => {
         if (typeof window === 'undefined') return null;
@@ -863,6 +900,16 @@ const App: React.FC = () => {
                     >
                         <Lightbulb size={20} />
                     </button>
+                    <button
+                        onClick={() => {
+                            setIsPromptOpen((prev) => (prev && sidebarTab === 'metrics' ? false : true));
+                            setSidebarTab('metrics');
+                        }}
+                        className={`p-2 rounded-lg transition-colors ${isPromptOpen && sidebarTab === 'metrics' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-400'}`}
+                        aria-label="Open AI metrics"
+                    >
+                        <BarChart3 size={20} />
+                    </button>
 
                     <div className="ml-2 flex items-center gap-2">
                         <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-full p-1 text-xs">
@@ -1101,6 +1148,99 @@ const App: React.FC = () => {
                                         ? `Caminho encontrado com ${flowBreadcrumbs.length} nós e ${flowBreadcrumbs.length - 1} passos.`
                                         : 'A explicação do fluxo aparecerá aqui após definir a consulta.'}
                                 </div>
+                            </div>
+                        </div>
+                    ) : sidebarTab === 'metrics' ? (
+                        <div className="flex flex-col h-full bg-slate-800 border-l border-slate-700">
+                            <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
+                                <h2 className="font-semibold text-slate-100 flex items-center gap-2">
+                                    <BarChart3 size={18} className="text-emerald-400" />
+                                    Métricas de IA
+                                </h2>
+                                <button
+                                    onClick={refreshAiMetrics}
+                                    className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded-full"
+                                >
+                                    Atualizar
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                {aiMetricsStatus === 'loading' && (
+                                    <div className="text-xs text-slate-400 flex items-center gap-2">
+                                        <Loader2 size={14} className="animate-spin" />
+                                        Carregando métricas...
+                                    </div>
+                                )}
+                                {aiMetricsError && (
+                                    <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded p-2">
+                                        {aiMetricsError}
+                                    </div>
+                                )}
+                                {aiMetrics && (
+                                    <>
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div className="bg-slate-950 border border-slate-700 rounded-lg p-3">
+                                                <p className="text-xs text-slate-400">Custo total</p>
+                                                <p className="text-sm text-slate-100 font-semibold">
+                                                    {formatCurrency(aiMetrics.summary.totalCostUsd)}
+                                                </p>
+                                                <p className="text-[10px] text-slate-500">
+                                                    Média {formatCurrency(aiMetrics.summary.averageCostUsd)}
+                                                </p>
+                                            </div>
+                                            <div className="bg-slate-950 border border-slate-700 rounded-lg p-3">
+                                                <p className="text-xs text-slate-400">Latência média</p>
+                                                <p className="text-sm text-slate-100 font-semibold">
+                                                    {aiMetrics.summary.averageLatencyMs.toFixed(0)} ms
+                                                </p>
+                                                <p className="text-[10px] text-slate-500">
+                                                    {aiMetrics.summary.totalRequests} chamadas
+                                                </p>
+                                            </div>
+                                            <div className="bg-slate-950 border border-slate-700 rounded-lg p-3">
+                                                <p className="text-xs text-slate-400">Hit rate</p>
+                                                <p className="text-sm text-slate-100 font-semibold">
+                                                    {formatPercent(aiMetrics.summary.hitRate)}
+                                                </p>
+                                                <p className="text-[10px] text-slate-500">
+                                                    {aiMetrics.summary.successCount} sucessos
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="bg-slate-950 border border-slate-700 rounded-lg p-3 space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <h3 className="text-xs uppercase tracking-wide text-slate-400">Últimas chamadas</h3>
+                                                <span className="text-[10px] text-slate-500">
+                                                    Atualizado {new Date(aiMetrics.summary.lastUpdated).toLocaleTimeString()}
+                                                </span>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {aiMetrics.recent.length === 0 ? (
+                                                    <p className="text-xs text-slate-500">Nenhuma chamada registrada.</p>
+                                                ) : (
+                                                    aiMetrics.recent.map((entry) => (
+                                                        <div key={entry.id} className="flex items-center justify-between text-xs text-slate-300 border border-slate-800 rounded px-2 py-2">
+                                                            <div>
+                                                                <p className="font-semibold text-slate-200">{entry.requestType}</p>
+                                                                <p className="text-[10px] text-slate-500">
+                                                                    {new Date(entry.timestamp).toLocaleString()}
+                                                                </p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className={`text-[11px] ${entry.success ? 'text-emerald-300' : 'text-red-300'}`}>
+                                                                    {entry.success ? 'OK' : 'Erro'}
+                                                                </p>
+                                                                <p className="text-[10px] text-slate-500">
+                                                                    {entry.latencyMs?.toFixed ? entry.latencyMs.toFixed(0) : entry.latencyMs} ms
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
                     ) : (
