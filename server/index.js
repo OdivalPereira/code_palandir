@@ -12,7 +12,7 @@ import {
 } from './ai-client.js';
 
 const port = Number(process.env.PORT ?? 8787);
-const appBaseUrl = process.env.APP_BASE_URL ?? 'http://localhost:5173';
+const appBaseUrl = process.env.APP_BASE_URL ?? 'http://localhost:8080';
 const serverBaseUrl = process.env.SERVER_BASE_URL ?? `http://localhost:${port}`;
 const githubClientId = process.env.GITHUB_CLIENT_ID;
 const githubClientSecret = process.env.GITHUB_CLIENT_SECRET;
