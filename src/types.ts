@@ -20,6 +20,13 @@ export interface CodeNode {
   children?: CodeNode[];
 }
 
+export type SelectedNodePayload = {
+  id?: string | null;
+  name: string;
+  path: string;
+  type: string;
+};
+
 export interface ClusterData {
   parentPath: string;
   childCount: number;
@@ -234,7 +241,9 @@ export interface ServiceRequirement {
 // Prompt Optimizer payload
 export interface PromptOptimizerPayload {
   userIntent: string;
-  componentCode: string;
+  fileContent: string;
+  selectedNode: SelectedNodePayload;
+  componentCode?: string;
   uiIntentSchema: UIIntentSchema;
   projectStructure: ProjectStructure;
   backendRequirements: BackendRequirements;
