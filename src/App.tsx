@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import CodeVisualizer from './components/CodeVisualizer';
 import PromptBuilder from './components/PromptBuilder';
 import { IntentPanel } from './components/IntentPanel';
@@ -1000,7 +1001,9 @@ const App: React.FC = () => {
                             <p className="text-slate-400">Parsing project structure...</p>
                         </div>
                     ) : (
-                        <CodeVisualizer />
+                        <ErrorBoundary name="CodeVisualizer">
+                            <CodeVisualizer />
+                        </ErrorBoundary>
                     )}
 
                     {/* Selected Node Detail Overlay */}
@@ -1311,16 +1314,20 @@ const App: React.FC = () => {
             </div>
 
             {/* Template Wizard Modal */}
-            {wizardTemplate && (
-                <TemplateWizard
-                    template={wizardTemplate}
-                    targetComponent={selectedNode}
-                    onClose={() => setWizardTemplate(null)}
-                    onApply={handleWizardApply}
-                />
-            )}
+            {
+                wizardTemplate && (
+                    <ErrorBoundary name="TemplateWizard">
+                        <TemplateWizard
+                            template={wizardTemplate}
+                            targetComponent={selectedNode}
+                            onClose={() => setWizardTemplate(null)}
+                            onApply={handleWizardApply}
+                        />
+                    </ErrorBoundary>
+                )
+            }
 
-        </div>
+        </div >
     );
 };
 
