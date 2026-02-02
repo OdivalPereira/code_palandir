@@ -3,7 +3,12 @@ import http from 'http';
 import fs from 'fs/promises';
 import path from 'path';
 import { URL, fileURLToPath } from 'url';
-import { GoogleGenAI, Type } from '@google/genai';
+import {
+  AI_REQUEST_SCHEMA,
+  createAiClient,
+  generateJsonResponse,
+  normalizeAiProvider,
+} from './ai-client.js';
 
 const port = Number(process.env.PORT ?? 8787);
 const appBaseUrl = process.env.APP_BASE_URL ?? 'http://localhost:5173';
@@ -14,6 +19,7 @@ const githubCallbackUrl =
   process.env.GITHUB_OAUTH_CALLBACK_URL ?? `${serverBaseUrl}/api/auth/callback`;
 const aiApiKey = process.env.GOOGLE_AI_API_KEY ?? '';
 const aiModelId = process.env.GOOGLE_AI_MODEL_ID ?? 'gemini-2.5-flash';
+const aiProvider = normalizeAiProvider(process.env.AI_PROVIDER);
 const aiRequestLimit = Number(process.env.AI_RATE_LIMIT_MAX ?? '30');
 const aiRequestWindowMs = Number(process.env.AI_RATE_LIMIT_WINDOW_MS ?? '300000');
 const indexingPollIntervalMs = Number(process.env.INDEXING_POLL_INTERVAL_MS ?? '5000');
@@ -21,7 +27,7 @@ const indexingJobDurationMs = Number(process.env.INDEXING_JOB_DURATION_MS ?? '10
 
 const sessions = new Map();
 const rateLimits = new Map();
-const aiClient = aiApiKey ? new GoogleGenAI({ apiKey: aiApiKey, vertexai: true }) : null;
+const aiClient = aiApiKey ? createAiClient({ apiKey: aiApiKey, provider: aiProvider }) : null;
 const indexingJobs = new Map();
 let isIndexingWorkerRunning = false;
 const savedSessions = new Map();
@@ -471,45 +477,17 @@ const handleAiAnalyzeFile = async (req, res, session) => {
     return;
   }
 
-  const prompt = `
-    Analyze the source code of ${filename}.
-    Extract the top-level structure: classes, functions, exported variables, and API endpoints.
-    Return a list of these elements.
-    For each, provide a brief description and the signature/snippet.
-  `;
-
-  const response = await aiClient.models.generateContent({
+  const nodes = await generateJsonResponse({
+    client: aiClient,
     model: aiModelId,
-    contents: {
-      role: 'user',
-      parts: [
-        { text: prompt },
-        { text: `CODE:\n${code.slice(0, 20000)}` },
-      ],
-    },
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            id: { type: Type.STRING },
-            name: { type: Type.STRING },
-            type: { type: Type.STRING, enum: ['function', 'class', 'variable', 'api_endpoint'] },
-            codeSnippet: { type: Type.STRING },
-            description: { type: Type.STRING },
-          },
-        },
-      },
+    type: AI_REQUEST_SCHEMA.analyzeFile.prompt.id,
+    params: {
+      filename,
+      code: code.slice(0, 20000),
     },
   });
 
-  if (!response.text) {
-    jsonResponse(res, 200, { nodes: [] });
-    return;
-  }
-  jsonResponse(res, 200, { nodes: JSON.parse(response.text) });
+  jsonResponse(res, 200, { nodes: Array.isArray(nodes) ? nodes : [] });
 };
 
 const handleAiRelevantFiles = async (req, res, session) => {
@@ -532,43 +510,17 @@ const handleAiRelevantFiles = async (req, res, session) => {
     return;
   }
 
-  const prompt = `
-    I have a project with the following file structure.
-    User Query: "${query}"
-    
-    Identify which files are likely to contain the logic relevant to the query.
-    Return a list of file paths.
-  `;
-
-  const response = await aiClient.models.generateContent({
+  const parsed = await generateJsonResponse({
+    client: aiClient,
     model: aiModelId,
-    contents: {
-      role: 'user',
-      parts: [
-        { text: prompt },
-        { text: `FILES:\n${filePaths.join('\n')}` },
-      ],
-    },
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          relevantFiles: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-          },
-        },
-      },
+    type: AI_REQUEST_SCHEMA.relevantFiles.prompt.id,
+    params: {
+      query,
+      filePaths,
     },
   });
 
-  if (!response.text) {
-    jsonResponse(res, 200, { relevantFiles: [] });
-    return;
-  }
-  const parsed = JSON.parse(response.text);
-  jsonResponse(res, 200, { relevantFiles: parsed.relevantFiles ?? [] });
+  jsonResponse(res, 200, { relevantFiles: parsed?.relevantFiles ?? [] });
 };
 
 const handleAiProjectSummary = async (req, res, session) => {
@@ -604,37 +556,21 @@ const handleAiProjectSummary = async (req, res, session) => {
     edges: Array.isArray(graph.edges) ? graph.edges.slice(0, 800) : [],
   };
 
-  const response = await aiClient.models.generateContent({
+  const parsed = await generateJsonResponse({
+    client: aiClient,
     model: aiModelId,
-    contents: {
-      role: 'user',
-      parts: [
-        { text: promptBase },
-        {
-          text: `INPUTS:\nFILES:\n${trimmedPaths.join('\n')}\n\nGRAPH:\n${JSON.stringify(graphSnapshot)}\n\nCONTEXT:\n${context.join('\n')}`,
-        },
-      ],
-    },
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          summary: { type: Type.STRING },
-          diagram: { type: Type.STRING },
-        },
-      },
+    type: AI_REQUEST_SCHEMA.projectSummary.prompt.id,
+    params: {
+      promptBase,
+      filePaths: trimmedPaths,
+      graph: graphSnapshot,
+      context,
     },
   });
 
-  if (!response.text) {
-    jsonResponse(res, 200, { summary: '', diagram: '' });
-    return;
-  }
-  const parsed = JSON.parse(response.text);
   jsonResponse(res, 200, {
-    summary: parsed.summary ?? '',
-    diagram: parsed.diagram ?? '',
+    summary: parsed?.summary ?? '',
+    diagram: parsed?.diagram ?? '',
   });
 };
 
