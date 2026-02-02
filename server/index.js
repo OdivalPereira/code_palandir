@@ -11,6 +11,12 @@ const githubCallbackUrl =
   process.env.GITHUB_OAUTH_CALLBACK_URL ?? `${serverBaseUrl}/api/auth/callback`;
 
 const sessions = new Map();
+const githubCache = new Map();
+const githubMetrics = {
+  hits: 0,
+  misses: 0,
+};
+const allowedGithubHosts = new Set(['api.github.com']);
 
 const buildSetCookieHeader = ({ name, value, maxAge }) => {
   const pieces = [
@@ -193,6 +199,132 @@ const handleSession = (req, res) => {
   });
 };
 
+const handleGithubMetrics = (req, res) => {
+  jsonResponse(res, 200, {
+    hits: githubMetrics.hits,
+    misses: githubMetrics.misses,
+  });
+};
+
+const buildGithubResponseHeaders = (payloadHeaders, bufferLength, cacheStatus) => {
+  const headers = {
+    'Content-Length': bufferLength,
+    'X-Cache': cacheStatus,
+  };
+
+  const contentType = payloadHeaders.get('content-type');
+  if (contentType) {
+    headers['Content-Type'] = contentType;
+  }
+
+  const etag = payloadHeaders.get('etag');
+  if (etag) {
+    headers.ETag = etag;
+  }
+
+  const cacheControl = payloadHeaders.get('cache-control');
+  if (cacheControl) {
+    headers['Cache-Control'] = cacheControl;
+  }
+
+  const rateLimitLimit = payloadHeaders.get('x-ratelimit-limit');
+  if (rateLimitLimit) {
+    headers['X-RateLimit-Limit'] = rateLimitLimit;
+  }
+
+  const rateLimitRemaining = payloadHeaders.get('x-ratelimit-remaining');
+  if (rateLimitRemaining) {
+    headers['X-RateLimit-Remaining'] = rateLimitRemaining;
+  }
+
+  const rateLimitReset = payloadHeaders.get('x-ratelimit-reset');
+  if (rateLimitReset) {
+    headers['X-RateLimit-Reset'] = rateLimitReset;
+  }
+
+  return headers;
+};
+
+const handleGithubProxy = async (req, res, url) => {
+  const targetUrl = url.searchParams.get('url');
+  if (!targetUrl) {
+    jsonResponse(res, 400, { error: 'Missing url query parameter.' });
+    return;
+  }
+
+  let githubUrl;
+  try {
+    githubUrl = new URL(targetUrl);
+  } catch (error) {
+    jsonResponse(res, 400, { error: 'Invalid url query parameter.' });
+    return;
+  }
+
+  if (githubUrl.protocol !== 'https:' || !allowedGithubHosts.has(githubUrl.hostname)) {
+    jsonResponse(res, 400, { error: 'Only https://api.github.com URLs are allowed.' });
+    return;
+  }
+
+  const session = getSession(req, res);
+  const cacheEntry = githubCache.get(githubUrl.toString());
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'palandir-github-proxy',
+  };
+
+  if (session.data.accessToken) {
+    headers.Authorization = `Bearer ${session.data.accessToken}`;
+  }
+
+  if (cacheEntry?.etag) {
+    headers['If-None-Match'] = cacheEntry.etag;
+  }
+
+  const upstreamResponse = await fetch(githubUrl.toString(), {
+    method: 'GET',
+    headers,
+  });
+
+  if (upstreamResponse.status === 304 && cacheEntry) {
+    githubMetrics.hits += 1;
+    const buffer = cacheEntry.body;
+    res.writeHead(
+      200,
+      buildGithubResponseHeaders(cacheEntry.headers, buffer.length, 'HIT'),
+    );
+    res.end(buffer);
+    return;
+  }
+
+  if (!upstreamResponse.ok) {
+    const errorBody = await upstreamResponse.text();
+    githubMetrics.misses += 1;
+    res.writeHead(upstreamResponse.status, {
+      'Content-Type': upstreamResponse.headers.get('content-type') ?? 'text/plain',
+    });
+    res.end(errorBody);
+    return;
+  }
+
+  const buffer = Buffer.from(await upstreamResponse.arrayBuffer());
+  const responseHeaders = new Map();
+  upstreamResponse.headers.forEach((value, key) => {
+    responseHeaders.set(key, value);
+  });
+  const etag = upstreamResponse.headers.get('etag');
+  githubCache.set(githubUrl.toString(), {
+    body: buffer,
+    etag,
+    headers: responseHeaders,
+  });
+  githubMetrics.misses += 1;
+  res.writeHead(
+    upstreamResponse.status,
+    buildGithubResponseHeaders(upstreamResponse.headers, buffer.length, 'MISS'),
+  );
+  res.end(buffer);
+};
+
 const server = http.createServer(async (req, res) => {
   if (!withCors(req, res)) {
     return;
@@ -223,6 +355,22 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && url.pathname === '/api/session') {
     handleSession(req, res);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/github/metrics') {
+    handleGithubMetrics(req, res);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/github') {
+    try {
+      await handleGithubProxy(req, res, url);
+    } catch (error) {
+      console.error('GitHub proxy error', error);
+      res.writeHead(502);
+      res.end('GitHub proxy error.');
+    }
     return;
   }
 
