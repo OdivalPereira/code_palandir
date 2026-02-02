@@ -4,10 +4,11 @@ import PromptBuilder from './components/PromptBuilder';
 import { analyzeFileContent, findRelevantFiles } from './geminiService';
 import { getCachedFileContent, hashContent, setCachedFileContent } from './cacheRepository';
 import { fetchGitHubJson } from './githubClient';
-import { FileSystemNode, PromptItem, AppStatus, CodeNode } from './types';
-import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus } from 'lucide-react';
+import { FileSystemNode, PromptItem, AppStatus, CodeNode, SESSION_SCHEMA_VERSION, SessionPayload } from './types';
+import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus, Save } from 'lucide-react';
 import { useGraphStore } from './stores/graphStore';
 import { selectLoadingPaths, selectRootNode, selectSelectedNode } from './stores/graphSelectors';
+import { openSession, saveSession } from './sessionService';
 
 const analysisCacheTtlEnv = Number(import.meta.env.VITE_ANALYSIS_CACHE_TTL_MS ?? '0');
 const analysisCacheTtlMs = Number.isFinite(analysisCacheTtlEnv) && analysisCacheTtlEnv > 0
@@ -25,6 +26,7 @@ const App: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [githubUrl, setGithubUrl] = useState('');
     const [isPromptOpen, setIsPromptOpen] = useState(false);
+    const [sessionId, setSessionId] = useState<string | null>(null);
 
     const rootNode = useGraphStore(selectRootNode);
     const selectedNode = useGraphStore(selectSelectedNode);
@@ -35,6 +37,7 @@ const App: React.FC = () => {
     const setLoadingPaths = useGraphStore((state) => state.setLoadingPaths);
     const setSelectedNode = useGraphStore((state) => state.setSelectedNode);
     const setRequestExpandNode = useGraphStore((state) => state.setRequestExpandNode);
+    const restoreSession = useGraphStore((state) => state.restoreSession);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const childrenIndexRef = useRef<Map<string, { path: string; name: string; type: 'directory' | 'file' }[]>>(new Map());
@@ -342,6 +345,54 @@ const App: React.FC = () => {
         setIsPromptOpen(true);
     };
 
+    const buildSessionPayload = (): SessionPayload => {
+        const graphState = useGraphStore.getState();
+        return {
+            schemaVersion: SESSION_SCHEMA_VERSION,
+            graph: {
+                rootNode: graphState.rootNode,
+                highlightedPaths: graphState.highlightedPaths,
+                expandedDirectories: Array.from(graphState.expandedDirectories)
+            },
+            selection: {
+                selectedNodeId: graphState.selectedNodeId
+            },
+            prompts: promptItems
+        };
+    };
+
+    const handleSaveSession = async () => {
+        if (!rootNode) {
+            alert('Load a project before saving a session.');
+            return;
+        }
+        try {
+            const payload = buildSessionPayload();
+            const response = await saveSession(payload, sessionId);
+            setSessionId(response.sessionId);
+            alert(`Session saved. ID: ${response.sessionId}`);
+        } catch (error) {
+            console.error(error);
+            alert('Failed to save session.');
+        }
+    };
+
+    const handleOpenSession = async () => {
+        const requestedId = window.prompt('Enter session ID to open:', sessionId ?? '');
+        if (!requestedId) return;
+        try {
+            const response = await openSession(requestedId.trim());
+            restoreSession(response.session.graph, response.session.selection);
+            setPromptItems(response.session.prompts);
+            setSessionId(response.sessionId);
+            setFileMap(new Map());
+            setStatus(AppStatus.IDLE);
+        } catch (error) {
+            console.error(error);
+            alert('Failed to open session.');
+        }
+    };
+
     return (
         <div className="flex h-screen w-full bg-slate-950 text-slate-200 overflow-hidden font-sans">
 
@@ -418,6 +469,21 @@ const App: React.FC = () => {
                             </span>
                         )}
                     </button>
+
+                    <div className="ml-2 flex items-center gap-2">
+                        <button
+                            onClick={handleSaveSession}
+                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors"
+                        >
+                            <Save size={14} /> Save Session
+                        </button>
+                        <button
+                            onClick={handleOpenSession}
+                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors"
+                        >
+                            <FolderOpen size={14} /> Open Session
+                        </button>
+                    </div>
                 </div>
 
                 {/* Visualization Area */}
