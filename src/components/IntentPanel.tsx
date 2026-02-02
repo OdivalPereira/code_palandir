@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Sparkles, Loader2, Copy, Check, Database, Server, Shield, RefreshCw } from 'lucide-react';
 import { useGraphStore } from '../stores/graphStore';
-import { FileSystemNode, FlatNode, MissingDependency } from '../types';
+import { FileSystemNode, FlatNode, Link, MissingDependency } from '../types';
 import { selectSelectedNode } from '../stores/graphSelectors';
 import {
     parseComponentIntent,
@@ -12,16 +12,19 @@ import {
 
 interface IntentPanelProps {
     className?: string;
+    missingDependencies: MissingDependency[];
+    setGhostData: (nodes: FlatNode[], links: Link[], deps: MissingDependency[]) => void;
+    clearGhostData: () => void;
 }
 
-export const IntentPanel: React.FC<IntentPanelProps> = ({ className = '' }) => {
+export const IntentPanel: React.FC<IntentPanelProps> = ({
+    className = '',
+    missingDependencies,
+    setGhostData,
+    clearGhostData,
+}) => {
     const selectedNode = useGraphStore(selectSelectedNode);
-    const isAnalyzingIntent = useGraphStore((state) => state.isAnalyzingIntent);
-    const missingDependencies = useGraphStore((state) => state.missingDependencies);
-    const setGhostNodes = useGraphStore((state) => state.setGhostNodes);
-    const setMissingDependencies = useGraphStore((state) => state.setMissingDependencies);
-    const setIsAnalyzingIntent = useGraphStore((state) => state.setIsAnalyzingIntent);
-    const clearGhostNodes = useGraphStore((state) => state.clearGhostNodes);
+    const [isAnalyzingIntent, setIsAnalyzingIntent] = useState(false);
 
     const [userIntent, setUserIntent] = useState('');
     const [generatedPrompt, setGeneratedPrompt] = useState('');
@@ -76,8 +79,7 @@ export const IntentPanel: React.FC<IntentPanelProps> = ({ className = '' }) => {
             const ghostLinks = createGhostLinks(missing, selectedNode);
 
             // 5. Update store
-            setGhostNodes(ghostNodes, ghostLinks);
-            setMissingDependencies(missing, requirements);
+            setGhostData(ghostNodes, ghostLinks, missing);
 
             // 6. Generate prompt
             const prompt = await generateBackendPrompt({
@@ -115,7 +117,7 @@ export const IntentPanel: React.FC<IntentPanelProps> = ({ className = '' }) => {
     };
 
     const handleClear = () => {
-        clearGhostNodes();
+        clearGhostData();
         setGeneratedPrompt('');
         setUserIntent('');
     };
@@ -293,7 +295,7 @@ function createGhostNodes(missing: MissingDependency[], sourceNode: FlatNode): F
     }));
 }
 
-function createGhostLinks(missing: MissingDependency[], sourceNode: FlatNode): any[] {
+function createGhostLinks(missing: MissingDependency[], sourceNode: FlatNode): Link[] {
     return missing.map((dep) => ({
         source: sourceNode.id,
         target: `ghost_${dep.id}`,

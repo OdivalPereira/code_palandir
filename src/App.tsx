@@ -73,10 +73,8 @@ const App: React.FC = () => {
     const updateRootNode = useGraphStore((state) => state.updateRootNode);
     const setHighlightedPaths = useGraphStore((state) => state.setHighlightedPaths);
     const setLoadingPaths = useGraphStore((state) => state.setLoadingPaths);
-    const setSelectedNode = useGraphStore((state) => state.setSelectedNode);
+    const selectNode = useGraphStore((state) => state.selectNode);
     const setRequestExpandNode = useGraphStore((state) => state.setRequestExpandNode);
-    const setGhostNodes = useGraphStore((state) => state.setGhostNodes);
-    const setMissingDependencies = useGraphStore((state) => state.setMissingDependencies);
     const restoreSession = useGraphStore((state) => state.restoreSession);
     const setSessionLayout = useGraphStore((state) => state.setSessionLayout);
     const graphNodesById = useGraphStore((state) => state.nodesById);
@@ -88,7 +86,6 @@ const App: React.FC = () => {
     const setFlowQuery = useGraphStore((state) => state.setFlowQuery);
     const setFlowHighlight = useGraphStore((state) => state.setFlowHighlight);
     const clearFlowHighlight = useGraphStore((state) => state.clearFlowHighlight);
-    const selectedNodeId = useGraphStore((state) => state.selectedNodeId);
 
     const presenceClientId = usePresenceStore((state) => state.clientId);
     const presenceProfile = usePresenceStore((state) => state.profile);
@@ -107,6 +104,9 @@ const App: React.FC = () => {
     const allFilePathsRef = useRef<string[]>([]);
     const autoRestoreSignatureRef = useRef<string | null>(null);
     const realtimeClientRef = useRef<ReturnType<typeof createRealtimeClient> | null>(null);
+    const [ghostNodes, setGhostNodes] = useState<FlatNode[]>([]);
+    const [ghostLinks, setGhostLinks] = useState<Link[]>([]);
+    const [missingDependencies, setMissingDependencies] = useState<MissingDependency[]>([]);
 
     const flowNodeOptions = React.useMemo(() => {
         const options = graphNodes.map((node) => ({
@@ -135,8 +135,8 @@ const App: React.FC = () => {
     const realtimeSessionId = sessionId ?? projectSignature ?? null;
 
     useEffect(() => {
-        setLocalSelection(selectedNodeId ?? null);
-    }, [selectedNodeId, setLocalSelection]);
+        setLocalSelection(selectedNode?.id ?? null);
+    }, [selectedNode, setLocalSelection]);
 
     useEffect(() => {
         if (!realtimeSessionId) {
@@ -779,7 +779,7 @@ const App: React.FC = () => {
                 graphViewMode: graphState.graphViewMode
             },
             selection: {
-                selectedNodeId: graphState.selectedNodeId
+                selectedNodeId: graphState.selectedNode?.id ?? null
             },
             prompts: promptItems,
             layout: layoutCache
@@ -829,26 +829,10 @@ const App: React.FC = () => {
     };
 
     const handleWizardApply = (ghostNodes: FlatNode[], ghostLinks: Link[], deps: MissingDependency[]) => {
-        setGhostNodes(ghostNodes, ghostLinks);
+        setGhostNodes(ghostNodes);
+        setGhostLinks(ghostLinks);
         if (deps.length > 0 && ghostNodes.length > 0) {
-            // Use null for requirements since this is template-based
-            setMissingDependencies(deps, {
-                tables: deps.filter(d => d.type === 'table').map(d => ({
-                    name: d.name,
-                    description: d.description,
-                    columns: [],
-                })),
-                endpoints: deps.filter(d => d.type === 'endpoint').map(d => ({
-                    method: 'POST' as const,
-                    path: d.name,
-                    description: d.description,
-                })),
-                services: deps.filter(d => d.type === 'service' || d.type === 'auth').map(d => ({
-                    name: d.name,
-                    type: d.type as 'auth' | 'storage' | 'email' | 'payment' | 'other',
-                    description: d.description,
-                })),
-            });
+            setMissingDependencies(deps);
         }
     };
 
@@ -1018,7 +1002,7 @@ const App: React.FC = () => {
                         </div>
                     ) : (
                         <ErrorBoundary name="CodeVisualizer">
-                            <CodeVisualizer />
+                            <CodeVisualizer ghostNodes={ghostNodes} ghostLinks={ghostLinks} />
                         </ErrorBoundary>
                     )}
 
@@ -1027,7 +1011,7 @@ const App: React.FC = () => {
                         <div className="absolute top-4 left-4 w-80 bg-slate-900/90 backdrop-blur border border-slate-700 rounded-lg shadow-xl p-4 max-h-[80%] overflow-y-auto">
                             <div className="flex justify-between items-start mb-2">
                                 <h3 className="font-bold text-slate-200 break-all">{selectedNode.name}</h3>
-                                <button onClick={() => setSelectedNode(null)} className="text-slate-500 hover:text-slate-300">×</button>
+                                <button onClick={() => selectNode(null)} className="text-slate-500 hover:text-slate-300">×</button>
                             </div>
                             <div className="text-xs text-slate-400 mb-4 font-mono bg-slate-950 p-1 rounded">{selectedNode.path}</div>
 
@@ -1072,7 +1056,20 @@ const App: React.FC = () => {
             </div>
 
             {/* Right Sidebar: Intent Panel (Reverse Architect) */}
-            <IntentPanel className="w-80" />
+            <IntentPanel
+                className="w-80"
+                missingDependencies={missingDependencies}
+                setGhostData={(nodes, links, deps) => {
+                    setGhostNodes(nodes);
+                    setGhostLinks(links);
+                    setMissingDependencies(deps);
+                }}
+                clearGhostData={() => {
+                    setGhostNodes([]);
+                    setGhostLinks([]);
+                    setMissingDependencies([]);
+                }}
+            />
 
             {/* Right Sidebar: Prompt Builder (Collapsible) */}
             <div
