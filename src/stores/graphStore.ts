@@ -14,6 +14,8 @@ export type GraphState = {
   loadingPaths: Set<string>;
   selectedNodeId: string | null;
   expandedDirectories: Set<string>;
+  layoutCache: { hash: string; positions: Record<string, { x: number; y: number }> } | null;
+  sessionLayout: { hash: string; positions: Record<string, { x: number; y: number }> } | null;
   nodesById: Record<string, FlatNode>;
   linksById: Record<string, Link>;
   requestExpandNode: ((path: string) => void) | null;
@@ -26,6 +28,8 @@ export type GraphState = {
   toggleDirectory: (path: string) => void;
   setRequestExpandNode: (handler: ((path: string) => void) | null) => void;
   restoreSession: (graph: SessionGraphState, selection: SessionSelectionState) => void;
+  setLayoutCache: (hash: string, positions: Record<string, { x: number; y: number }>) => void;
+  setSessionLayout: (layout: { hash: string; positions: Record<string, { x: number; y: number }> } | null) => void;
 };
 
 const buildGraphHashData = (
@@ -139,6 +143,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   loadingPaths: new Set(),
   selectedNodeId: null,
   expandedDirectories: new Set(),
+  layoutCache: null,
+  sessionLayout: null,
   nodesById: {},
   linksById: {},
   requestExpandNode: null,
@@ -150,7 +156,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       expandedDirectories,
       nodesById,
       linksById,
-      selectedNodeId: null
+      selectedNodeId: null,
+      layoutCache: null
     });
   },
   updateRootNode: (updater) => {
@@ -202,13 +209,19 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   restoreSession: (graph, selection) => {
     const expandedDirectories = new Set(graph.expandedDirectories);
     const { nodesById, linksById } = computeGraph(graph.rootNode, graph.highlightedPaths, expandedDirectories);
+    const nextSelected = selection.selectedNodeId && nodesById[selection.selectedNodeId]
+      ? selection.selectedNodeId
+      : null;
     set({
       rootNode: graph.rootNode,
       highlightedPaths: graph.highlightedPaths,
       expandedDirectories,
       nodesById,
       linksById,
-      selectedNodeId: selection.selectedNodeId ?? null
+      selectedNodeId: nextSelected,
+      layoutCache: null
     });
-  }
+  },
+  setLayoutCache: (hash, positions) => set({ layoutCache: { hash, positions } }),
+  setSessionLayout: (layout) => set({ sessionLayout: layout })
 }));
