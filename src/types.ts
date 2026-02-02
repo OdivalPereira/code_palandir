@@ -112,6 +112,29 @@ export type SessionPayload = {
   layout?: SessionLayoutState | null;
 };
 
+export type PresenceCursor = {
+  x: number;
+  y: number;
+};
+
+export type PresenceSelection = {
+  selectedNodeId: string | null;
+};
+
+export type PresenceProfile = {
+  name: string;
+  color: string;
+};
+
+export type PresenceState = {
+  clientId: string;
+  profile: PresenceProfile;
+  cursor: PresenceCursor | null;
+  selection: PresenceSelection;
+  sequence: number;
+  updatedAt: number;
+};
+
 export enum AppStatus {
   IDLE = 'IDLE',
   LOADING_FILES = 'LOADING_FILES',

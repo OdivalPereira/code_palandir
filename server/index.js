@@ -3,6 +3,7 @@ import http from 'http';
 import fs from 'fs/promises';
 import path from 'path';
 import { URL, fileURLToPath } from 'url';
+import { WebSocketServer } from 'ws';
 import {
   AI_REQUEST_SCHEMA,
   createAiClient,
@@ -31,6 +32,7 @@ const aiClient = aiApiKey ? createAiClient({ apiKey: aiApiKey, provider: aiProvi
 const indexingJobs = new Map();
 let isIndexingWorkerRunning = false;
 const savedSessions = new Map();
+const realtimeSessions = new Map();
 const SESSION_SCHEMA_VERSION = 1;
 const PROJECT_SUMMARY_PROMPT_BASE = `Você é um arquiteto de software. Com base nos inputs fornecidos (arquivos e grafo),
 gere uma visão geral do projeto.
@@ -100,6 +102,28 @@ const persistSessionStore = async () => {
     updatedAt: new Date().toISOString(),
   };
   await fs.writeFile(sessionStorePath, JSON.stringify(payload, null, 2));
+};
+
+const ensureRealtimeSession = (sessionId) => {
+  const existing = realtimeSessions.get(sessionId);
+  if (existing) return existing;
+  const session = { presence: new Map(), sockets: new Set() };
+  realtimeSessions.set(sessionId, session);
+  return session;
+};
+
+const serializePresence = (presenceMap) => Array.from(presenceMap.values());
+
+const broadcastRealtime = (sessionId, payload, excludeSocket) => {
+  const session = realtimeSessions.get(sessionId);
+  if (!session) return;
+  const message = JSON.stringify(payload);
+  session.sockets.forEach((socket) => {
+    if (excludeSocket && socket === excludeSocket) return;
+    if (socket.readyState === socket.OPEN) {
+      socket.send(message);
+    }
+  });
 };
 
 const updateJob = async (jobId, updates) => {
@@ -757,6 +781,87 @@ const server = http.createServer(async (req, res) => {
 
   res.writeHead(404);
   res.end('Not found');
+});
+
+const realtimeServer = new WebSocketServer({ server, path: '/realtime' });
+realtimeServer.on('connection', (socket) => {
+  const clientInfo = { sessionId: null, clientId: null };
+
+  const send = (payload) => {
+    if (socket.readyState !== socket.OPEN) return;
+    socket.send(JSON.stringify(payload));
+  };
+
+  socket.on('message', (data) => {
+    let message = null;
+    try {
+      const raw = typeof data === 'string' ? data : data.toString();
+      message = JSON.parse(raw);
+    } catch (error) {
+      console.error('Invalid realtime message', error);
+      return;
+    }
+    if (!message || typeof message !== 'object') return;
+
+    if (message.type === 'join') {
+      const { sessionId, clientId, profile } = message;
+      if (typeof sessionId !== 'string' || typeof clientId !== 'string') return;
+      clientInfo.sessionId = sessionId;
+      clientInfo.clientId = clientId;
+      const session = ensureRealtimeSession(sessionId);
+      session.sockets.add(socket);
+      const existing = session.presence.get(clientId);
+      const presence = {
+        clientId,
+        profile: profile ?? existing?.profile ?? { name: 'Guest', color: '#94a3b8' },
+        cursor: existing?.cursor ?? null,
+        selection: existing?.selection ?? { selectedNodeId: null },
+        sequence: existing?.sequence ?? 0,
+        updatedAt: Date.now(),
+      };
+      session.presence.set(clientId, presence);
+      send({ type: 'state_sync', sessionId, presence: serializePresence(session.presence) });
+      broadcastRealtime(sessionId, { type: 'presence_update', presence }, socket);
+      return;
+    }
+
+    if (message.type === 'presence_update') {
+      const { sessionId, clientId, presence, sequence } = message;
+      if (typeof sessionId !== 'string' || typeof clientId !== 'string') return;
+      const nextSequence = Number(sequence);
+      if (!Number.isFinite(nextSequence)) return;
+      const session = ensureRealtimeSession(sessionId);
+      const current = session.presence.get(clientId);
+      if (current && nextSequence <= current.sequence) {
+        return;
+      }
+      const nextPresence = {
+        clientId,
+        profile: current?.profile ?? { name: 'Guest', color: '#94a3b8' },
+        cursor: presence?.cursor ?? current?.cursor ?? null,
+        selection: presence?.selection ?? current?.selection ?? { selectedNodeId: null },
+        sequence: nextSequence,
+        updatedAt: Date.now(),
+      };
+      session.presence.set(clientId, nextPresence);
+      broadcastRealtime(sessionId, { type: 'presence_update', presence: nextPresence });
+    }
+  });
+
+  socket.on('close', () => {
+    const { sessionId, clientId } = clientInfo;
+    if (!sessionId || !clientId) return;
+    const session = realtimeSessions.get(sessionId);
+    if (!session) return;
+    session.sockets.delete(socket);
+    if (session.presence.has(clientId)) {
+      session.presence.delete(clientId);
+      broadcastRealtime(sessionId, { type: 'presence_remove', clientId });
+    }
+    if (session.sockets.size === 0) {
+      realtimeSessions.delete(sessionId);
+    }
+  });
 });
 
 server.listen(port, () => {
