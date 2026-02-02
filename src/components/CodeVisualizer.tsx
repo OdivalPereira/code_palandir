@@ -636,9 +636,14 @@ const CodeVisualizer: React.FC = () => {
             btnGroup.on("click", (e) => {
               e.stopPropagation();
               if (isCollapsed) {
+                // When expanding: first load children into tree, then expand directory
+                // The expandDirectory call will recalculate the graph with the new children
                 requestExpandNode?.(d.path);
+                expandDirectory(d.path);
+              } else {
+                // When collapsing: just toggle (remove from expanded set)
+                toggleDirectory(d.path);
               }
-              toggleDirectory(d.path);
             });
           }
         }
