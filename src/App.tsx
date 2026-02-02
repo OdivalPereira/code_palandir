@@ -1010,6 +1010,7 @@ const App: React.FC = () => {
                     {sidebarTab === 'prompt' ? (
                         <PromptBuilder
                             items={promptItems}
+                            modules={moduleInputs}
                             onRemove={(id) => setPromptItems(prev => prev.filter(i => i.id !== id))}
                             onClear={() => setPromptItems([])}
                         />
