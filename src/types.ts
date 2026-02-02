@@ -141,3 +141,38 @@ export enum AppStatus {
   ANALYZING_QUERY = 'ANALYZING_QUERY',
   ERROR = 'ERROR'
 }
+
+export type AiUsageTokens = {
+  promptTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+};
+
+export type AiAuditEntry = {
+  id: string;
+  timestamp: string;
+  requestType: string;
+  model: string;
+  provider: string;
+  latencyMs: number;
+  success: boolean;
+  error?: string | null;
+  usage?: AiUsageTokens | null;
+  costUsd?: number | null;
+};
+
+export type AiMetricsSummary = {
+  totalRequests: number;
+  successCount: number;
+  errorCount: number;
+  hitRate: number;
+  averageLatencyMs: number;
+  totalCostUsd: number;
+  averageCostUsd: number;
+  lastUpdated: string;
+};
+
+export type AiMetricsResponse = {
+  summary: AiMetricsSummary;
+  recent: AiAuditEntry[];
+};
