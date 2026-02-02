@@ -10,15 +10,21 @@ import { analyzeIntent } from './apiClient';
  * Uses Gemini AI to understand the UI intent and suggest tables, endpoints, and services.
  */
 export async function analyzeBackendRequirements(
-    uiSchema: UIIntentSchema,
-    componentCode: string,
-    existingInfrastructure: string[] = []
+    payload: {
+        uiSchema: UIIntentSchema;
+        fileContent: string;
+        selectedNode: { name: string; path: string; type: string; id?: string | null };
+        userIntent?: string;
+        existingInfrastructure?: string[];
+    }
 ): Promise<BackendRequirements> {
     try {
         return await analyzeIntent({
-            uiSchema,
-            componentCode,
-            existingInfrastructure,
+            uiSchema: payload.uiSchema,
+            fileContent: payload.fileContent,
+            selectedNode: payload.selectedNode,
+            userIntent: payload.userIntent,
+            existingInfrastructure: payload.existingInfrastructure ?? [],
         });
     } catch (error) {
         console.error('Backend requirements analysis failed:', error);

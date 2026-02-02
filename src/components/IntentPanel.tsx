@@ -55,7 +55,18 @@ export const IntentPanel: React.FC<IntentPanelProps> = ({ className = '' }) => {
             const uiSchema = parseComponentIntent(content, selectedNode.name);
 
             // 2. Analyze backend requirements using AI
-            const requirements = await analyzeBackendRequirements(uiSchema, content, []);
+            const requirements = await analyzeBackendRequirements({
+                uiSchema,
+                fileContent: content,
+                selectedNode: {
+                    id: selectedNode.id,
+                    name: selectedNode.name,
+                    path: selectedNode.path,
+                    type: selectedNode.type,
+                },
+                userIntent,
+                existingInfrastructure: [],
+            });
 
             // 3. Detect missing dependencies
             const missing = detectMissingDependencies(requirements, [], selectedNode.path);
@@ -71,7 +82,13 @@ export const IntentPanel: React.FC<IntentPanelProps> = ({ className = '' }) => {
             // 6. Generate prompt
             const prompt = await generateBackendPrompt({
                 userIntent: userIntent || `Implementar funcionalidade para ${selectedNode.name}`,
-                componentCode: content,
+                fileContent: content,
+                selectedNode: {
+                    id: selectedNode.id,
+                    name: selectedNode.name,
+                    path: selectedNode.path,
+                    type: selectedNode.type,
+                },
                 uiIntentSchema: uiSchema,
                 projectStructure: {
                     hasBackend: false,
@@ -185,7 +202,7 @@ export const IntentPanel: React.FC<IntentPanelProps> = ({ className = '' }) => {
                             ) : (
                                 <>
                                     <Sparkles size={16} />
-                                    Analisar Intenção
+                                    Gerar Planejamento
                                 </>
                             )}
                         </button>

@@ -4,6 +4,7 @@ import {
   PromptOptimizerPayload,
   ProjectGraphInput,
   ProjectSummary,
+  SelectedNodePayload,
   UIIntentSchema,
 } from '../types';
 import {
@@ -15,14 +16,17 @@ import {
 } from '../cacheRepository';
 
 type AnalyzeIntentPayload = {
+  fileContent: string;
+  selectedNode: SelectedNodePayload;
+  userIntent?: string;
   uiSchema: UIIntentSchema;
-  componentCode: string;
   existingInfrastructure?: string[];
 };
 
 const requestApi = async <T>(path: string, payload: Record<string, unknown>): Promise<T> => {
   const response = await fetch(path, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
     },
@@ -57,8 +61,10 @@ export const analyzeIntent = async (
   payload: AnalyzeIntentPayload,
 ): Promise<BackendRequirements> => {
   const result = await requestApi<BackendRequirements>('/api/analyze-intent', {
+    fileContent: payload.fileContent,
+    selectedNode: payload.selectedNode,
+    userIntent: payload.userIntent ?? '',
     uiSchema: payload.uiSchema,
-    componentCode: payload.componentCode,
     existingInfrastructure: payload.existingInfrastructure ?? [],
   });
 
@@ -70,10 +76,15 @@ export const analyzeIntent = async (
 };
 
 export const optimizePrompt = async (payload: PromptOptimizerPayload): Promise<string> => {
-  const result = await requestApi<{ prompt?: string }>('/api/optimize-prompt', payload as Record<
-    string,
-    unknown
-  >);
+  const result = await requestApi<{ prompt?: string }>('/api/optimize-prompt', {
+    fileContent: payload.fileContent ?? payload.componentCode ?? '',
+    selectedNode: payload.selectedNode,
+    userIntent: payload.userIntent,
+    uiIntentSchema: payload.uiIntentSchema,
+    projectStructure: payload.projectStructure,
+    backendRequirements: payload.backendRequirements,
+    preferredStack: payload.preferredStack,
+  });
 
   return typeof result.prompt === 'string' ? result.prompt : '';
 };

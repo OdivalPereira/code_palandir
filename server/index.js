@@ -839,9 +839,12 @@ const handleAiProjectSummary = async (req, res, session) => {
   });
 };
 
-const handleAnalyzeIntent = async (req, res) => {
+const handleAnalyzeIntent = async (req, res, session) => {
   if (!aiClient) {
     jsonResponse(res, 500, { error: 'AI client not configured.' });
+    return;
+  }
+  if (!checkRateLimit(req, res, session.id)) {
     return;
   }
   const payload = await getJsonPayload(req, res);
@@ -849,12 +852,13 @@ const handleAnalyzeIntent = async (req, res) => {
     return;
   }
   const uiSchema = payload?.uiSchema;
-  const componentCode = payload?.componentCode;
+  const fileContent =
+    typeof payload?.fileContent === 'string' ? payload.fileContent : payload?.componentCode;
   const existingInfrastructure = Array.isArray(payload?.existingInfrastructure)
     ? payload.existingInfrastructure.filter((item) => typeof item === 'string')
     : [];
 
-  if (!uiSchema || typeof uiSchema !== 'object' || typeof componentCode !== 'string') {
+  if (!uiSchema || typeof uiSchema !== 'object' || typeof fileContent !== 'string') {
     jsonResponse(res, 400, { error: 'Invalid payload.' });
     return;
   }
@@ -870,7 +874,7 @@ const handleAnalyzeIntent = async (req, res) => {
         role: 'user',
         parts: [
           { text: prompt },
-          { text: `COMPONENT CODE:\n${componentCode.slice(0, 12000)}` },
+          { text: `COMPONENT CODE:\n${fileContent.slice(0, 12000)}` },
         ],
       },
       config: {
@@ -971,9 +975,12 @@ const handleAnalyzeIntent = async (req, res) => {
   });
 };
 
-const handleOptimizePrompt = async (req, res) => {
+const handleOptimizePrompt = async (req, res, session) => {
   if (!aiClient) {
     jsonResponse(res, 500, { error: 'AI client not configured.' });
+    return;
+  }
+  if (!checkRateLimit(req, res, session.id)) {
     return;
   }
   const payload = await getJsonPayload(req, res);
@@ -981,10 +988,19 @@ const handleOptimizePrompt = async (req, res) => {
     return;
   }
 
+  const fileContent =
+    typeof payload?.fileContent === 'string' ? payload.fileContent : payload?.componentCode;
+  const selectedNode = payload?.selectedNode;
+  const userIntent = typeof payload?.userIntent === 'string' ? payload.userIntent : '';
   const uiIntentSchema = payload?.uiIntentSchema;
   const backendRequirements = payload?.backendRequirements;
   const projectStructure = payload?.projectStructure;
   const preferredStack = payload?.preferredStack || 'supabase';
+  const resolvedIntent =
+    userIntent.trim() ||
+    (selectedNode && typeof selectedNode?.name === 'string'
+      ? `Implementar funcionalidade para ${selectedNode.name}`
+      : '');
 
   if (
     !uiIntentSchema
@@ -993,6 +1009,8 @@ const handleOptimizePrompt = async (req, res) => {
     || typeof backendRequirements !== 'object'
     || !projectStructure
     || typeof projectStructure !== 'object'
+    || typeof resolvedIntent !== 'string'
+    || !fileContent
   ) {
     jsonResponse(res, 400, { error: 'Invalid payload.' });
     return;
@@ -1019,7 +1037,7 @@ Structure your response as:
   const userPrompt = `Create a backend implementation prompt based on this analysis:
 
 ## User Intent
-"${payload.userIntent}"
+"${resolvedIntent}"
 
 ## Analyzed Frontend Component: ${uiIntentSchema.component}
 
@@ -1272,7 +1290,9 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && url.pathname === '/api/analyze-intent') {
     try {
-      await handleAnalyzeIntent(req, res);
+      const session = requireAuthenticatedSession(req, res);
+      if (!session) return;
+      await handleAnalyzeIntent(req, res, session);
     } catch (error) {
       console.error('Intent analysis error', error);
       jsonResponse(res, 500, { error: 'Intent analysis failed.' });
@@ -1282,7 +1302,9 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && url.pathname === '/api/optimize-prompt') {
     try {
-      await handleOptimizePrompt(req, res);
+      const session = requireAuthenticatedSession(req, res);
+      if (!session) return;
+      await handleOptimizePrompt(req, res, session);
     } catch (error) {
       console.error('Prompt optimization error', error);
       jsonResponse(res, 500, { error: 'Prompt optimization failed.' });
