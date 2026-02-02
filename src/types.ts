@@ -47,6 +47,13 @@ export interface PromptItem {
   type: 'code' | 'comment' | 'context';
 }
 
+export interface ModuleInput {
+  id: string;
+  name: string;
+  files: string[];
+  dependencies: string[];
+}
+
 export type ProjectGraphInput = {
   nodes: Array<{
     id: string;
