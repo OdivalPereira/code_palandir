@@ -59,11 +59,17 @@ export type SessionSelectionState = {
   selectedNodeId: string | null;
 };
 
+export type SessionLayoutState = {
+  graphHash: string;
+  positions: Record<string, { x: number; y: number }>;
+};
+
 export type SessionPayload = {
   schemaVersion: number;
   graph: SessionGraphState;
   selection: SessionSelectionState;
   prompts: PromptItem[];
+  layout?: SessionLayoutState | null;
 };
 
 export enum AppStatus {

@@ -10,6 +10,7 @@ import { useGraphStore } from './stores/graphStore';
 import { selectLoadingPaths, selectRootNode, selectSelectedNode } from './stores/graphSelectors';
 import { openSession, saveSession } from './sessionService';
 
+const LAST_SESSION_STORAGE_KEY = 'codemind:lastSession';
 const analysisCacheTtlEnv = Number(import.meta.env.VITE_ANALYSIS_CACHE_TTL_MS ?? '0');
 const analysisCacheTtlMs = Number.isFinite(analysisCacheTtlEnv) && analysisCacheTtlEnv > 0
     ? analysisCacheTtlEnv
@@ -27,6 +28,7 @@ const App: React.FC = () => {
     const [githubUrl, setGithubUrl] = useState('');
     const [isPromptOpen, setIsPromptOpen] = useState(false);
     const [sessionId, setSessionId] = useState<string | null>(null);
+    const [projectSignature, setProjectSignature] = useState<string | null>(null);
 
     const rootNode = useGraphStore(selectRootNode);
     const selectedNode = useGraphStore(selectSelectedNode);
@@ -38,12 +40,72 @@ const App: React.FC = () => {
     const setSelectedNode = useGraphStore((state) => state.setSelectedNode);
     const setRequestExpandNode = useGraphStore((state) => state.setRequestExpandNode);
     const restoreSession = useGraphStore((state) => state.restoreSession);
+    const setSessionLayout = useGraphStore((state) => state.setSessionLayout);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const childrenIndexRef = useRef<Map<string, { path: string; name: string; type: 'directory' | 'file' }[]>>(new Map());
     const descendantCountRef = useRef<Map<string, number>>(new Map());
     const localFileHandlesRef = useRef<Map<string, File>>(new Map());
     const allFilePathsRef = useRef<string[]>([]);
+    const autoRestoreSignatureRef = useRef<string | null>(null);
+
+    const loadStoredSessionMeta = () => {
+        if (typeof window === 'undefined') return null;
+        const raw = window.localStorage.getItem(LAST_SESSION_STORAGE_KEY);
+        if (!raw) return null;
+        try {
+            const parsed = JSON.parse(raw) as { sessionId?: string; projectSignature?: string };
+            if (parsed?.sessionId && parsed?.projectSignature) {
+                return { sessionId: parsed.sessionId, projectSignature: parsed.projectSignature };
+            }
+        } catch {
+            return null;
+        }
+        return null;
+    };
+
+    const storeSessionMeta = (nextSessionId: string, signature: string | null) => {
+        if (typeof window === 'undefined' || !signature) return;
+        window.localStorage.setItem(LAST_SESSION_STORAGE_KEY, JSON.stringify({
+            sessionId: nextSessionId,
+            projectSignature: signature
+        }));
+    };
+
+    const computeProjectSignature = async (paths: string[], sourceId: string) => {
+        const normalized = [...paths].sort().join('|');
+        return hashContent(`${sourceId}::${normalized}`);
+    };
+
+    const restoreSessionById = async (
+        requestedId: string,
+        signatureOverride?: string | null
+    ) => {
+        const response = await openSession(requestedId.trim());
+        restoreSession(response.session.graph, response.session.selection);
+        setPromptItems(response.session.prompts);
+        setSessionId(response.sessionId);
+        setSessionLayout(
+            response.session.layout
+                ? { hash: response.session.layout.graphHash, positions: response.session.layout.positions }
+                : null
+        );
+        setFileMap(new Map());
+        setStatus(AppStatus.IDLE);
+        storeSessionMeta(response.sessionId, signatureOverride ?? projectSignature);
+    };
+
+    const tryRestoreSavedSession = async (signature: string) => {
+        if (autoRestoreSignatureRef.current === signature) return;
+        autoRestoreSignatureRef.current = signature;
+        const stored = loadStoredSessionMeta();
+        if (!stored || stored.projectSignature !== signature) return;
+        try {
+            await restoreSessionById(stored.sessionId, signature);
+        } catch (error) {
+            console.error(error);
+        }
+    };
 
     // --- File Loading Logic ---
 
@@ -146,6 +208,11 @@ const App: React.FC = () => {
         setFileMap(new Map());
         setRootNode(root);
         setStatus(AppStatus.IDLE);
+        setSessionLayout(null);
+
+        const signature = await computeProjectSignature(allPaths, 'local');
+        setProjectSignature(signature);
+        await tryRestoreSavedSession(signature);
     };
 
     const handleLocalUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,6 +257,11 @@ const App: React.FC = () => {
             setRootNode(root);
             setFileMap(new Map());
             setStatus(AppStatus.IDLE);
+            setSessionLayout(null);
+
+            const signature = await computeProjectSignature(paths, `github:${owner}/${repo}`);
+            setProjectSignature(signature);
+            await tryRestoreSavedSession(signature);
 
         } catch (error) {
             console.error(error);
@@ -347,6 +419,7 @@ const App: React.FC = () => {
 
     const buildSessionPayload = (): SessionPayload => {
         const graphState = useGraphStore.getState();
+        const layoutCache = graphState.layoutCache;
         return {
             schemaVersion: SESSION_SCHEMA_VERSION,
             graph: {
@@ -357,7 +430,13 @@ const App: React.FC = () => {
             selection: {
                 selectedNodeId: graphState.selectedNodeId
             },
-            prompts: promptItems
+            prompts: promptItems,
+            layout: layoutCache
+                ? {
+                    graphHash: layoutCache.hash,
+                    positions: layoutCache.positions
+                }
+                : null
         };
     };
 
@@ -370,6 +449,7 @@ const App: React.FC = () => {
             const payload = buildSessionPayload();
             const response = await saveSession(payload, sessionId);
             setSessionId(response.sessionId);
+            storeSessionMeta(response.sessionId, projectSignature);
             alert(`Session saved. ID: ${response.sessionId}`);
         } catch (error) {
             console.error(error);
@@ -381,12 +461,7 @@ const App: React.FC = () => {
         const requestedId = window.prompt('Enter session ID to open:', sessionId ?? '');
         if (!requestedId) return;
         try {
-            const response = await openSession(requestedId.trim());
-            restoreSession(response.session.graph, response.session.selection);
-            setPromptItems(response.session.prompts);
-            setSessionId(response.sessionId);
-            setFileMap(new Map());
-            setStatus(AppStatus.IDLE);
+            await restoreSessionById(requestedId);
         } catch (error) {
             console.error(error);
             alert('Failed to open session.');

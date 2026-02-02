@@ -74,6 +74,21 @@ const buildGraphHash = (nodes: FlatNode[], links: Link[]) => {
   return hashString(`${nodeParts}::${linkParts}`);
 };
 
+const filterLayoutPositions = (
+  positions: Record<string, { x: number; y: number }> | null | undefined,
+  nodes: FlatNode[]
+): Record<string, { x: number; y: number }> | null => {
+  if (!positions) return null;
+  const nodeIds = new Set(nodes.map(node => node.id));
+  const next: Record<string, { x: number; y: number }> = {};
+  Object.entries(positions).forEach(([id, position]) => {
+    if (!nodeIds.has(id)) return;
+    if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return;
+    next[id] = { x: position.x, y: position.y };
+  });
+  return Object.keys(next).length > 0 ? next : null;
+};
+
 const CodeVisualizer: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -87,6 +102,9 @@ const CodeVisualizer: React.FC = () => {
   const expandDirectory = useGraphStore((state) => state.expandDirectory);
   const toggleDirectory = useGraphStore((state) => state.toggleDirectory);
   const requestExpandNode = useGraphStore(selectRequestExpandNode);
+  const sessionLayout = useGraphStore((state) => state.sessionLayout);
+  const setLayoutCache = useGraphStore((state) => state.setLayoutCache);
+  const setSessionLayout = useGraphStore((state) => state.setSessionLayout);
   const [dimensions, setDimensions] = useState({ width: 1000, height: 800 });
   const [visibleNodeFilter, setVisibleNodeFilter] = useState<'all' | 'directories'>('all');
   const zoomTransformRef = useRef(d3.zoomIdentity);
@@ -222,7 +240,7 @@ const CodeVisualizer: React.FC = () => {
       setLayoutPositions(positions);
     };
 
-    const memoryCache = layoutCacheRef.current.get(graphHash);
+    const memoryCache = filterLayoutPositions(layoutCacheRef.current.get(graphHash) ?? null, filteredNodes);
     if (memoryCache) {
       applyPositions(memoryCache);
       return () => {
@@ -234,21 +252,38 @@ const CodeVisualizer: React.FC = () => {
     setLayoutPositions({});
 
     readLayoutCache(graphHash).then((cached) => {
-      if (!cached) return;
-      layoutCacheRef.current.set(graphHash, cached);
-      applyPositions(cached);
+      const compatible = filterLayoutPositions(cached, filteredNodes);
+      if (!compatible) return;
+      layoutCacheRef.current.set(graphHash, compatible);
+      applyPositions(compatible);
     });
 
     return () => {
       isActive = false;
     };
-  }, [graphHash, rootNode]);
+  }, [graphHash, rootNode, filteredNodes]);
+
+  useEffect(() => {
+    if (!rootNode || !sessionLayout) return;
+    if (sessionLayout.hash !== graphHash) return;
+    const compatible = filterLayoutPositions(sessionLayout.positions, filteredNodes);
+    if (!compatible) {
+      setSessionLayout(null);
+      return;
+    }
+    stablePositionsRef.current = new Map(Object.entries(compatible));
+    setLayoutPositions(compatible);
+    layoutCacheRef.current.set(graphHash, compatible);
+    writeLayoutCache(graphHash, compatible);
+    setSessionLayout(null);
+  }, [filteredNodes, graphHash, rootNode, sessionLayout, setSessionLayout]);
 
   useEffect(() => {
     if (!graphHash || Object.keys(layoutPositions).length === 0) return;
     layoutCacheRef.current.set(graphHash, layoutPositions);
     writeLayoutCache(graphHash, layoutPositions);
-  }, [graphHash, layoutPositions]);
+    setLayoutCache(graphHash, layoutPositions);
+  }, [graphHash, layoutPositions, setLayoutCache]);
 
   useEffect(() => {
     if (!rootNode || !workerRef.current) return;

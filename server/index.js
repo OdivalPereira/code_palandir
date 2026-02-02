@@ -238,6 +238,22 @@ const isValidSessionPayload = (payload) => {
   if (!('rootNode' in graph)) return false;
   if (!('selectedNodeId' in selection)) return false;
 
+  if ('layout' in payload && payload.layout !== null && payload.layout !== undefined) {
+    if (!payload.layout || typeof payload.layout !== 'object') return false;
+    if (typeof payload.layout.graphHash !== 'string') return false;
+    if (!payload.layout.positions || typeof payload.layout.positions !== 'object') return false;
+    const positions = payload.layout.positions;
+    const positionValues = Object.values(positions);
+    if (positionValues.some((position) => (
+      !position
+      || typeof position !== 'object'
+      || typeof position.x !== 'number'
+      || typeof position.y !== 'number'
+    ))) {
+      return false;
+    }
+  }
+
   return prompts.every((item) => {
     if (!item || typeof item !== 'object') return false;
     if (typeof item.id !== 'string') return false;
