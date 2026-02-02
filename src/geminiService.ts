@@ -1,4 +1,4 @@
-import { CodeNode } from './types';
+import { CodeNode, ProjectGraphInput, ProjectSummary } from './types';
 import {
   getCachedAnalysis,
   getCachedRelevantFiles,
@@ -23,6 +23,15 @@ const requestAi = async <T>(path: string, payload: Record<string, unknown>): Pro
 
   return (await response.json()) as T;
 };
+
+export const PROJECT_SUMMARY_PROMPT_BASE = `Você é um arquiteto de software. Com base nos inputs fornecidos (arquivos e grafo),
+gere uma visão geral do projeto.
+
+Requisitos:
+- Produza um resumo claro (até 8 frases) descrevendo propósito, módulos principais e fluxos críticos.
+- Produza um diagrama lógico em Mermaid usando flowchart TD.
+- Responda em pt-br.
+- Retorne apenas JSON válido conforme o schema, sem markdown ou explicações extras.`;
 
 // Analyze a single file's content to extract structure
 export const analyzeFileContent = async (
@@ -77,4 +86,22 @@ export const findRelevantFiles = async (
     console.error("Relevance search failed", error);
     return [];
   }
+};
+
+export const summarizeProject = async (inputs: {
+  filePaths: string[];
+  graph: ProjectGraphInput;
+  context?: string[];
+  promptBase?: string;
+}): Promise<ProjectSummary> => {
+  const result = await requestAi<ProjectSummary>('project-summary', {
+    promptBase: inputs.promptBase ?? PROJECT_SUMMARY_PROMPT_BASE,
+    filePaths: inputs.filePaths,
+    graph: inputs.graph,
+    context: inputs.context ?? [],
+  });
+  return {
+    summary: typeof result.summary === 'string' ? result.summary : '',
+    diagram: typeof result.diagram === 'string' ? result.diagram : '',
+  };
 };
