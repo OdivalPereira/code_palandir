@@ -12,7 +12,15 @@ import { fetchGitHubJson } from './githubClient';
 import { FileSystemNode, PromptItem, AppStatus, CodeNode, SESSION_SCHEMA_VERSION, SessionPayload, ProjectGraphInput, ProjectSummary, ModuleInput, SemanticLink, Link, MissingDependency, AiMetricsResponse, FlatNode } from './types';
 import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus, Save, Network, Lightbulb, Route, BarChart3 } from 'lucide-react';
 import { useGraphStore } from './stores/graphStore';
-import { selectGraphLinks, selectGraphNodes, selectLoadingPaths, selectRootNode, selectSelectedNode } from './stores/graphSelectors';
+import {
+    selectFlowPathNodeIds,
+    selectFlowQuery,
+    selectGraphLinks,
+    selectGraphNodes,
+    selectLoadingPaths,
+    selectRootNode,
+    selectSelectedNode
+} from './stores/graphSelectors';
 import { openSession, saveSession } from './sessionService';
 import { buildSemanticLinksForFile, SymbolIndex } from './dependencyParser';
 import { usePresenceStore } from './stores/presenceStore';
@@ -47,15 +55,13 @@ const App: React.FC = () => {
     const [aiMetricsStatus, setAiMetricsStatus] = useState<'idle' | 'loading' | 'error'>('idle');
     const [aiMetricsError, setAiMetricsError] = useState<string | null>(null);
     const [moduleInputs, setModuleInputs] = useState<ModuleInput[]>([]);
-    const [flowSourceId, setFlowSourceId] = useState('');
-    const [flowTargetId, setFlowTargetId] = useState('');
-    const [flowPathNodeIds, setFlowPathNodeIds] = useState<string[] | null>(null);
-
     const rootNode = useGraphStore(selectRootNode);
     const selectedNode = useGraphStore(selectSelectedNode);
     const loadingPaths = useGraphStore(selectLoadingPaths);
     const graphNodes = useGraphStore(selectGraphNodes);
     const graphLinks = useGraphStore(selectGraphLinks);
+    const flowQuery = useGraphStore(selectFlowQuery);
+    const flowPathNodeIds = useGraphStore(selectFlowPathNodeIds);
     const setRootNode = useGraphStore((state) => state.setRootNode);
     const updateRootNode = useGraphStore((state) => state.updateRootNode);
     const setHighlightedPaths = useGraphStore((state) => state.setHighlightedPaths);
@@ -103,9 +109,13 @@ const App: React.FC = () => {
         return options.sort((a, b) => a.label.localeCompare(b.label));
     }, [graphNodes]);
 
+    const flowPathNodeIdList = React.useMemo(() => Array.from(flowPathNodeIds), [flowPathNodeIds]);
+    const flowSourceId = flowQuery.sourceId ?? '';
+    const flowTargetId = flowQuery.targetId ?? '';
+
     const flowBreadcrumbs = React.useMemo(() => {
-        if (!flowPathNodeIds || flowPathNodeIds.length === 0) return [];
-        return flowPathNodeIds.map((id) => {
+        if (flowPathNodeIdList.length === 0) return [];
+        return flowPathNodeIdList.map((id) => {
             const node = graphNodesById[id];
             return {
                 id,
@@ -113,7 +123,7 @@ const App: React.FC = () => {
                 detail: node?.path ?? id
             };
         });
-    }, [flowPathNodeIds, graphNodesById]);
+    }, [flowPathNodeIdList, graphNodesById]);
 
     const realtimeSessionId = sessionId ?? projectSignature ?? null;
 
@@ -577,27 +587,22 @@ const App: React.FC = () => {
     }, [selectedNode, updateRootNode]);
 
     useEffect(() => {
-        setFlowQuery(flowSourceId || null, flowTargetId || null);
-        if (!flowSourceId || !flowTargetId) {
-            setFlowPathNodeIds(null);
+        if (!flowQuery.sourceId || !flowQuery.targetId) {
             clearFlowHighlight();
             return;
         }
-        if (flowSourceId === flowTargetId) {
-            setFlowPathNodeIds([]);
+        if (flowQuery.sourceId === flowQuery.targetId) {
             clearFlowHighlight();
             return;
         }
         const nodeIds = new Set(graphNodes.map((node) => node.id));
-        const path = buildFlowPath(flowSourceId, flowTargetId, graphLinks, nodeIds);
+        const path = buildFlowPath(flowQuery.sourceId, flowQuery.targetId, graphLinks, nodeIds);
         if (!path) {
-            setFlowPathNodeIds([]);
             clearFlowHighlight();
             return;
         }
         setFlowHighlight(path.nodeIds, path.linkIds);
-        setFlowPathNodeIds(path.nodeIds);
-    }, [flowSourceId, flowTargetId, graphLinks, graphNodes, setFlowQuery, setFlowHighlight, clearFlowHighlight]);
+    }, [flowQuery, graphLinks, graphNodes, setFlowHighlight, clearFlowHighlight]);
 
     const addToPrompt = (title: string, content: string) => {
         setPromptItems(prev => [...prev, {
@@ -1149,7 +1154,7 @@ const App: React.FC = () => {
                                     <label className="text-xs uppercase tracking-wide text-slate-400">Entrypoint</label>
                                     <select
                                         value={flowSourceId}
-                                        onChange={(event) => setFlowSourceId(event.target.value)}
+                                        onChange={(event) => setFlowQuery(event.target.value || null, flowQuery.targetId)}
                                         className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                                     >
                                         <option value="">Selecione o ponto de entrada</option>
@@ -1164,7 +1169,7 @@ const App: React.FC = () => {
                                     <label className="text-xs uppercase tracking-wide text-slate-400">Destino</label>
                                     <select
                                         value={flowTargetId}
-                                        onChange={(event) => setFlowTargetId(event.target.value)}
+                                        onChange={(event) => setFlowQuery(flowQuery.sourceId, event.target.value || null)}
                                         className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                                     >
                                         <option value="">Selecione o destino</option>
@@ -1178,9 +1183,7 @@ const App: React.FC = () => {
                                 <div className="flex gap-2">
                                     <button
                                         onClick={() => {
-                                            setFlowSourceId('');
-                                            setFlowTargetId('');
-                                            setFlowPathNodeIds(null);
+                                            setFlowQuery(null, null);
                                             clearFlowHighlight();
                                         }}
                                         className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs py-2 rounded"
