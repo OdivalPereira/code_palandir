@@ -128,26 +128,31 @@ const App: React.FC = () => {
         }
 
         realtimeClientRef.current?.close();
-        realtimeClientRef.current = createRealtimeClient({
-            sessionId: realtimeSessionId,
-            clientId: presenceClientId,
-            profile: presenceProfile,
-            onStateSync: (presence) => {
-                const peers = presence.filter((entry) => entry.clientId !== presenceClientId);
-                setPeers(peers);
-            },
-            onPresenceUpdate: (presence) => {
-                if (presence.clientId === presenceClientId) return;
-                updatePeer(presence);
-            },
-            onPresenceRemove: (clientId) => {
-                if (clientId === presenceClientId) return;
-                removePeer(clientId);
-            },
-            onConnectionChange: (status) => {
-                setConnectionStatus(status);
-            }
-        });
+        try {
+            realtimeClientRef.current = createRealtimeClient({
+                sessionId: realtimeSessionId,
+                clientId: presenceClientId,
+                profile: presenceProfile,
+                onStateSync: (presence) => {
+                    const peers = presence.filter((entry) => entry.clientId !== presenceClientId);
+                    setPeers(peers);
+                },
+                onPresenceUpdate: (presence) => {
+                    if (presence.clientId === presenceClientId) return;
+                    updatePeer(presence);
+                },
+                onPresenceRemove: (clientId) => {
+                    if (clientId === presenceClientId) return;
+                    removePeer(clientId);
+                },
+                onConnectionChange: (status) => {
+                    setConnectionStatus(status);
+                }
+            });
+        } catch (error) {
+            console.error('Failed to create realtime client', error);
+            setConnectionStatus('disconnected');
+        }
 
         return () => {
             realtimeClientRef.current?.close();

@@ -106,7 +106,12 @@ export const createRealtimeClient = (options: RealtimeClientOptions) => {
     });
   };
 
-  connect();
+  try {
+    connect();
+  } catch (err) {
+    console.error('Failed to initiate realtime connection', err);
+    options.onConnectionChange('disconnected');
+  }
 
   return {
     sendPresenceUpdate: (presence: PresencePayload) => {
