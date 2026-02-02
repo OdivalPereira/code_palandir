@@ -1,6 +1,8 @@
 import crypto from 'crypto';
 import http from 'http';
-import { URL } from 'url';
+import fs from 'fs/promises';
+import path from 'path';
+import { URL, fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 
 const port = Number(process.env.PORT ?? 8787);
@@ -14,10 +16,86 @@ const aiApiKey = process.env.GOOGLE_AI_API_KEY ?? '';
 const aiModelId = process.env.GOOGLE_AI_MODEL_ID ?? 'gemini-2.5-flash';
 const aiRequestLimit = Number(process.env.AI_RATE_LIMIT_MAX ?? '30');
 const aiRequestWindowMs = Number(process.env.AI_RATE_LIMIT_WINDOW_MS ?? '300000');
+const indexingPollIntervalMs = Number(process.env.INDEXING_POLL_INTERVAL_MS ?? '5000');
+const indexingJobDurationMs = Number(process.env.INDEXING_JOB_DURATION_MS ?? '1000');
 
 const sessions = new Map();
 const rateLimits = new Map();
 const aiClient = aiApiKey ? new GoogleGenAI({ apiKey: aiApiKey, vertexai: true }) : null;
+const indexingJobs = new Map();
+let isIndexingWorkerRunning = false;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const indexingStorePath = path.join(__dirname, 'indexing-store.json');
+
+const readIndexingStore = async () => {
+  try {
+    const content = await fs.readFile(indexingStorePath, 'utf-8');
+    const parsed = JSON.parse(content);
+    if (parsed && Array.isArray(parsed.jobs)) {
+      parsed.jobs.forEach((job) => {
+        if (job?.id) {
+          const normalizedJob =
+            job.status === 'in_progress'
+              ? { ...job, status: 'pending', updatedAt: new Date().toISOString() }
+              : job;
+          indexingJobs.set(job.id, normalizedJob);
+        }
+      });
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      console.error('Failed to read indexing store', error);
+    }
+  }
+};
+
+const persistIndexingStore = async () => {
+  const payload = {
+    jobs: Array.from(indexingJobs.values()),
+    updatedAt: new Date().toISOString(),
+  };
+  await fs.writeFile(indexingStorePath, JSON.stringify(payload, null, 2));
+};
+
+const updateJob = async (jobId, updates) => {
+  const existing = indexingJobs.get(jobId);
+  if (!existing) return null;
+  const updated = {
+    ...existing,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  indexingJobs.set(jobId, updated);
+  await persistIndexingStore();
+  return updated;
+};
+
+const runIndexingJob = async (job) => {
+  await updateJob(job.id, { status: 'in_progress' });
+  try {
+    await new Promise((resolve) => setTimeout(resolve, indexingJobDurationMs));
+    await updateJob(job.id, { status: 'ok', error: null, completedAt: new Date().toISOString() });
+  } catch (error) {
+    await updateJob(job.id, {
+      status: 'error',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+};
+
+const processIndexingQueue = async () => {
+  if (isIndexingWorkerRunning) return;
+  const nextJob = Array.from(indexingJobs.values()).find((job) => job.status === 'pending');
+  if (!nextJob) return;
+  isIndexingWorkerRunning = true;
+  try {
+    await runIndexingJob(nextJob);
+  } finally {
+    isIndexingWorkerRunning = false;
+  }
+};
 
 const buildSetCookieHeader = ({ name, value, maxAge }) => {
   const pieces = [
@@ -386,6 +464,38 @@ const handleAiRelevantFiles = async (req, res, session) => {
   jsonResponse(res, 200, { relevantFiles: parsed.relevantFiles ?? [] });
 };
 
+const handleCreateIndexJob = async (req, res) => {
+  const payload = await getJsonPayload(req, res);
+  if (payload === null && req.headers['content-length'] && req.headers['content-length'] !== '0') {
+    return;
+  }
+  const job = {
+    id: crypto.randomUUID(),
+    status: 'pending',
+    payload: payload ?? null,
+    error: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    completedAt: null,
+  };
+  indexingJobs.set(job.id, job);
+  await persistIndexingStore();
+  jsonResponse(res, 202, job);
+};
+
+const handleIndexJobStatus = (req, res, jobId) => {
+  const job = indexingJobs.get(jobId);
+  if (!job) {
+    jsonResponse(res, 404, { error: 'Job not found.' });
+    return;
+  }
+  jsonResponse(res, 200, job);
+};
+
+const handleIndexJobList = (req, res) => {
+  jsonResponse(res, 200, { jobs: Array.from(indexingJobs.values()) });
+};
+
 const server = http.createServer(async (req, res) => {
   if (!withCors(req, res)) {
     return;
@@ -443,6 +553,27 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/indexer/jobs') {
+    try {
+      await handleCreateIndexJob(req, res);
+    } catch (error) {
+      console.error('Index job create error', error);
+      jsonResponse(res, 500, { error: 'Failed to create index job.' });
+    }
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/indexer/jobs') {
+    handleIndexJobList(req, res);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname.startsWith('/api/indexer/jobs/')) {
+    const jobId = url.pathname.replace('/api/indexer/jobs/', '');
+    handleIndexJobStatus(req, res, jobId);
+    return;
+  }
+
   res.writeHead(404);
   res.end('Not found');
 });
@@ -450,3 +581,11 @@ const server = http.createServer(async (req, res) => {
 server.listen(port, () => {
   console.log(`Auth server listening on port ${port}`);
 });
+
+await readIndexingStore();
+setInterval(() => {
+  processIndexingQueue().catch((error) => {
+    console.error('Indexing worker error', error);
+    isIndexingWorkerRunning = false;
+  });
+}, indexingPollIntervalMs);
