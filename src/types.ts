@@ -47,6 +47,24 @@ export interface PromptItem {
   type: 'code' | 'comment' | 'context';
 }
 
+export type ProjectGraphInput = {
+  nodes: Array<{
+    id: string;
+    type: string;
+    label: string;
+    path?: string;
+  }>;
+  edges: Array<{
+    source: string;
+    target: string;
+  }>;
+};
+
+export type ProjectSummary = {
+  summary: string;
+  diagram: string;
+};
+
 export const SESSION_SCHEMA_VERSION = 1 as const;
 
 export type SessionGraphState = {

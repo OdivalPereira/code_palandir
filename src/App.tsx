@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import CodeVisualizer from './components/CodeVisualizer';
 import PromptBuilder from './components/PromptBuilder';
-import { analyzeFileContent, findRelevantFiles } from './geminiService';
+import { analyzeFileContent, findRelevantFiles, PROJECT_SUMMARY_PROMPT_BASE, summarizeProject } from './geminiService';
 import { getCachedFileContent, hashContent, setCachedFileContent } from './cacheRepository';
 import { fetchGitHubJson } from './githubClient';
-import { FileSystemNode, PromptItem, AppStatus, CodeNode, SESSION_SCHEMA_VERSION, SessionPayload } from './types';
-import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus, Save } from 'lucide-react';
+import { FileSystemNode, PromptItem, AppStatus, CodeNode, SESSION_SCHEMA_VERSION, SessionPayload, ProjectGraphInput, ProjectSummary } from './types';
+import { Search, FolderOpen, Github, Loader2, Sparkles, FileText, Plus, Save, Network } from 'lucide-react';
 import { useGraphStore } from './stores/graphStore';
 import { selectLoadingPaths, selectRootNode, selectSelectedNode } from './stores/graphSelectors';
 import { openSession, saveSession } from './sessionService';
@@ -27,8 +27,13 @@ const App: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [githubUrl, setGithubUrl] = useState('');
     const [isPromptOpen, setIsPromptOpen] = useState(false);
+    const [sidebarTab, setSidebarTab] = useState<'prompt' | 'summary'>('prompt');
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [projectSignature, setProjectSignature] = useState<string | null>(null);
+    const [summaryPromptBase, setSummaryPromptBase] = useState(PROJECT_SUMMARY_PROMPT_BASE);
+    const [projectSummary, setProjectSummary] = useState<ProjectSummary | null>(null);
+    const [summaryStatus, setSummaryStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+    const [summaryError, setSummaryError] = useState<string | null>(null);
 
     const rootNode = useGraphStore(selectRootNode);
     const selectedNode = useGraphStore(selectSelectedNode);
@@ -41,6 +46,8 @@ const App: React.FC = () => {
     const setRequestExpandNode = useGraphStore((state) => state.setRequestExpandNode);
     const restoreSession = useGraphStore((state) => state.restoreSession);
     const setSessionLayout = useGraphStore((state) => state.setSessionLayout);
+    const graphNodesById = useGraphStore((state) => state.nodesById);
+    const graphLinksById = useGraphStore((state) => state.linksById);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const childrenIndexRef = useRef<Map<string, { path: string; name: string; type: 'directory' | 'file' }[]>>(new Map());
@@ -415,6 +422,45 @@ const App: React.FC = () => {
             type: 'code'
         }]);
         setIsPromptOpen(true);
+        setSidebarTab('prompt');
+    };
+
+    const buildProjectGraphInput = (): ProjectGraphInput => {
+        const nodes = Object.values(graphNodesById).map(node => ({
+            id: node.id,
+            type: node.type,
+            label: node.name,
+            path: node.path
+        }));
+        const edges = Object.values(graphLinksById).map(link => ({
+            source: typeof link.source === 'string' ? link.source : link.source.id,
+            target: typeof link.target === 'string' ? link.target : link.target.id
+        }));
+        return { nodes, edges };
+    };
+
+    const handleGenerateSummary = async () => {
+        if (!rootNode) return;
+        setSummaryStatus('loading');
+        setSummaryError(null);
+        try {
+            const graph = buildProjectGraphInput();
+            const context = promptItems
+                .filter((item) => item.type !== 'code')
+                .map((item) => `${item.title}: ${item.content}`);
+            const summary = await summarizeProject({
+                filePaths: allFilePathsRef.current,
+                graph,
+                context,
+                promptBase: summaryPromptBase
+            });
+            setProjectSummary(summary);
+            setSummaryStatus('idle');
+        } catch (error) {
+            console.error(error);
+            setSummaryStatus('error');
+            setSummaryError('Falha ao gerar resumo. Tente novamente.');
+        }
     };
 
     const buildSessionPayload = (): SessionPayload => {
@@ -534,8 +580,11 @@ const App: React.FC = () => {
                     </div>
 
                     <button
-                        onClick={() => setIsPromptOpen(!isPromptOpen)}
-                        className={`p-2 rounded-lg transition-colors relative ${isPromptOpen ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-400'}`}
+                        onClick={() => {
+                            setIsPromptOpen((prev) => (prev && sidebarTab === 'prompt' ? false : true));
+                            setSidebarTab('prompt');
+                        }}
+                        className={`p-2 rounded-lg transition-colors relative ${isPromptOpen && sidebarTab === 'prompt' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-400'}`}
                     >
                         <FileText size={20} />
                         {promptItems.length > 0 && (
@@ -543,6 +592,16 @@ const App: React.FC = () => {
                                 {promptItems.length}
                             </span>
                         )}
+                    </button>
+                    <button
+                        onClick={() => {
+                            setIsPromptOpen((prev) => (prev && sidebarTab === 'summary' ? false : true));
+                            setSidebarTab('summary');
+                        }}
+                        className={`p-2 rounded-lg transition-colors ${isPromptOpen && sidebarTab === 'summary' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-400'}`}
+                        aria-label="Open project summary"
+                    >
+                        <Network size={20} />
                     </button>
 
                     <div className="ml-2 flex items-center gap-2">
@@ -627,11 +686,66 @@ const App: React.FC = () => {
                     }`}
             >
                 <div className="flex-1 overflow-hidden">
-                    <PromptBuilder
-                        items={promptItems}
-                        onRemove={(id) => setPromptItems(prev => prev.filter(i => i.id !== id))}
-                        onClear={() => setPromptItems([])}
-                    />
+                    {sidebarTab === 'prompt' ? (
+                        <PromptBuilder
+                            items={promptItems}
+                            onRemove={(id) => setPromptItems(prev => prev.filter(i => i.id !== id))}
+                            onClear={() => setPromptItems([])}
+                        />
+                    ) : (
+                        <div className="flex flex-col h-full bg-slate-800 border-l border-slate-700">
+                            <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
+                                <h2 className="font-semibold text-slate-100 flex items-center gap-2">
+                                    <Network size={18} className="text-indigo-400" />
+                                    Project Summary
+                                </h2>
+                                <span className="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded-full">
+                                    {Object.keys(graphNodesById).length} nodes
+                                </span>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-xs uppercase tracking-wide text-slate-400">Prompt base</label>
+                                    <textarea
+                                        value={summaryPromptBase}
+                                        onChange={(event) => setSummaryPromptBase(event.target.value)}
+                                        className="w-full h-40 bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                                    />
+                                </div>
+                                <div className="text-xs text-slate-400 space-y-1">
+                                    <p>Arquivos carregados: <span className="text-slate-200">{allFilePathsRef.current.length}</span></p>
+                                    <p>Conexões do grafo: <span className="text-slate-200">{Object.keys(graphLinksById).length}</span></p>
+                                </div>
+                                <button
+                                    onClick={handleGenerateSummary}
+                                    disabled={!rootNode || summaryStatus === 'loading'}
+                                    className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-400 text-white py-2.5 rounded-lg font-medium transition-colors"
+                                >
+                                    {summaryStatus === 'loading' ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                                    Gerar resumo
+                                </button>
+                                {summaryError && (
+                                    <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded p-2">
+                                        {summaryError}
+                                    </div>
+                                )}
+                                <div className="space-y-3">
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-slate-200">Resumo</h3>
+                                        <p className="text-xs text-slate-300 whitespace-pre-wrap">
+                                            {projectSummary?.summary || 'Nenhum resumo gerado ainda.'}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-slate-200">Diagrama lógico (Mermaid)</h3>
+                                        <pre className="bg-slate-950 p-2 rounded text-xs text-slate-300 overflow-x-auto border border-slate-800 whitespace-pre-wrap">
+                                            {projectSummary?.diagram || 'flowchart TD\n  A[Contexto] --> B[Resumo]\n  B --> C[Mermaid]'}
+                                        </pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 

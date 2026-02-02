@@ -26,6 +26,14 @@ const indexingJobs = new Map();
 let isIndexingWorkerRunning = false;
 const savedSessions = new Map();
 const SESSION_SCHEMA_VERSION = 1;
+const PROJECT_SUMMARY_PROMPT_BASE = `Você é um arquiteto de software. Com base nos inputs fornecidos (arquivos e grafo),
+gere uma visão geral do projeto.
+
+Requisitos:
+- Produza um resumo claro (até 8 frases) descrevendo propósito, módulos principais e fluxos críticos.
+- Produza um diagrama lógico em Mermaid usando flowchart TD.
+- Responda em pt-br.
+- Retorne apenas JSON válido conforme o schema, sem markdown ou explicações extras.`;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -563,6 +571,73 @@ const handleAiRelevantFiles = async (req, res, session) => {
   jsonResponse(res, 200, { relevantFiles: parsed.relevantFiles ?? [] });
 };
 
+const handleAiProjectSummary = async (req, res, session) => {
+  if (!aiClient) {
+    jsonResponse(res, 500, { error: 'AI client not configured.' });
+    return;
+  }
+  if (!checkRateLimit(req, res, session.id)) {
+    return;
+  }
+  const payload = await getJsonPayload(req, res);
+  if (!payload) {
+    return;
+  }
+  const promptBase =
+    typeof payload?.promptBase === 'string' && payload.promptBase.trim().length > 0
+      ? payload.promptBase
+      : PROJECT_SUMMARY_PROMPT_BASE;
+  const filePaths = Array.isArray(payload?.filePaths) ? payload.filePaths : null;
+  const graph = payload?.graph;
+  const context = Array.isArray(payload?.context)
+    ? payload.context.filter((item) => typeof item === 'string')
+    : [];
+
+  if (!filePaths || !graph || typeof graph !== 'object') {
+    jsonResponse(res, 400, { error: 'Invalid payload.' });
+    return;
+  }
+
+  const trimmedPaths = filePaths.slice(0, 400);
+  const graphSnapshot = {
+    nodes: Array.isArray(graph.nodes) ? graph.nodes.slice(0, 400) : [],
+    edges: Array.isArray(graph.edges) ? graph.edges.slice(0, 800) : [],
+  };
+
+  const response = await aiClient.models.generateContent({
+    model: aiModelId,
+    contents: {
+      role: 'user',
+      parts: [
+        { text: promptBase },
+        {
+          text: `INPUTS:\nFILES:\n${trimmedPaths.join('\n')}\n\nGRAPH:\n${JSON.stringify(graphSnapshot)}\n\nCONTEXT:\n${context.join('\n')}`,
+        },
+      ],
+    },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          summary: { type: Type.STRING },
+          diagram: { type: Type.STRING },
+        },
+      },
+    },
+  });
+
+  if (!response.text) {
+    jsonResponse(res, 200, { summary: '', diagram: '' });
+    return;
+  }
+  const parsed = JSON.parse(response.text);
+  jsonResponse(res, 200, {
+    summary: parsed.summary ?? '',
+    diagram: parsed.diagram ?? '',
+  });
+};
+
 const handleCreateIndexJob = async (req, res) => {
   const payload = await getJsonPayload(req, res);
   if (payload === null && req.headers['content-length'] && req.headers['content-length'] !== '0') {
@@ -691,6 +766,18 @@ const server = http.createServer(async (req, res) => {
     } catch (error) {
       console.error('AI relevance error', error);
       jsonResponse(res, 500, { error: 'AI relevance failed.' });
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/ai/project-summary') {
+    try {
+      const session = requireAuthenticatedSession(req, res);
+      if (!session) return;
+      await handleAiProjectSummary(req, res, session);
+    } catch (error) {
+      console.error('AI summary error', error);
+      jsonResponse(res, 500, { error: 'AI summary failed.' });
     }
     return;
   }
