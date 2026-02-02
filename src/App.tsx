@@ -6,7 +6,15 @@ import { IntentPanel } from './components/IntentPanel';
 import { TemplateSidebar, BackendTemplate } from './components/TemplateSidebar';
 import { TemplateWizard } from './components/TemplateWizard';
 import ModuleRecommendations from './components/ModuleRecommendations';
-import { analyzeFile, PROJECT_SUMMARY_PROMPT_BASE, projectSummary, relevantFiles } from './services/apiClient';
+import {
+    analyzeFile,
+    fetchAiMetrics,
+    openSession,
+    PROJECT_SUMMARY_PROMPT_BASE,
+    projectSummary,
+    relevantFiles,
+    saveSession,
+} from './api/client';
 import { getCachedFileContent, hashContent, setCachedFileContent } from './cacheRepository';
 import { fetchGitHubJson } from './githubClient';
 import { FileSystemNode, PromptItem, AppStatus, CodeNode, SESSION_SCHEMA_VERSION, SessionPayload, ProjectGraphInput, ProjectSummary, ModuleInput, SemanticLink, Link, MissingDependency, AiMetricsResponse, FlatNode } from './types';
@@ -21,7 +29,6 @@ import {
     selectRootNode,
     selectSelectedNode
 } from './stores/graphSelectors';
-import { openSession, saveSession } from './sessionService';
 import { buildSemanticLinksForFile, SymbolIndex } from './dependencyParser';
 import { usePresenceStore } from './stores/presenceStore';
 import { createRealtimeClient } from './realtimeClient';
@@ -194,11 +201,7 @@ const App: React.FC = () => {
         setAiMetricsStatus('loading');
         setAiMetricsError(null);
         try {
-            const response = await fetch('/api/ai/metrics', { credentials: 'include' });
-            if (!response.ok) {
-                throw new Error('Falha ao carregar métricas.');
-            }
-            const payload = await response.json() as AiMetricsResponse;
+            const payload = await fetchAiMetrics();
             setAiMetrics(payload);
             setAiMetricsStatus('idle');
         } catch (error) {

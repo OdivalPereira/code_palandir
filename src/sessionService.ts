@@ -1,3 +1,4 @@
+import { openSession as openSessionApi, saveSession as saveSessionApi } from './api/client';
 import { SessionPayload } from './types';
 
 type SaveSessionResponse = {
@@ -13,32 +14,7 @@ type OpenSessionResponse = {
 export const saveSession = async (
   session: SessionPayload,
   sessionId?: string | null
-): Promise<SaveSessionResponse> => {
-  const response = await fetch('/api/sessions/save', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({
-      sessionId: sessionId ?? undefined,
-      session
-    })
-  });
+): Promise<SaveSessionResponse> => saveSessionApi(session, sessionId);
 
-  if (!response.ok) {
-    throw new Error('Failed to save session.');
-  }
-
-  return response.json();
-};
-
-export const openSession = async (sessionId: string): Promise<OpenSessionResponse> => {
-  const response = await fetch(`/api/sessions/${sessionId}`, {
-    credentials: 'include'
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to open session.');
-  }
-
-  return response.json();
-};
+export const openSession = async (sessionId: string): Promise<OpenSessionResponse> =>
+  openSessionApi(sessionId);

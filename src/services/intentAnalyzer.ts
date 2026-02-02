@@ -3,7 +3,7 @@ import {
     BackendRequirements,
     MissingDependency,
 } from '../types';
-import { analyzeIntent } from './apiClient';
+import { analyzeIntent } from '../api/client';
 
 /**
  * Analyze a frontend component and infer required backend infrastructure.
