@@ -4,6 +4,8 @@ import {
   FileSystemNode,
   FlatNode,
   Link,
+  GraphViewMode,
+  SemanticLink,
   SessionGraphState,
   SessionSelectionState
 } from '../types';
@@ -18,6 +20,8 @@ export type GraphState = {
   sessionLayout: { hash: string; positions: Record<string, { x: number; y: number }> } | null;
   nodesById: Record<string, FlatNode>;
   linksById: Record<string, Link>;
+  semanticLinksById: Record<string, SemanticLink>;
+  graphViewMode: GraphViewMode;
   requestExpandNode: ((path: string) => void) | null;
   setRootNode: (rootNode: FileSystemNode | null) => void;
   updateRootNode: (updater: (current: FileSystemNode | null) => FileSystemNode | null) => void;
@@ -30,6 +34,8 @@ export type GraphState = {
   restoreSession: (graph: SessionGraphState, selection: SessionSelectionState) => void;
   setLayoutCache: (hash: string, positions: Record<string, { x: number; y: number }>) => void;
   setSessionLayout: (layout: { hash: string; positions: Record<string, { x: number; y: number }> } | null) => void;
+  setSemanticLinks: (links: SemanticLink[], sourceIds?: Set<string>) => void;
+  setGraphViewMode: (mode: GraphViewMode) => void;
 };
 
 const buildGraphHashData = (
@@ -55,7 +61,7 @@ const buildGraphHashData = (
 
   const registerLink = (source: string, target: string) => {
     const linkId = linkIdFor(source, target);
-    linksById[linkId] = { source, target };
+    linksById[linkId] = { source, target, kind: 'structural' };
   };
 
   const addClusterNode = (node: FileSystemNode, depth: number) => {
@@ -147,6 +153,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   sessionLayout: null,
   nodesById: {},
   linksById: {},
+  semanticLinksById: {},
+  graphViewMode: 'structural',
   requestExpandNode: null,
   setRootNode: (rootNode) => {
     const expandedDirectories = rootNode ? new Set([rootNode.path]) : new Set();
@@ -157,7 +165,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       nodesById,
       linksById,
       selectedNodeId: null,
-      layoutCache: null
+      layoutCache: null,
+      semanticLinksById: {},
+      graphViewMode: 'structural'
     });
   },
   updateRootNode: (updater) => {
@@ -212,6 +222,13 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const nextSelected = selection.selectedNodeId && nodesById[selection.selectedNodeId]
       ? selection.selectedNodeId
       : null;
+    const semanticLinksById: Record<string, SemanticLink> = {};
+    if (graph.semanticLinks) {
+      graph.semanticLinks.forEach((link) => {
+        const id = `${link.kind}:${link.source}-->${link.target}`;
+        semanticLinksById[id] = { ...link };
+      });
+    }
     set({
       rootNode: graph.rootNode,
       highlightedPaths: graph.highlightedPaths,
@@ -219,9 +236,31 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       nodesById,
       linksById,
       selectedNodeId: nextSelected,
-      layoutCache: null
+      layoutCache: null,
+      semanticLinksById,
+      graphViewMode: graph.graphViewMode ?? 'structural'
     });
   },
   setLayoutCache: (hash, positions) => set({ layoutCache: { hash, positions } }),
-  setSessionLayout: (layout) => set({ sessionLayout: layout })
+  setSessionLayout: (layout) => set({ sessionLayout: layout }),
+  setSemanticLinks: (links, sourceIds) => {
+    set((state) => {
+      const nextLinks = { ...state.semanticLinksById };
+      if (sourceIds && sourceIds.size > 0) {
+        Object.entries(nextLinks).forEach(([id, link]) => {
+          if (sourceIds.has(link.source as string)) {
+            delete nextLinks[id];
+          }
+        });
+      }
+      links.forEach((link) => {
+        const source = typeof link.source === 'string' ? link.source : link.source.id;
+        const target = typeof link.target === 'string' ? link.target : link.target.id;
+        const id = `${link.kind}:${source}-->${target}`;
+        nextLinks[id] = { ...link, source, target };
+      });
+      return { semanticLinksById: nextLinks };
+    });
+  },
+  setGraphViewMode: (mode) => set({ graphViewMode: mode })
 }));

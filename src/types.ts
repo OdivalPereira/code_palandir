@@ -38,7 +38,16 @@ export interface FlatNode extends d3.SimulationNodeDatum {
 export interface Link extends d3.SimulationLinkDatum<FlatNode> {
   source: string | FlatNode;
   target: string | FlatNode;
+  kind?: 'structural' | SemanticEdgeType;
 }
+
+export type SemanticEdgeType = 'import' | 'call';
+
+export interface SemanticLink extends Link {
+  kind: SemanticEdgeType;
+}
+
+export type GraphViewMode = 'structural' | 'semantic';
 
 export interface PromptItem {
   id: string;
@@ -78,6 +87,12 @@ export type SessionGraphState = {
   rootNode: FileSystemNode | null;
   highlightedPaths: string[];
   expandedDirectories: string[];
+  semanticLinks?: Array<{
+    source: string;
+    target: string;
+    kind: SemanticEdgeType;
+  }>;
+  graphViewMode?: GraphViewMode;
 };
 
 export type SessionSelectionState = {
