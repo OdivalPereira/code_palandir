@@ -47,6 +47,25 @@ export interface PromptItem {
   type: 'code' | 'comment' | 'context';
 }
 
+export const SESSION_SCHEMA_VERSION = 1 as const;
+
+export type SessionGraphState = {
+  rootNode: FileSystemNode | null;
+  highlightedPaths: string[];
+  expandedDirectories: string[];
+};
+
+export type SessionSelectionState = {
+  selectedNodeId: string | null;
+};
+
+export type SessionPayload = {
+  schemaVersion: number;
+  graph: SessionGraphState;
+  selection: SessionSelectionState;
+  prompts: PromptItem[];
+};
+
 export enum AppStatus {
   IDLE = 'IDLE',
   LOADING_FILES = 'LOADING_FILES',

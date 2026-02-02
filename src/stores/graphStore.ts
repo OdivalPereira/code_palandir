@@ -1,5 +1,12 @@
 import { create } from './zustand';
-import { ClusterData, FileSystemNode, FlatNode, Link } from '../types';
+import {
+  ClusterData,
+  FileSystemNode,
+  FlatNode,
+  Link,
+  SessionGraphState,
+  SessionSelectionState
+} from '../types';
 
 export type GraphState = {
   rootNode: FileSystemNode | null;
@@ -18,6 +25,7 @@ export type GraphState = {
   expandDirectory: (path: string) => void;
   toggleDirectory: (path: string) => void;
   setRequestExpandNode: (handler: ((path: string) => void) | null) => void;
+  restoreSession: (graph: SessionGraphState, selection: SessionSelectionState) => void;
 };
 
 const buildGraphHashData = (
@@ -190,5 +198,17 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       return { expandedDirectories, nodesById, linksById };
     });
   },
-  setRequestExpandNode: (handler) => set({ requestExpandNode: handler })
+  setRequestExpandNode: (handler) => set({ requestExpandNode: handler }),
+  restoreSession: (graph, selection) => {
+    const expandedDirectories = new Set(graph.expandedDirectories);
+    const { nodesById, linksById } = computeGraph(graph.rootNode, graph.highlightedPaths, expandedDirectories);
+    set({
+      rootNode: graph.rootNode,
+      highlightedPaths: graph.highlightedPaths,
+      expandedDirectories,
+      nodesById,
+      linksById,
+      selectedNodeId: selection.selectedNodeId ?? null
+    });
+  }
 }));

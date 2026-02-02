@@ -24,10 +24,13 @@ const rateLimits = new Map();
 const aiClient = aiApiKey ? new GoogleGenAI({ apiKey: aiApiKey, vertexai: true }) : null;
 const indexingJobs = new Map();
 let isIndexingWorkerRunning = false;
+const savedSessions = new Map();
+const SESSION_SCHEMA_VERSION = 1;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const indexingStorePath = path.join(__dirname, 'indexing-store.json');
+const sessionStorePath = path.join(__dirname, 'session-store.json');
 
 const readIndexingStore = async () => {
   try {
@@ -57,6 +60,32 @@ const persistIndexingStore = async () => {
     updatedAt: new Date().toISOString(),
   };
   await fs.writeFile(indexingStorePath, JSON.stringify(payload, null, 2));
+};
+
+const readSessionStore = async () => {
+  try {
+    const content = await fs.readFile(sessionStorePath, 'utf-8');
+    const parsed = JSON.parse(content);
+    if (parsed && Array.isArray(parsed.sessions)) {
+      parsed.sessions.forEach((entry) => {
+        if (entry?.id && entry?.session) {
+          savedSessions.set(entry.id, entry);
+        }
+      });
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      console.error('Failed to read session store', error);
+    }
+  }
+};
+
+const persistSessionStore = async () => {
+  const payload = {
+    sessions: Array.from(savedSessions.values()),
+    updatedAt: new Date().toISOString(),
+  };
+  await fs.writeFile(sessionStorePath, JSON.stringify(payload, null, 2));
 };
 
 const updateJob = async (jobId, updates) => {
@@ -176,6 +205,60 @@ const getJsonPayload = async (req, res) => {
     }
     return null;
   }
+};
+
+const migrateSessionPayload = (payload) => {
+  if (!payload || typeof payload !== 'object') return null;
+  const rawVersion = payload.schemaVersion ?? 0;
+  const schemaVersion = Number(rawVersion);
+  if (!Number.isFinite(schemaVersion)) return null;
+  if (schemaVersion > SESSION_SCHEMA_VERSION) return null;
+  if (schemaVersion === SESSION_SCHEMA_VERSION) {
+    return payload;
+  }
+  if (schemaVersion === 0) {
+    return {
+      ...payload,
+      schemaVersion: SESSION_SCHEMA_VERSION,
+    };
+  }
+  return null;
+};
+
+const isValidSessionPayload = (payload) => {
+  if (!payload || typeof payload !== 'object') return false;
+  if (typeof payload.schemaVersion !== 'number') return false;
+  if (!payload.graph || typeof payload.graph !== 'object') return false;
+  if (!payload.selection || typeof payload.selection !== 'object') return false;
+  if (!Array.isArray(payload.prompts)) return false;
+
+  const { graph, selection, prompts } = payload;
+  if (!Array.isArray(graph.highlightedPaths)) return false;
+  if (!Array.isArray(graph.expandedDirectories)) return false;
+  if (!('rootNode' in graph)) return false;
+  if (!('selectedNodeId' in selection)) return false;
+
+  return prompts.every((item) => {
+    if (!item || typeof item !== 'object') return false;
+    if (typeof item.id !== 'string') return false;
+    if (typeof item.title !== 'string') return false;
+    if (typeof item.content !== 'string') return false;
+    return item.type === 'code' || item.type === 'comment' || item.type === 'context';
+  });
+};
+
+const extractSessionPayload = (payload) => {
+  if (!payload || typeof payload !== 'object') return null;
+  if (payload.session && typeof payload.session === 'object') {
+    return {
+      sessionId: typeof payload.sessionId === 'string' ? payload.sessionId : null,
+      session: payload.session,
+    };
+  }
+  return {
+    sessionId: typeof payload.sessionId === 'string' ? payload.sessionId : null,
+    session: payload,
+  };
 };
 
 const redirectResponse = (res, location) => {
@@ -496,6 +579,49 @@ const handleIndexJobList = (req, res) => {
   jsonResponse(res, 200, { jobs: Array.from(indexingJobs.values()) });
 };
 
+const handleSaveSession = async (req, res) => {
+  const payload = await getJsonPayload(req, res);
+  if (payload === null) {
+    return;
+  }
+  const extracted = extractSessionPayload(payload);
+  if (!extracted) {
+    jsonResponse(res, 400, { error: 'Invalid session payload.' });
+    return;
+  }
+  const migrated = migrateSessionPayload(extracted.session);
+  if (!migrated || !isValidSessionPayload(migrated)) {
+    jsonResponse(res, 400, { error: 'Invalid session payload.' });
+    return;
+  }
+  const now = new Date().toISOString();
+  const sessionId = extracted.sessionId ?? crypto.randomUUID();
+  const existing = savedSessions.get(sessionId);
+  const entry = {
+    id: sessionId,
+    session: migrated,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  };
+  savedSessions.set(sessionId, entry);
+  await persistSessionStore();
+  jsonResponse(res, 200, { sessionId, session: migrated });
+};
+
+const handleOpenSession = (req, res, sessionId) => {
+  const entry = savedSessions.get(sessionId);
+  if (!entry) {
+    jsonResponse(res, 404, { error: 'Session not found.' });
+    return;
+  }
+  const migrated = migrateSessionPayload(entry.session);
+  if (!migrated || !isValidSessionPayload(migrated)) {
+    jsonResponse(res, 409, { error: 'Session data is invalid.' });
+    return;
+  }
+  jsonResponse(res, 200, { sessionId: entry.id, session: migrated });
+};
+
 const server = http.createServer(async (req, res) => {
   if (!withCors(req, res)) {
     return;
@@ -574,6 +700,22 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/sessions/save') {
+    try {
+      await handleSaveSession(req, res);
+    } catch (error) {
+      console.error('Session save error', error);
+      jsonResponse(res, 500, { error: 'Failed to save session.' });
+    }
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {
+    const sessionId = url.pathname.replace('/api/sessions/', '');
+    handleOpenSession(req, res, sessionId);
+    return;
+  }
+
   res.writeHead(404);
   res.end('Not found');
 });
@@ -583,6 +725,7 @@ server.listen(port, () => {
 });
 
 await readIndexingStore();
+await readSessionStore();
 setInterval(() => {
   processIndexingQueue().catch((error) => {
     console.error('Indexing worker error', error);
