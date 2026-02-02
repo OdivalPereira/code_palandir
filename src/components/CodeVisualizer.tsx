@@ -4,6 +4,8 @@ import { ClusterData, FlatNode, Link } from '../types';
 import { useGraphStore } from '../stores/graphStore';
 import {
   selectExpandedDirectories,
+  selectFlowPathLinkIds,
+  selectFlowPathNodeIds,
   selectGraphLinks,
   selectGraphNodes,
   selectLoadingPaths,
@@ -98,6 +100,8 @@ const CodeVisualizer: React.FC = () => {
   const expandedDirectories = useGraphStore(selectExpandedDirectories);
   const graphNodes = useGraphStore(selectGraphNodes);
   const graphLinks = useGraphStore(selectGraphLinks);
+  const flowPathNodeIds = useGraphStore(selectFlowPathNodeIds);
+  const flowPathLinkIds = useGraphStore(selectFlowPathLinkIds);
   const setSelectedNode = useGraphStore((state) => state.setSelectedNode);
   const expandDirectory = useGraphStore((state) => state.expandDirectory);
   const toggleDirectory = useGraphStore((state) => state.toggleDirectory);
@@ -137,7 +141,15 @@ const CodeVisualizer: React.FC = () => {
     if (node.type === 'file') return 10;
     return 6;
   };
+  const isFlowNode = useCallback((node: FlatNode) => flowPathNodeIds.has(node.id), [flowPathNodeIds]);
+  const getLinkId = useCallback((link: Link) => {
+    const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
+    const targetId = typeof link.target === 'string' ? link.target : link.target.id;
+    return link.kind ? `${link.kind}:${sourceId}-->${targetId}` : `${sourceId}-->${targetId}`;
+  }, []);
+  const isFlowLink = useCallback((link: Link) => flowPathLinkIds.has(getLinkId(link)), [flowPathLinkIds, getLinkId]);
   const getNodeFill = (node: FlatNode) => {
+    if (isFlowNode(node)) return "#f97316";
     if (node.relevant) return "#facc15";
     switch (node.type) {
       case 'cluster': return "#0f172a";
@@ -150,13 +162,18 @@ const CodeVisualizer: React.FC = () => {
     }
   };
   const getNodeStroke = (node: FlatNode) => {
+    if (isFlowNode(node)) return "#fdba74";
     if (node.relevant) return "#ffffff";
     if (node.type === 'cluster') return "#38bdf8";
     return "transparent";
   };
-  const getNodeStrokeWidth = (node: FlatNode) => (node.type === 'cluster' ? 2.5 : 2);
+  const getNodeStrokeWidth = (node: FlatNode) => {
+    if (isFlowNode(node)) return 3;
+    return node.type === 'cluster' ? 2.5 : 2;
+  };
   const getNodeDash = (node: FlatNode) => (node.type === 'cluster' ? [4, 3] : []);
   const getLinkStroke = (link: Link) => {
+    if (isFlowLink(link)) return '#f97316';
     switch (link.kind) {
       case 'import':
         return '#38bdf8';
@@ -176,7 +193,7 @@ const CodeVisualizer: React.FC = () => {
         return [];
     }
   };
-  const getLinkOpacity = (link: Link) => (link.kind ? 0.6 : 0.4);
+  const getLinkOpacity = (link: Link) => (isFlowLink(link) ? 0.9 : (link.kind ? 0.6 : 0.4));
   const isNodeLoading = useCallback((d: FlatNode) => {
     if (d.type === 'cluster') {
       const { parentPath } = d.data as ClusterData;
@@ -399,25 +416,10 @@ const CodeVisualizer: React.FC = () => {
         if (d.type === 'file') return 10;
         return 6;
       })
-      .attr("fill", d => {
-        if (d.relevant) return "#facc15"; // Highlight
-        switch (d.type) {
-          case 'cluster': return "#0f172a";
-          case 'directory': return "#3b82f6";
-          case 'file': return "#64748b";
-          case 'function': return "#4ade80";
-          case 'class': return "#f472b6";
-          case 'api_endpoint': return "#a78bfa";
-          default: return "#94a3b8";
-        }
-      })
-      .attr("stroke", d => {
-        if (d.relevant) return "#ffffff";
-        if (d.type === 'cluster') return "#38bdf8";
-        return "none";
-      })
-      .attr("stroke-width", d => d.type === 'cluster' ? 2.5 : 2)
-      .attr("stroke-dasharray", d => d.type === 'cluster' ? "4 3" : "0");
+      .attr("fill", d => getNodeFill(d))
+      .attr("stroke", d => getNodeStroke(d))
+      .attr("stroke-width", d => getNodeStrokeWidth(d))
+      .attr("stroke-dasharray", d => getNodeDash(d).join(' '));
 
     node.filter(d => isNodeLoading(d))
       .append("circle")
@@ -484,7 +486,7 @@ const CodeVisualizer: React.FC = () => {
     return () => {
       g.remove();
     };
-  }, [rootNode, dimensions, visibleNodeFilter, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading, requestExpandNode, expandDirectory, toggleDirectory, setSelectedNode]);
+  }, [rootNode, dimensions, visibleNodeFilter, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading, requestExpandNode, expandDirectory, toggleDirectory, setSelectedNode, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode]);
 
   const updateNodePositions = useCallback(() => {
     const { width, height } = dimensions;
@@ -681,7 +683,7 @@ const CodeVisualizer: React.FC = () => {
     });
 
     ctx.restore();
-  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, isNodeLoading, updateNodePositions]);
+  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, isNodeLoading, updateNodePositions, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode]);
 
   useEffect(() => {
     renderCanvasRef.current = renderCanvas;
@@ -806,7 +808,7 @@ const CodeVisualizer: React.FC = () => {
   useEffect(() => {
     if (!useCanvasRenderer) return;
     renderCanvasRef.current();
-  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, layoutPositions, loadingPaths, useCanvasRenderer, visibleNodeFilter]);
+  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, layoutPositions, loadingPaths, useCanvasRenderer, visibleNodeFilter, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode]);
 
   useEffect(() => {
     return () => {

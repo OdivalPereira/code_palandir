@@ -10,6 +10,9 @@ export const selectSemanticLinksById = (state: GraphState) => state.semanticLink
 export const selectSelectedNodeId = (state: GraphState) => state.selectedNodeId;
 export const selectRequestExpandNode = (state: GraphState) => state.requestExpandNode;
 export const selectGraphViewMode = (state: GraphState) => state.graphViewMode;
+export const selectFlowQuery = (state: GraphState) => state.flowQuery;
+export const selectFlowPathNodeIds = (state: GraphState) => state.flowPathNodeIds;
+export const selectFlowPathLinkIds = (state: GraphState) => state.flowPathLinkIds;
 
 export const selectSelectedNode = createSelector(
   [selectNodesById, selectSelectedNodeId],
