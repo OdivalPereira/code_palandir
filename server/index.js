@@ -975,6 +975,10 @@ const handleAnalyzeIntent = async (req, res, session) => {
   });
 };
 
+const handleAnalyze = async (req, res, session) => {
+  await handleAnalyzeIntent(req, res, session);
+};
+
 const handleOptimizePrompt = async (req, res, session) => {
   if (!aiClient) {
     jsonResponse(res, 500, { error: 'AI client not configured.' });
@@ -1109,6 +1113,10 @@ Generate a comprehensive, copy-paste-ready prompt for implementing this backend 
   }
 
   jsonResponse(res, 200, { prompt });
+};
+
+const handleOptimize = async (req, res, session) => {
+  await handleOptimizePrompt(req, res, session);
 };
 
 const handleAiMetrics = async (req, res) => {
@@ -1288,11 +1296,11 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === 'POST' && url.pathname === '/api/analyze-intent') {
+  if (req.method === 'POST' && url.pathname === '/api/analyze') {
     try {
       const session = requireAuthenticatedSession(req, res);
       if (!session) return;
-      await handleAnalyzeIntent(req, res, session);
+      await handleAnalyze(req, res, session);
     } catch (error) {
       console.error('Intent analysis error', error);
       jsonResponse(res, 500, { error: 'Intent analysis failed.' });
@@ -1300,11 +1308,11 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === 'POST' && url.pathname === '/api/optimize-prompt') {
+  if (req.method === 'POST' && url.pathname === '/api/optimize') {
     try {
       const session = requireAuthenticatedSession(req, res);
       if (!session) return;
-      await handleOptimizePrompt(req, res, session);
+      await handleOptimize(req, res, session);
     } catch (error) {
       console.error('Prompt optimization error', error);
       jsonResponse(res, 500, { error: 'Prompt optimization failed.' });
