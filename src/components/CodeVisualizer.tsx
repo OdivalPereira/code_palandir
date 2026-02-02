@@ -635,6 +635,9 @@ const CodeVisualizer: React.FC = () => {
             // Click handler for button
             btnGroup.on("click", (e) => {
               e.stopPropagation();
+              if (isCollapsed) {
+                requestExpandNode?.(d.path);
+              }
               toggleDirectory(d.path);
             });
           }
