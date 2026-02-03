@@ -2,11 +2,84 @@ import { GoogleGenAI, Type } from '@google/genai';
 
 const DEFAULT_AI_PROVIDER = 'vertex';
 const SUPPORTED_AI_PROVIDERS = new Set(['vertex', 'google']);
+const DEFAULT_AI_REQUEST_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS ?? '20000');
+const DEFAULT_AI_REQUEST_RETRY_MAX = Number(process.env.AI_REQUEST_RETRY_MAX ?? '1');
+const DEFAULT_AI_REQUEST_BACKOFF_MS = Number(process.env.AI_REQUEST_BACKOFF_MS ?? '300');
 
 const normalizeAiProvider = (value) => {
   if (!value || typeof value !== 'string') return DEFAULT_AI_PROVIDER;
   const normalized = value.toLowerCase();
   return SUPPORTED_AI_PROVIDERS.has(normalized) ? normalized : DEFAULT_AI_PROVIDER;
+};
+
+const toNumberOr = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+class AiTimeoutError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'AiTimeoutError';
+  }
+}
+
+const sleep = (durationMs) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, durationMs);
+  });
+
+const withTimeout = async (promise, timeoutMs) => {
+  const normalizedTimeout = toNumberOr(timeoutMs, 0);
+  if (!Number.isFinite(normalizedTimeout) || normalizedTimeout <= 0) {
+    return promise;
+  }
+
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new AiTimeoutError(`AI request timed out after ${normalizedTimeout}ms`));
+    }, normalizedTimeout);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
+const withRetryAndTimeout = async (
+  operation,
+  {
+    timeoutMs = DEFAULT_AI_REQUEST_TIMEOUT_MS,
+    retryMax = DEFAULT_AI_REQUEST_RETRY_MAX,
+    backoffMs = DEFAULT_AI_REQUEST_BACKOFF_MS,
+  } = {},
+) => {
+  const maxRetries = Math.max(0, toNumberOr(retryMax, 0));
+  const normalizedBackoff = Math.max(0, toNumberOr(backoffMs, 0));
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    try {
+      const result = await withTimeout(Promise.resolve().then(() => operation(attempt)), timeoutMs);
+      return result;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= maxRetries) {
+        break;
+      }
+      const delayMs = normalizedBackoff * (attempt + 1);
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+    }
+  }
+
+  throw lastError;
 };
 
 const createAiClient = ({ apiKey, provider }) => {
@@ -327,17 +400,19 @@ const generateJsonResponse = async ({ client, model, type, params }) => {
 
   const promptParts = buildPromptParts(type, params);
   const startedAt = Date.now();
-  const response = await client.models.generateContent({
-    model,
-    contents: {
-      role: 'user',
-      parts: promptParts,
-    },
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: requestSchema.response,
-    },
-  });
+  const response = await withRetryAndTimeout(() =>
+    client.models.generateContent({
+      model,
+      contents: {
+        role: 'user',
+        parts: promptParts,
+      },
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: requestSchema.response,
+      },
+    }),
+  );
   const latencyMs = Date.now() - startedAt;
 
   if (!response.text) {
@@ -356,9 +431,11 @@ const generateJsonResponse = async ({ client, model, type, params }) => {
 
 export {
   AI_REQUEST_SCHEMA,
+  AiTimeoutError,
   buildPromptParts,
   createAiClient,
   extractUsageTokens,
   generateJsonResponse,
   normalizeAiProvider,
+  withRetryAndTimeout,
 };
