@@ -2,6 +2,8 @@ import {
   AiMetricsResponse,
   BackendRequirements,
   CodeNode,
+  GeneratedPrompt,
+  PromptAgentInput,
   PromptOptimizerPayload,
   ProjectGraphInput,
   ProjectSummary,
@@ -264,3 +266,8 @@ export const openSession = async (sessionId: string): Promise<OpenSessionRespons
   requestJson<OpenSessionResponse>(`/api/sessions/${sessionId}`, {}, {
     errorMessage: 'Failed to open session.',
   });
+
+export const generatePromptAgent = async (input: PromptAgentInput): Promise<GeneratedPrompt> => {
+  const result = await requestAi<GeneratedPrompt>('generate-prompt', input as any);
+  return result;
+};

@@ -13,8 +13,8 @@ import {
   normalizeAiProvider,
 } from './ai-client.js';
 
-const port = Number(process.env.PORT ?? 8787);
-const appBaseUrl = process.env.APP_BASE_URL ?? 'http://localhost:8080';
+const port = Number(process.env.PORT ?? 3000);
+const appBaseUrl = process.env.APP_BASE_URL ?? 'http://localhost:5174';
 const serverBaseUrl = process.env.SERVER_BASE_URL ?? `http://localhost:${port}`;
 const githubClientId = process.env.GITHUB_CLIENT_ID;
 const githubClientSecret = process.env.GITHUB_CLIENT_SECRET;
@@ -1152,6 +1152,142 @@ const handleAiMetrics = async (req, res) => {
   });
 };
 
+/**
+ * Handler para gerar prompts otimizados via AI Agent.
+ */
+const handleGeneratePrompt = async (req, res, session) => {
+  if (!aiClient) {
+    jsonResponse(res, 500, { error: 'AI client not configured.' });
+    return;
+  }
+
+  const payload = await getJsonPayload(req, res);
+  if (!payload) return;
+
+  const { task, context, files } = payload;
+  if (!task) {
+    jsonResponse(res, 400, { error: 'Task is required.' });
+    return;
+  }
+
+  try {
+    const response = await generateJsonResponse({
+      client: aiClient,
+      model: aiModelId,
+      type: 'generatePrompt',
+      params: { task, context, files },
+    });
+
+    const result = {
+      prompt: response.content,
+      metadata: {
+        techniques: response.techniquesApplied,
+        sections: response.sections,
+      },
+      usage: extractUsageTokens(response),
+    };
+
+    jsonResponse(res, 200, result);
+  } catch (error) {
+    console.error('Generate prompt error', error);
+    jsonResponse(res, 500, { error: 'Failed to generate prompt.' });
+  }
+};
+
+/**
+ * Handler para chat contextual com IA.
+ * Suporta 6 modos: explore, create, alter, fix, connect, ask
+ */
+const handleAiContextualChat = async (req, res, session) => {
+  if (!aiClient) {
+    jsonResponse(res, 500, { error: 'AI client not configured.' });
+    return;
+  }
+  if (!checkRateLimit(req, res, session.id)) {
+    return;
+  }
+
+  const payload = await getJsonPayload(req, res);
+  if (!payload) {
+    return;
+  }
+
+  const { mode, element, userMessage, conversationHistory, projectContext } = payload;
+
+  // Validar modo
+  const validModes = ['explore', 'create', 'alter', 'fix', 'connect', 'ask'];
+  if (!mode || !validModes.includes(mode)) {
+    jsonResponse(res, 400, { error: 'Invalid mode. Must be one of: explore, create, alter, fix, connect, ask' });
+    return;
+  }
+
+  // Validar mensagem
+  if (typeof userMessage !== 'string' || userMessage.trim().length === 0) {
+    jsonResponse(res, 400, { error: 'userMessage is required.' });
+    return;
+  }
+
+  const requestType = AI_REQUEST_SCHEMA.contextualChat.prompt.id;
+  const startedAt = Date.now();
+  let response = null;
+  let errorMessage = null;
+
+  try {
+    response = await generateJsonResponse({
+      client: aiClient,
+      model: aiModelId,
+      type: requestType,
+      params: {
+        mode,
+        element: element ?? null,
+        userMessage: userMessage.slice(0, 8000),
+        conversationHistory: Array.isArray(conversationHistory)
+          ? conversationHistory.slice(-10) // Limitar histórico
+          : [],
+        projectContext: typeof projectContext === 'string'
+          ? projectContext.slice(0, 4000)
+          : null,
+      },
+    });
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : 'Unknown AI error';
+  }
+
+  const data = response?.data ?? null;
+  const meta = response?.meta ?? null;
+  const latencyMs = meta?.latencyMs ?? Date.now() - startedAt;
+  const usage = meta?.usage ?? null;
+  const costUsd = estimateAiCostUsd(usage);
+  const success = Boolean(data);
+
+  await appendAiAuditLog({
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    requestType,
+    model: aiModelId,
+    provider: aiProvider,
+    mode,
+    latencyMs,
+    success,
+    error: errorMessage,
+    usage,
+    costUsd,
+  });
+
+  if (errorMessage) {
+    jsonResponse(res, 500, { error: errorMessage });
+    return;
+  }
+
+  jsonResponse(res, 200, {
+    response: data?.response ?? '',
+    suggestions: Array.isArray(data?.suggestions) ? data.suggestions : [],
+    followUpQuestions: Array.isArray(data?.followUpQuestions) ? data.followUpQuestions : [],
+    usage,
+    latencyMs,
+  });
+};
+
 const handleCreateIndexJob = async (req, res) => {
   const payload = await getJsonPayload(req, res);
   if (payload === null && req.headers['content-length'] && req.headers['content-length'] !== '0') {
@@ -1320,12 +1456,47 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Alias route for /api/optimize-prompt (used by frontend store)
+  if (req.method === 'POST' && url.pathname === '/api/optimize-prompt') {
+    try {
+      const session = requireAuthenticatedSession(req, res);
+      if (!session) return;
+      await handleOptimizePrompt(req, res, session);
+    } catch (error) {
+      console.error('Prompt optimization error', error);
+      jsonResponse(res, 500, { error: 'Prompt optimization failed.' });
+    }
+    return;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/ai/metrics') {
     try {
       await handleAiMetrics(req, res);
     } catch (error) {
       console.error('AI metrics error', error);
       jsonResponse(res, 500, { error: 'Failed to load AI metrics.' });
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/ai/generate-prompt') {
+    try {
+      const session = getSession(req, res);
+      await handleGeneratePrompt(req, res, session);
+    } catch (error) {
+      console.error('Generate prompt error', error);
+      jsonResponse(res, 500, { error: 'Generate prompt failed.' });
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/ai/chat') {
+    try {
+      const session = getSession(req, res); // Não requer autenticação GitHub
+      await handleAiContextualChat(req, res, session);
+    } catch (error) {
+      console.error('AI contextual chat error', error);
+      jsonResponse(res, 500, { error: 'AI chat failed.' });
     }
     return;
   }

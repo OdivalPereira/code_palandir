@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { ClusterData, FlatNode, Link } from '../types';
+import { AIActionMode, ClusterData, FlatNode, Link } from '../types';
 import { useGraphStore } from '../stores/graphStore';
 import { usePresenceStore } from '../stores/presenceStore';
 import { selectGraphLinks, selectGraphNodes, selectLoadingPaths, selectRootNode, selectSelectedNode, selectExpandedDirectories, selectFlowPathNodeIds, selectFlowPathLinkIds, selectRequestExpandNode, selectNodesById, selectGhostNodes, selectGhostLinks } from '../stores/graphSelectors';
+import AIContextBalloon from './AIContextBalloon';
+import ContextualChat from './ContextualChat';
 
 const LAYOUT_DB_NAME = 'graphLayoutCache';
 const LAYOUT_STORE_NAME = 'positions';
@@ -133,6 +135,14 @@ const CodeVisualizer: React.FC = () => {
   const clickTimeoutRef = useRef<number | null>(null);
   const cursorFrameRef = useRef<number | null>(null);
 
+  // AI Context Balloon state
+  const [showBalloon, setShowBalloon] = useState(false);
+  const [balloonPosition, setBalloonPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Contextual Chat state
+  const [showChat, setShowChat] = useState(false);
+  const [chatMode, setChatMode] = useState<AIActionMode>('explore');
+
   // VITE_GRAPH_RENDERER=canvas|webgl switches to the canvas-backed renderer (webgl currently uses canvas fallback).
   const renderMode = (import.meta.env.VITE_GRAPH_RENDERER ?? 'svg').toLowerCase();
   const useCanvasRenderer = renderMode === 'canvas' || renderMode === 'webgl';
@@ -156,6 +166,57 @@ const CodeVisualizer: React.FC = () => {
   useEffect(() => {
     layoutPositionsRef.current = layoutPositions;
   }, [layoutPositions]);
+
+  // Show balloon when a node is selected
+  useEffect(() => {
+    console.log('[AIBalloon] selectedNode changed:', selectedNode?.name, selectedNode?.type);
+    if (selectedNode && selectedNode.type !== 'cluster') {
+      const position = layoutPositionsRef.current[selectedNode.id] ?? stablePositionsRef.current.get(selectedNode.id);
+      console.log('[AIBalloon] position for node:', position);
+      if (position && wrapperRef.current) {
+        const transform = zoomTransformRef.current;
+        // Transform graph coordinates to screen coordinates
+        const screenX = transform.applyX(position.x);
+        const screenY = transform.applyY(position.y);
+        console.log('[AIBalloon] screen position:', screenX, screenY);
+        setBalloonPosition({ x: screenX, y: screenY });
+        setShowBalloon(true);
+      } else if (selectedNode.x !== undefined && selectedNode.y !== undefined) {
+        // Fallback: use node's own x,y if available
+        const transform = zoomTransformRef.current;
+        const screenX = transform.applyX(selectedNode.x);
+        const screenY = transform.applyY(selectedNode.y);
+        console.log('[AIBalloon] fallback screen position:', screenX, screenY);
+        setBalloonPosition({ x: screenX, y: screenY });
+        setShowBalloon(true);
+      } else {
+        // Last resort: show at center of wrapper
+        if (wrapperRef.current) {
+          setBalloonPosition({ x: dimensions.width / 2, y: dimensions.height / 2 });
+          setShowBalloon(true);
+          console.log('[AIBalloon] using center fallback');
+        }
+      }
+    } else {
+      setShowBalloon(false);
+    }
+  }, [selectedNode, dimensions.width, dimensions.height]);
+
+  // Handle AI action selection - opens contextual chat
+  const handleAIAction = useCallback((mode: AIActionMode) => {
+    console.log('AI Action selected:', mode, 'for node:', selectedNode?.name);
+    setChatMode(mode);
+    setShowChat(true);
+    setShowBalloon(false);
+  }, [selectedNode]);
+
+  const handleCloseBalloon = useCallback(() => {
+    setShowBalloon(false);
+  }, []);
+
+  const handleCloseChat = useCallback(() => {
+    setShowChat(false);
+  }, []);
 
   const isAggregateNode = (node: FlatNode) => node.type === 'directory' || node.type === 'cluster';
   const isGhostNode = (node: FlatNode) => node.isGhost || node.type.startsWith('ghost_');
@@ -1186,6 +1247,27 @@ const CodeVisualizer: React.FC = () => {
           Double-click a directory to collapse/expand. Click a cluster to expand.
         </div>
       </div>
+
+      {/* AI Context Balloon */}
+      {showBalloon && selectedNode && selectedNode.type !== 'cluster' && (
+        <AIContextBalloon
+          selectedNode={selectedNode}
+          position={balloonPosition}
+          onSelectAction={handleAIAction}
+          onClose={handleCloseBalloon}
+        />
+      )}
+
+      {/* Contextual Chat Panel */}
+      {showChat && selectedNode && (
+        <div className="absolute right-0 top-0 h-full w-[380px] z-40 shadow-2xl">
+          <ContextualChat
+            selectedNode={selectedNode}
+            initialMode={chatMode}
+            onClose={handleCloseChat}
+          />
+        </div>
+      )}
     </div>
   );
 };

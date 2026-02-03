@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Check, Database, Server, Shield, ChevronRight, Sparkles } from 'lucide-react';
-import { BackendTemplate, TemplateComponent } from './TemplateSidebar';
+import { TemplateComponent } from './TemplateSidebar';
 import { FlatNode, Link, MissingDependency } from '../types';
 import { useGraphStore } from '../stores/graphStore';
 import { selectSelectedNode, selectWizardTemplate } from '../stores/graphSelectors';
@@ -208,7 +208,7 @@ export const TemplateWizard: React.FC = () => {
                 {step === 'customize' && (
                     <div className="p-4 border-t border-slate-700 flex justify-end gap-2">
                         <button
-                            onClick={onClose}
+                            onClick={() => setWizardTemplate(null)}
                             className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
                         >
                             Cancelar

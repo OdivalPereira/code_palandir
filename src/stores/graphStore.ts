@@ -41,7 +41,7 @@ export type GraphState = {
   searchQuery: string;
   githubUrl: string;
   isPromptOpen: boolean;
-  sidebarTab: 'prompt' | 'summary' | 'recommendations' | 'flow' | 'metrics';
+  sidebarTab: 'prompt' | 'summary' | 'recommendations' | 'flow' | 'metrics' | 'library';
   sessionId: string | null;
   projectSignature: string | null;
   summaryPromptBase: string;
@@ -65,7 +65,7 @@ export type GraphState = {
   setSearchQuery: (query: string) => void;
   setGithubUrl: (url: string) => void;
   setPromptOpen: (open: boolean) => void;
-  setSidebarTab: (tab: 'prompt' | 'summary' | 'recommendations' | 'flow' | 'metrics') => void;
+  setSidebarTab: (tab: 'prompt' | 'summary' | 'recommendations' | 'flow' | 'metrics' | 'library') => void;
   setSummaryPromptBase: (base: string) => void;
   setPromptItems: (items: PromptItem[]) => void;
   addPromptItem: (item: PromptItem) => void;
@@ -111,6 +111,8 @@ export type GraphState = {
   flowPathNodeIds: Set<string>;
   flowPathLinkIds: Set<string>;
   requestExpandNode: ((path: string) => void) | null;
+  optimizedPrompt: string | null;
+  isOptimizing: boolean;
   // Actions
   setGraphData: (nodes: FlatNode[], links: Link[]) => void;
   setRootNode: (rootNode: FileSystemNode | null) => void;
@@ -131,6 +133,8 @@ export type GraphState = {
   setFlowHighlight: (nodeIds: string[], linkIds: string[]) => void;
   clearFlowHighlight: () => void;
   expandNode: (path: string) => void;
+  optimizeIntent: (userIntent: string) => Promise<void>;
+  clearOptimizedPrompt: () => void;
 };
 
 const LAST_SESSION_STORAGE_KEY = 'codemind:lastSession';
@@ -749,6 +753,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   flowPathNodeIds: new Set(),
   flowPathLinkIds: new Set(),
   requestExpandNode: (path) => get().expandNode(path),
+  optimizedPrompt: null,
+  isOptimizing: false,
   setGraphData: (nodes, links) => {
     const nodesById: Record<string, FlatNode> = {};
     nodes.forEach((node) => {
@@ -985,5 +991,50 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       next.delete(path);
       get().setLoadingPaths(next);
     }, 250);
-  }
+  },
+  optimizeIntent: async (userIntent) => {
+    const { selectedNode, ensureFileContent } = get();
+    if (!selectedNode) {
+      set({ optimizedPrompt: 'Selecione um nó antes de otimizar o prompt.', isOptimizing: false });
+      return;
+    }
+
+    set({ isOptimizing: true, optimizedPrompt: null });
+
+    try {
+      // Get the file content for the selected node
+      let fileContent = '';
+      if (selectedNode.type === 'file') {
+        fileContent = await ensureFileContent(selectedNode.path) || '';
+      }
+
+      const response = await fetch('/api/optimize-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          userIntent,
+          selectedNode: {
+            id: selectedNode.id,
+            name: selectedNode.name,
+            path: selectedNode.path,
+            type: selectedNode.type,
+          },
+          fileContent,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Request failed with status ${response.status}`);
+      }
+
+      const data = await response.json() as { prompt?: string };
+      set({ optimizedPrompt: data.prompt || '', isOptimizing: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao otimizar o prompt.';
+      set({ optimizedPrompt: message, isOptimizing: false });
+    }
+  },
+  clearOptimizedPrompt: () => set({ optimizedPrompt: null, isOptimizing: false }),
 }));

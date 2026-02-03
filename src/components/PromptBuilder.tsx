@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ModuleInput, PromptItem } from '../types';
+import { ModuleInput } from '../types';
 import { useGraphStore } from '../stores/graphStore';
 import { selectModuleInputs, selectPromptItems } from '../stores/graphSelectors';
-import { Trash2, Copy, MessageSquarePlus } from 'lucide-react';
+import { Trash2, Copy, MessageSquarePlus, Sparkles, Loader2 } from 'lucide-react';
+import { generatePromptAgent } from '../api/client';
 
 const buildModulesSection = (modules: ModuleInput[]) => {
   if (modules.length === 0) {
@@ -77,12 +78,47 @@ const PromptBuilder: React.FC = () => {
   const generatedPrompt = useMemo(() => generateFinalPrompt(), [generateFinalPrompt]);
   const [editablePrompt, setEditablePrompt] = useState(generatedPrompt);
   const [isDirty, setIsDirty] = useState(false);
+  const [isRefining, setIsRefining] = useState(false);
 
   useEffect(() => {
     if (!isDirty) {
       setEditablePrompt(generatedPrompt);
     }
   }, [generatedPrompt, isDirty]);
+
+  const handleRefineWithAI = async () => {
+    setIsRefining(true);
+    try {
+      // Tentar inferir a tarefa principal a partir dos comentários
+      const taskItem = items.find(i => i.type === 'comment');
+      const task = taskItem ? taskItem.content : 'Analisar e melhorar este código';
+
+      const context = items
+        .filter(i => i.type === 'context')
+        .map(i => i.content)
+        .join('\n');
+
+      const files = items
+        .filter(i => i.type === 'code')
+        .map(i => `// ${i.title}\n${i.content}`);
+
+      const result = await generatePromptAgent({
+        task,
+        context: context || undefined,
+        files: files.length > 0 ? files : undefined
+      });
+
+      if (result && result.content) {
+        setEditablePrompt(result.content);
+        setIsDirty(true);
+      }
+    } catch (e) {
+      console.error('AI Agent failed', e);
+      // Fallback ou aviso
+    } finally {
+      setIsRefining(false);
+    }
+  };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(editablePrompt);
@@ -116,23 +152,22 @@ const PromptBuilder: React.FC = () => {
           items.map((item) => (
             <div key={item.id} className="bg-slate-700/50 rounded-lg border border-slate-600 p-3 group hover:border-indigo-500/50 transition-colors">
               <div className="flex justify-between items-start mb-2">
-                <span className={`text-xs font-bold px-1.5 py-0.5 rounded uppercase ${
-                  item.type === 'code' ? 'bg-blue-500/20 text-blue-300' :
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded uppercase ${item.type === 'code' ? 'bg-blue-500/20 text-blue-300' :
                   item.type === 'context' ? 'bg-purple-500/20 text-purple-300' :
-                  'bg-green-500/20 text-green-300'
-                }`}>
+                    'bg-green-500/20 text-green-300'
+                  }`}>
                   {item.type}
                 </span>
-                <button 
+                <button
                   onClick={() => removePromptItem(item.id)}
                   className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   <Trash2 size={14} />
                 </button>
               </div>
-              
+
               <h3 className="text-sm font-medium text-slate-200 mb-1">{item.title}</h3>
-              
+
               {item.type === 'code' ? (
                 <pre className="bg-slate-950 p-2 rounded text-xs text-slate-400 overflow-x-auto font-mono border border-slate-800">
                   {item.content.slice(0, 150)}{item.content.length > 150 ? '...' : ''}
@@ -168,7 +203,15 @@ const PromptBuilder: React.FC = () => {
       </div>
 
       <div className="p-4 border-t border-slate-700 bg-slate-900/50 space-y-2">
-        <button 
+        <button
+          onClick={handleRefineWithAI}
+          disabled={isRefining || items.length === 0}
+          className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:text-slate-500 text-white py-2.5 rounded-lg font-medium transition-colors"
+        >
+          {isRefining ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
+          Refinar com IA (Agent)
+        </button>
+        <button
           onClick={handleCopy}
           disabled={editablePrompt.length === 0}
           className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white py-2.5 rounded-lg font-medium transition-colors"
@@ -176,7 +219,7 @@ const PromptBuilder: React.FC = () => {
           <Copy size={16} />
           Copy Optimized Prompt
         </button>
-        <button 
+        <button
           onClick={clearPromptItems}
           disabled={items.length === 0}
           className="w-full text-xs text-slate-500 hover:text-slate-300 py-1"

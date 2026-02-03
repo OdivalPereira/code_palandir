@@ -23,6 +23,7 @@ import {
 } from '../stores/graphSelectors';
 import PromptBuilder from './PromptBuilder';
 import ModuleRecommendations from './ModuleRecommendations';
+import ThreadLibrary from './ThreadLibrary';
 import { Link } from '../types';
 
 const formatCurrency = (value: number) =>
@@ -117,6 +118,7 @@ const PromptSidebarPanel: React.FC = () => {
   const setFlowHighlight = useGraphStore((state) => state.setFlowHighlight);
   const clearFlowHighlight = useGraphStore((state) => state.clearFlowHighlight);
   const refreshAiMetrics = useGraphStore((state) => state.refreshAiMetrics);
+  const setPromptOpen = useGraphStore((state) => state.setPromptOpen);
 
   const flowNodeOptions = React.useMemo(() => {
     const options = graphNodes.map((node) => ({
@@ -396,6 +398,8 @@ const PromptSidebarPanel: React.FC = () => {
               )}
             </div>
           </div>
+        ) : sidebarTab === 'library' ? (
+          <ThreadLibrary onClose={() => setPromptOpen(false)} />
         ) : (
           <ModuleRecommendations />
         )}

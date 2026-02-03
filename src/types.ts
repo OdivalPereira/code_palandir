@@ -290,3 +290,176 @@ export type AiMetricsResponse = {
   summary: AiMetricsSummary;
   recent: AiAuditEntry[];
 };
+
+// ============================================
+// AI Context Balloon & Thread System Types
+// ============================================
+
+/**
+ * Modos de ação disponíveis no balão de IA contextual.
+ * Cada modo ajusta o tom e foco da conversa com a IA.
+ */
+export type AIActionMode = 'explore' | 'create' | 'alter' | 'fix' | 'connect' | 'ask';
+
+/**
+ * Labels em português para os modos de ação.
+ */
+export const AI_ACTION_LABELS: Record<AIActionMode, string> = {
+  explore: 'Explorar',
+  create: 'Criar',
+  alter: 'Alterar',
+  fix: 'Corrigir',
+  connect: 'Conectar',
+  ask: 'Perguntar',
+};
+
+/**
+ * Mensagem individual em uma conversa com a IA.
+ */
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  mode: AIActionMode;
+  timestamp: number;
+  /** Tokens estimados desta mensagem */
+  tokenEstimate?: number;
+}
+
+/**
+ * Referência ao elemento base de uma Thread.
+ * Pode ser um arquivo, componente, função, etc.
+ */
+export interface ThreadBaseElement {
+  nodeId: string;
+  name: string;
+  path: string;
+  type: string;
+  /** Snippet de código relevante, se disponível */
+  codeSnippet?: string;
+}
+
+/**
+ * Sugestão gerada pela IA durante a conversa.
+ * Pode ser um arquivo a criar, API a implementar, snippet de código, etc.
+ */
+export interface ThreadSuggestion {
+  id: string;
+  type: 'file' | 'api' | 'snippet' | 'migration' | 'table' | 'service';
+  title: string;
+  description: string;
+  /** Conteúdo/código da sugestão */
+  content?: string;
+  /** Caminho do arquivo (para sugestões de arquivo) */
+  path?: string;
+  /** Linhas afetadas [início, fim] */
+  lines?: [number, number];
+  /** Se foi incluída no prompt final */
+  included: boolean;
+}
+
+/**
+ * Thread de trabalho: uma conversa focada sobre um elemento específico.
+ * Representa uma sessão de interação com a IA.
+ */
+export interface Thread {
+  id: string;
+  title: string;
+  /** Elemento base sobre o qual a conversa se baseia */
+  baseElement: ThreadBaseElement;
+  /** Modos usados durante a conversa (pode mudar sem reset) */
+  modesUsed: AIActionMode[];
+  /** Modo atual ativo */
+  currentMode: AIActionMode;
+  /** Histórico de mensagens */
+  conversation: ChatMessage[];
+  /** Sugestões geradas pela IA */
+  suggestions: ThreadSuggestion[];
+  /** Contagem total de tokens estimada */
+  tokenCount: number;
+  /** Status da thread */
+  status: 'active' | 'paused' | 'completed';
+  /** Timestamps */
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * Thread salva na biblioteca para reuso.
+ * Inclui metadados adicionais para organização.
+ */
+export interface SavedThread extends Thread {
+  /** Nota do usuário sobre porque salvou */
+  userNote: string;
+  /** Tags para organização */
+  tags: string[];
+  /** Data de salvamento */
+  savedAt: number;
+}
+
+/**
+ * Estado do Basket (cesta de threads).
+ * Armazena threads ativas e monitora uso de tokens.
+ */
+export interface BasketState {
+  /** Threads ativas no basket */
+  threads: Thread[];
+  /** ID da thread ativa (em foco) */
+  activeThreadId: string | null;
+  /** Total de tokens consumidos */
+  totalTokens: number;
+  /** Limite máximo de tokens (para contexto da IA) */
+  maxTokens: number;
+  /** Percentual para warning (amarelo) */
+  warningThreshold: number;
+  /** Percentual para danger (vermelho) */
+  dangerThreshold: number;
+}
+
+/**
+ * Configuração para o Prompt Agent.
+ * Define preferências para geração do prompt final.
+ */
+export interface PromptAgentConfig {
+  /** Stack preferida para sugestões de backend */
+  preferredStack: 'supabase' | 'firebase' | 'express' | 'nextjs' | 'auto';
+  /** Incluir contexto do projeto */
+  includeProjectContext: boolean;
+  /** Incluir convenções de código */
+  includeConventions: boolean;
+  /** Nível de detalhe do prompt */
+  detailLevel: 'minimal' | 'standard' | 'detailed';
+  /** Formato de saída */
+  outputFormat: 'markdown' | 'structured' | 'cursor' | 'windsurf';
+}
+
+/**
+ * Input para o Prompt Agent.
+ */
+export interface PromptAgentInput {
+  task: string;
+  context?: string;
+  files?: string[];
+}
+
+/**
+ * Resultado da geração de prompt pelo Prompt Agent.
+ */
+export interface GeneratedPrompt {
+  /** Prompt gerado */
+  content: string;
+  /** Tokens do prompt */
+  tokenCount: number;
+  /** Técnicas de prompt engineering aplicadas */
+  techniquesApplied: string[];
+  /** Seções incluídas */
+  sections: {
+    context: string;
+    tasks: string;
+    instructions: string;
+    validation: string;
+  };
+  /** Timestamp de geração */
+  generatedAt: number;
+}
+

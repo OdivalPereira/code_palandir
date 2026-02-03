@@ -1,5 +1,7 @@
 import React, { useRef } from 'react';
-import { BarChart3, FileText, FolderOpen, Github, Lightbulb, Loader2, Network, Route, Save, Search, Sparkles } from 'lucide-react';
+import { BarChart3, BookOpen, FileDown, FileText, FolderOpen, Github, Lightbulb, Loader2, Network, Route, Save, Search, Sparkles } from 'lucide-react';
+import { useBasketStore } from '../stores/basketStore';
+import { generateMarkdownExport, downloadMarkdown } from '../utils/exportUtils';
 import { useGraphStore } from '../stores/graphStore';
 import {
   selectIsPromptOpen,
@@ -150,6 +152,16 @@ const AppTopBar: React.FC = () => {
       </button>
       <button
         onClick={() => {
+          setPromptOpen(isPromptOpen && sidebarTab === 'library' ? false : true);
+          setSidebarTab('library');
+        }}
+        className={`p-2 rounded-lg transition-colors ${isPromptOpen && sidebarTab === 'library' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-400'}`}
+        aria-label="Open thread library"
+      >
+        <BookOpen size={20} />
+      </button>
+      <button
+        onClick={() => {
           setPromptOpen(isPromptOpen && sidebarTab === 'metrics' ? false : true);
           setSidebarTab('metrics');
         }}
@@ -179,6 +191,16 @@ const AppTopBar: React.FC = () => {
           className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors"
         >
           <Save size={14} /> Save Session
+        </button>
+        <button
+          onClick={() => {
+            const threads = useBasketStore.getState().threads;
+            const md = generateMarkdownExport(threads);
+            downloadMarkdown(md, `codemind-session-${new Date().toISOString().slice(0, 10)}.md`);
+          }}
+          className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors"
+        >
+          <FileDown size={14} /> Export MD
         </button>
         <button
           onClick={handleOpenSession}
