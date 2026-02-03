@@ -388,9 +388,12 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
                     <div className="flex items-center gap-2 mb-2">
                         <Lightbulb size={14} className="text-amber-400" />
                         <span className="text-xs text-slate-400 uppercase tracking-wider">Sugestões</span>
+                        <span className="text-[10px] text-slate-500">
+                            {currentThread.suggestions.length} sugestões
+                        </span>
                     </div>
                     <div className="space-y-2 max-h-[120px] overflow-y-auto">
-                        {currentThread.suggestions.slice(-3).map((sug) => (
+                        {currentThread.suggestions.map((sug) => (
                             <SuggestionCard
                                 key={sug.id}
                                 suggestion={sug}
