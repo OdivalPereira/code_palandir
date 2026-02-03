@@ -1,5 +1,24 @@
 # Code Palandir
 
+## Como rodar o projeto
+
+1. Instale as dependências:
+   ```bash
+   npm install
+   ```
+2. Inicie o servidor:
+   ```bash
+   npm run server
+   ```
+3. Em outro terminal, rode o front-end:
+   ```bash
+   npm run dev
+   ```
+
+### Proxy do Vite e WebSocket
+
+O front-end utiliza o proxy do Vite para encaminhar chamadas REST para `/api` até o backend e também para o WebSocket em `/realtime`. Mantenha o servidor rodando para que essas rotas funcionem corretamente no ambiente local.
+
 ## Configuração de variáveis de ambiente
 
 Crie um arquivo `.env` na raiz do projeto com base no `.env.example` e ajuste os valores conforme o seu ambiente.
@@ -29,3 +48,9 @@ O backend aplica CORS usando `APP_BASE_URL`. Para evitar bloqueios:
 - Configure `APP_BASE_URL` com a URL exata onde o front-end está rodando.
 
 Se `APP_BASE_URL` não corresponder à origem do navegador, as requisições podem ser bloqueadas por CORS.
+
+## Troubleshooting
+
+- **401 ao usar IA**: faça login antes de usar recursos de IA.
+- **500 ao chamar o cliente de IA**: verifique se a chave do provedor (ex.: `GOOGLE_AI_API_KEY`) está configurada.
+- **Erro do GitHub**: pode ser rate limit ou branch default não configurada. Verifique a autenticação, limite de requisições e se o repositório possui uma branch padrão.
