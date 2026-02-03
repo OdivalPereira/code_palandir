@@ -2,6 +2,8 @@ import { create } from './zustand';
 import {
   analyzeFile,
   fetchAiMetrics,
+  fetchSessionAccessToken,
+  logoutSession,
   openSession,
   optimizePrompt,
   projectSummary,
@@ -9,6 +11,7 @@ import {
   saveSession,
   PROJECT_SUMMARY_PROMPT_BASE,
 } from '../api/client';
+import { clearSessionAccessToken } from '../authClient';
 import { getCachedFileContent, hashContent, setCachedFileContent } from '../cacheRepository';
 import { fetchGitHubJson } from '../githubClient';
 import { buildSemanticLinksForFile, SymbolIndex } from '../dependencyParser';
@@ -37,6 +40,8 @@ import {
 export type GraphState = {
   fileMap: Map<string, string>;
   status: AppStatus;
+  isAuthenticated: boolean;
+  authNotice: string | null;
   promptItems: PromptItem[];
   searchQuery: string;
   githubUrl: string;
@@ -76,6 +81,9 @@ export type GraphState = {
   clearGhostData: () => void;
   clearAiResponse: () => void;
   setWizardTemplate: (template: BackendTemplate | null) => void;
+  setAuthNotice: (notice: string | null) => void;
+  refreshAuthSession: () => Promise<void>;
+  logout: () => Promise<void>;
   // Data actions
   processFiles: (files: FileList) => Promise<void>;
   importGithubRepo: () => Promise<void>;
@@ -142,6 +150,7 @@ const relevantCacheTtlEnv = Number(import.meta.env.VITE_RELEVANT_FILES_CACHE_TTL
 const relevantCacheTtlMs = Number.isFinite(relevantCacheTtlEnv) && relevantCacheTtlEnv > 0
   ? relevantCacheTtlEnv
   : undefined;
+const AUTH_NOTICE_MESSAGE = 'Conecte-se com GitHub para habilitar recursos de IA.';
 
 const loadStoredSessionMeta = () => {
   if (typeof window === 'undefined') return null;
@@ -329,6 +338,8 @@ const computeGraph = (
 export const useGraphStore = create<GraphState>((set, get) => ({
   fileMap: new Map(),
   status: AppStatus.IDLE,
+  isAuthenticated: false,
+  authNotice: null,
   promptItems: [],
   searchQuery: '',
   githubUrl: '',
@@ -373,6 +384,29 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   clearGhostData: () => set({ ghostNodes: [], ghostLinks: [], missingDependencies: [] }),
   clearAiResponse: () => set({ aiResponse: null }),
   setWizardTemplate: (template) => set({ wizardTemplate: template }),
+  setAuthNotice: (notice) => set({ authNotice: notice }),
+  refreshAuthSession: async () => {
+    try {
+      const accessToken = await fetchSessionAccessToken();
+      const isAuthenticated = Boolean(accessToken);
+      set({
+        isAuthenticated,
+        authNotice: isAuthenticated ? null : AUTH_NOTICE_MESSAGE
+      });
+    } catch (error) {
+      console.error(error);
+      set({ isAuthenticated: false, authNotice: AUTH_NOTICE_MESSAGE });
+    }
+  },
+  logout: async () => {
+    try {
+      await logoutSession();
+    } catch (error) {
+      console.error(error);
+    }
+    clearSessionAccessToken();
+    set({ isAuthenticated: false, authNotice: AUTH_NOTICE_MESSAGE });
+  },
   processFiles: async (files) => {
     set({ status: AppStatus.LOADING_FILES });
     const newFileHandles = new Map<string, File>();
@@ -467,6 +501,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   searchRelevantFiles: async () => {
     const { searchQuery, rootNode, allFilePaths } = get();
     if (!searchQuery.trim() || !rootNode) return;
+    if (!get().isAuthenticated) {
+      set({ authNotice: AUTH_NOTICE_MESSAGE });
+      return;
+    }
     set({ status: AppStatus.ANALYZING_QUERY });
     try {
       const relevantPaths = await relevantFiles(searchQuery, allFilePaths, { ttlMs: relevantCacheTtlMs });
@@ -547,6 +585,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const updateTree = (node: FileSystemNode): boolean => {
       if (node.path === selectedPath) {
         if (!node.codeStructure) {
+          if (!get().isAuthenticated) {
+            set({ authNotice: AUTH_NOTICE_MESSAGE });
+            return true;
+          }
           set({ status: AppStatus.ANALYZING_QUERY });
           analyzeFile(content, selectedName, { ttlMs: analysisCacheTtlMs }).then((structure) => {
             node.codeStructure = structure;
@@ -567,6 +609,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     updateTree(currentRoot);
   },
   refreshAiMetrics: async () => {
+    if (!get().isAuthenticated) {
+      set({ authNotice: AUTH_NOTICE_MESSAGE });
+      return;
+    }
     set({ aiMetricsStatus: 'loading', aiMetricsError: null });
     try {
       const payload = await fetchAiMetrics();
@@ -582,6 +628,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   generateSummary: async () => {
     const { rootNode, promptItems, summaryPromptBase, allFilePaths } = get();
     if (!rootNode) return;
+    if (!get().isAuthenticated) {
+      set({
+        authNotice: AUTH_NOTICE_MESSAGE,
+        summaryStatus: 'error',
+        summaryError: 'Conecte-se com GitHub para gerar o resumo.'
+      });
+      return;
+    }
     set({ summaryStatus: 'loading', summaryError: null });
     try {
       const graph = get().buildProjectGraphInput();
@@ -818,6 +872,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set({ selectedNode });
   },
   fetchAiOptimization: async (nodeId, userIntent) => {
+    if (!get().isAuthenticated) {
+      set({
+        authNotice: AUTH_NOTICE_MESSAGE,
+        aiResponse: 'Conecte-se com GitHub para usar a IA.',
+        isLoading: false
+      });
+      return;
+    }
     const node = get().nodesById[nodeId];
     if (!node) {
       set({ aiResponse: 'Selecione um nó válido para otimizar.', isLoading: false });
