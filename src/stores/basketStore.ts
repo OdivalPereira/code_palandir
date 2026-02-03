@@ -60,12 +60,24 @@ function calculateThreadTokens(thread: Thread): number {
 // Library Storage (LocalStorage)
 // ============================================
 
-const LIBRARY_STORAGE_KEY = 'codemind:thread-library';
+const LIBRARY_STORAGE_KEY = 'codemind-thread-library';
+const LEGACY_LIBRARY_STORAGE_KEY = 'codemind:thread-library';
 
 function loadLibraryFromStorage(): SavedThread[] {
     try {
         const stored = localStorage.getItem(LIBRARY_STORAGE_KEY);
-        return stored ? JSON.parse(stored) : [];
+        if (stored) {
+            return JSON.parse(stored);
+        }
+
+        const legacyStored = localStorage.getItem(LEGACY_LIBRARY_STORAGE_KEY);
+        if (legacyStored) {
+            const threads = JSON.parse(legacyStored) as SavedThread[];
+            localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(threads));
+            return threads;
+        }
+
+        return [];
     } catch {
         return [];
     }
