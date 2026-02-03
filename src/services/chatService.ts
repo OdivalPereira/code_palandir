@@ -12,6 +12,7 @@ import {
     ThreadBaseElement,
     ThreadSuggestion,
 } from '../types';
+import { isChatResponse, isThreadSuggestion } from '../utils/typeGuards';
 
 // ============================================
 // Types
@@ -113,23 +114,34 @@ export async function sendChatMessage(options: SendMessageOptions): Promise<Chat
 
     const data = await response.json();
 
+    if (isChatResponse(data)) {
+        return {
+            response: data.response,
+            suggestions: data.suggestions,
+            followUpQuestions: data.followUpQuestions,
+            usage: data.usage === null ? EMPTY_USAGE : data.usage,
+            latencyMs: data.latencyMs,
+        };
+    }
+
     // Normalizar sugestões
-    const suggestions: ThreadSuggestion[] = (data.suggestions || []).map((sug: any, index: number) => ({
-        id: `sug-${Date.now()}-${index}`,
-        type: sug.type || 'snippet',
-        title: sug.title || 'Sugestão',
-        description: sug.description || '',
-        content: sug.content,
-        path: sug.path,
-        included: true,
-    }));
+    const suggestions: ThreadSuggestion[] = (Array.isArray(data?.suggestions) ? data.suggestions : [])
+        .filter((sug: unknown): sug is ThreadSuggestion => isThreadSuggestion(sug))
+        .map((sug, index) => ({
+            ...sug,
+            id: sug.id || `sug-${Date.now()}-${index}`,
+            type: sug.type || 'snippet',
+            title: sug.title || 'Sugestão',
+            description: sug.description || '',
+            included: sug.included ?? true,
+        }));
 
     return {
-        response: data.response || '',
+        response: typeof data?.response === 'string' ? data.response : '',
         suggestions,
-        followUpQuestions: data.followUpQuestions || [],
-        usage: normalizeUsage(data.usage),
-        latencyMs: data.latencyMs,
+        followUpQuestions: Array.isArray(data?.followUpQuestions) ? data.followUpQuestions.filter((q: unknown) => typeof q === 'string') : [],
+        usage: normalizeUsage(data?.usage),
+        latencyMs: typeof data?.latencyMs === 'number' ? data.latencyMs : undefined,
     };
 }
 
