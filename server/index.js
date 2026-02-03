@@ -7,10 +7,12 @@ import { WebSocketServer } from 'ws';
 import { Type } from '@google/genai';
 import {
   AI_REQUEST_SCHEMA,
+  AiTimeoutError,
   createAiClient,
   extractUsageTokens,
   generateJsonResponse,
   normalizeAiProvider,
+  withRetryAndTimeout,
 } from './ai-client.js';
 
 const port = Number(process.env.PORT ?? 3000);
@@ -185,6 +187,14 @@ const formatServices = (services) => {
 };
 
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
+const isAiTimeoutError = (error) => error instanceof AiTimeoutError;
+const getAiErrorMessage = (error, fallback = 'Unknown AI error') => {
+  if (isAiTimeoutError(error)) {
+    return 'A requisição para a IA expirou. Tente novamente.';
+  }
+  return error instanceof Error ? error.message : fallback;
+};
+const getAiErrorStatus = (error) => (isAiTimeoutError(error) ? 504 : 500);
 
 const collectValidationErrors = (checks) =>
   checks.flatMap((check) => (check.ok ? [] : [check.message]));
@@ -796,6 +806,7 @@ const handleAiAnalyzeFile = async (req, res, session, requestId) => {
   const requestType = AI_REQUEST_SCHEMA.analyzeFile.prompt.id;
   const startedAt = Date.now();
   let response = null;
+  let error = null;
   let errorMessage = null;
   try {
     response = await generateJsonResponse({
@@ -807,8 +818,9 @@ const handleAiAnalyzeFile = async (req, res, session, requestId) => {
         code: code.slice(0, 20000),
       },
     });
-  } catch (error) {
-    errorMessage = error instanceof Error ? error.message : 'Unknown AI error';
+  } catch (caughtError) {
+    error = caughtError;
+    errorMessage = getAiErrorMessage(caughtError);
   }
 
   const data = response?.data ?? null;
@@ -833,7 +845,12 @@ const handleAiAnalyzeFile = async (req, res, session, requestId) => {
   });
 
   if (errorMessage) {
-    throw new Error(errorMessage);
+    jsonResponse(
+      res,
+      getAiErrorStatus(error),
+      withRequestId({ error: errorMessage }, requestId),
+    );
+    return;
   }
 
   jsonResponse(
@@ -866,6 +883,7 @@ const handleAiRelevantFiles = async (req, res, session, requestId) => {
   const requestType = AI_REQUEST_SCHEMA.relevantFiles.prompt.id;
   const startedAt = Date.now();
   let response = null;
+  let error = null;
   let errorMessage = null;
   try {
     response = await generateJsonResponse({
@@ -877,8 +895,9 @@ const handleAiRelevantFiles = async (req, res, session, requestId) => {
         filePaths,
       },
     });
-  } catch (error) {
-    errorMessage = error instanceof Error ? error.message : 'Unknown AI error';
+  } catch (caughtError) {
+    error = caughtError;
+    errorMessage = getAiErrorMessage(caughtError);
   }
 
   const data = response?.data ?? null;
@@ -903,7 +922,12 @@ const handleAiRelevantFiles = async (req, res, session, requestId) => {
   });
 
   if (errorMessage) {
-    throw new Error(errorMessage);
+    jsonResponse(
+      res,
+      getAiErrorStatus(error),
+      withRequestId({ error: errorMessage }, requestId),
+    );
+    return;
   }
 
   jsonResponse(
@@ -949,6 +973,7 @@ const handleAiProjectSummary = async (req, res, session, requestId) => {
   const requestType = AI_REQUEST_SCHEMA.projectSummary.prompt.id;
   const startedAt = Date.now();
   let response = null;
+  let error = null;
   let errorMessage = null;
   try {
     response = await generateJsonResponse({
@@ -962,8 +987,9 @@ const handleAiProjectSummary = async (req, res, session, requestId) => {
         context,
       },
     });
-  } catch (error) {
-    errorMessage = error instanceof Error ? error.message : 'Unknown AI error';
+  } catch (caughtError) {
+    error = caughtError;
+    errorMessage = getAiErrorMessage(caughtError);
   }
 
   const data = response?.data ?? null;
@@ -988,7 +1014,12 @@ const handleAiProjectSummary = async (req, res, session, requestId) => {
   });
 
   if (errorMessage) {
-    throw new Error(errorMessage);
+    jsonResponse(
+      res,
+      getAiErrorStatus(error),
+      withRequestId({ error: errorMessage }, requestId),
+    );
+    return;
   }
 
   jsonResponse(
@@ -1031,73 +1062,77 @@ const handleAnalyzeIntent = async (req, res, session, requestId) => {
   const prompt = buildIntentPrompt({ uiSchema, existingInfrastructure });
   const startedAt = Date.now();
   let response = null;
+  let error = null;
   let errorMessage = null;
   try {
-    response = await aiClient.models.generateContent({
-      model: aiModelId,
-      contents: {
-        role: 'user',
-        parts: [
-          { text: prompt },
-          { text: `COMPONENT CODE:\n${fileContent.slice(0, 12000)}` },
-        ],
-      },
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            tables: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  columns: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        name: { type: Type.STRING },
-                        type: { type: Type.STRING },
-                        constraints: {
-                          type: Type.ARRAY,
-                          items: { type: Type.STRING },
+    response = await withRetryAndTimeout(() =>
+      aiClient.models.generateContent({
+        model: aiModelId,
+        contents: {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            { text: `COMPONENT CODE:\n${fileContent.slice(0, 12000)}` },
+          ],
+        },
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              tables: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    columns: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          name: { type: Type.STRING },
+                          type: { type: Type.STRING },
+                          constraints: {
+                            type: Type.ARRAY,
+                            items: { type: Type.STRING },
+                          },
                         },
                       },
                     },
                   },
                 },
               },
-            },
-            endpoints: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  method: { type: Type.STRING },
-                  path: { type: Type.STRING },
-                  description: { type: Type.STRING },
+              endpoints: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    method: { type: Type.STRING },
+                    path: { type: Type.STRING },
+                    description: { type: Type.STRING },
+                  },
                 },
               },
-            },
-            services: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  type: { type: Type.STRING },
-                  description: { type: Type.STRING },
+              services: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    type: { type: Type.STRING },
+                    description: { type: Type.STRING },
+                  },
                 },
               },
             },
           },
         },
-      },
-    });
-  } catch (error) {
-    errorMessage = error instanceof Error ? error.message : 'Unknown AI error';
+      }),
+    );
+  } catch (caughtError) {
+    error = caughtError;
+    errorMessage = getAiErrorMessage(caughtError);
   }
 
   let data = null;
@@ -1132,8 +1167,8 @@ const handleAnalyzeIntent = async (req, res, session, requestId) => {
   if (errorMessage) {
     jsonResponse(
       res,
-      500,
-      withRequestId({ error: 'Intent analysis failed.' }, requestId),
+      getAiErrorStatus(error),
+      withRequestId({ error: errorMessage }, requestId),
     );
     return;
   }
@@ -1252,17 +1287,21 @@ Generate a comprehensive, copy-paste-ready prompt for implementing this backend 
 
   const startedAt = Date.now();
   let response = null;
+  let error = null;
   let errorMessage = null;
   try {
-    response = await aiClient.models.generateContent({
-      model: aiModelId,
-      contents: [
-        { role: 'user', parts: [{ text: systemPrompt }] },
-        { role: 'user', parts: [{ text: userPrompt }] },
-      ],
-    });
-  } catch (error) {
-    errorMessage = error instanceof Error ? error.message : 'Unknown AI error';
+    response = await withRetryAndTimeout(() =>
+      aiClient.models.generateContent({
+        model: aiModelId,
+        contents: [
+          { role: 'user', parts: [{ text: systemPrompt }] },
+          { role: 'user', parts: [{ text: userPrompt }] },
+        ],
+      }),
+    );
+  } catch (caughtError) {
+    error = caughtError;
+    errorMessage = getAiErrorMessage(caughtError);
   }
 
   const prompt = typeof response?.text === 'string' ? response.text : '';
@@ -1288,8 +1327,8 @@ Generate a comprehensive, copy-paste-ready prompt for implementing this backend 
   if (errorMessage) {
     jsonResponse(
       res,
-      500,
-      withRequestId({ error: 'Prompt optimization failed.' }, requestId),
+      getAiErrorStatus(error),
+      withRequestId({ error: errorMessage }, requestId),
     );
     return;
   }
@@ -1358,38 +1397,70 @@ const handleGeneratePrompt = async (req, res, session, requestId) => {
 
   const { task, context, files } = payload;
 
+  const requestType = AI_REQUEST_SCHEMA.generatePrompt.prompt.id;
+  const startedAt = Date.now();
+  let response = null;
+  let error = null;
+  let errorMessage = null;
+
   try {
-    const response = await generateJsonResponse({
+    response = await generateJsonResponse({
       client: aiClient,
       model: aiModelId,
-      type: 'generatePrompt',
+      type: requestType,
       params: { task, context, files },
     });
-
-    const data = response?.data ?? {};
-    const result = {
-      prompt: data.content,
-      metadata: {
-        techniques: data.techniquesApplied,
-        sections: data.sections,
-      },
-      usage: response?.meta?.usage ?? null,
-    };
-
-    jsonResponse(res, 200, withRequestId(result, requestId));
-  } catch (error) {
+  } catch (caughtError) {
+    error = caughtError;
+    errorMessage = getAiErrorMessage(caughtError, 'Failed to generate prompt.');
     console.error({
       requestId,
-      error,
+      error: caughtError,
       route: req.url,
       message: 'Generate prompt error',
     });
+  }
+
+  const data = response?.data ?? {};
+  const meta = response?.meta ?? null;
+  const latencyMs = meta?.latencyMs ?? Date.now() - startedAt;
+  const usage = meta?.usage ?? null;
+  const costUsd = estimateAiCostUsd(usage);
+  const success = Boolean(data?.content);
+
+  await appendAiAuditLog({
+    id: crypto.randomUUID(),
+    requestId,
+    timestamp: new Date().toISOString(),
+    requestType,
+    model: aiModelId,
+    provider: aiProvider,
+    latencyMs,
+    success,
+    error: errorMessage,
+    usage,
+    costUsd,
+  });
+
+  if (errorMessage) {
     jsonResponse(
       res,
-      500,
-      withRequestId({ error: 'Failed to generate prompt.' }, requestId),
+      getAiErrorStatus(error),
+      withRequestId({ error: errorMessage }, requestId),
     );
+    return;
   }
+
+  const result = {
+    prompt: data.content,
+    metadata: {
+      techniques: data.techniquesApplied,
+      sections: data.sections,
+    },
+    usage,
+  };
+
+  jsonResponse(res, 200, withRequestId(result, requestId));
 };
 
 /**
@@ -1425,6 +1496,7 @@ const handleAiContextualChat = async (req, res, session, requestId) => {
   const requestType = AI_REQUEST_SCHEMA.contextualChat.prompt.id;
   const startedAt = Date.now();
   let response = null;
+  let error = null;
   let errorMessage = null;
 
   try {
@@ -1444,8 +1516,9 @@ const handleAiContextualChat = async (req, res, session, requestId) => {
           : null,
       },
     });
-  } catch (error) {
-    errorMessage = error instanceof Error ? error.message : 'Unknown AI error';
+  } catch (caughtError) {
+    error = caughtError;
+    errorMessage = getAiErrorMessage(caughtError);
   }
 
   const data = response?.data ?? null;
@@ -1471,7 +1544,7 @@ const handleAiContextualChat = async (req, res, session, requestId) => {
   });
 
   if (errorMessage) {
-    jsonResponse(res, 500, withRequestId({ error: errorMessage }, requestId));
+    jsonResponse(res, getAiErrorStatus(error), withRequestId({ error: errorMessage }, requestId));
     return;
   }
 
