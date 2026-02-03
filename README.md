@@ -17,6 +17,30 @@
    npm run dev
    ```
 
+## Instalação limpa
+
+Se você suspeitar de problemas com dependências ou lockfile, faça uma instalação limpa:
+
+1. Remova dependências e o lockfile:
+   ```bash
+   rm -rf node_modules package-lock.json
+   ```
+2. (Opcional) Limpe o cache do npm:
+   ```bash
+   npm cache clean --force
+   ```
+3. Reinstale as dependências:
+   ```bash
+   npm install
+   # ou, se preferir reproduzir o lockfile existente:
+   npm ci
+   ```
+
+**Erros comuns**
+
+- **Lockfile corrompido**: remova `package-lock.json` e refaça a instalação.
+- **Versões de Node incompatíveis**: verifique se sua versão do Node é compatível com o projeto e com as dependências (ex.: pacotes exigindo Node 18+).
+
 ### Smoke test (API)
 
 Com o backend rodando, execute:
