@@ -184,6 +184,103 @@ const formatServices = (services) => {
     .join('\n');
 };
 
+const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
+
+const collectValidationErrors = (checks) =>
+  checks.flatMap((check) => (check.ok ? [] : [check.message]));
+
+const validateGeneratePromptPayload = (payload) => {
+  if (!payload || typeof payload !== 'object') {
+    return ['Payload inválido. Envie um objeto JSON.'];
+  }
+  const errors = collectValidationErrors([
+    {
+      ok: isNonEmptyString(payload.task),
+      message: 'task é obrigatório e deve ser uma string.',
+    },
+    {
+      ok: payload.context === undefined || typeof payload.context === 'string',
+      message: 'context deve ser uma string quando fornecido.',
+    },
+    {
+      ok: payload.files === undefined || Array.isArray(payload.files),
+      message: 'files deve ser um array de strings quando fornecido.',
+    },
+  ]);
+
+  if (Array.isArray(payload.files)) {
+    const invalidFile = payload.files.find((file) => typeof file !== 'string');
+    if (invalidFile !== undefined) {
+      errors.push('files deve conter apenas strings.');
+    }
+  }
+
+  return errors;
+};
+
+const validateAiChatPayload = (payload) => {
+  if (!payload || typeof payload !== 'object') {
+    return ['Payload inválido. Envie um objeto JSON.'];
+  }
+  const validModes = ['explore', 'create', 'alter', 'fix', 'connect', 'ask'];
+  const errors = collectValidationErrors([
+    {
+      ok: isNonEmptyString(payload.mode) && validModes.includes(payload.mode),
+      message: `mode é obrigatório e deve ser um destes: ${validModes.join(', ')}.`,
+    },
+    {
+      ok: isNonEmptyString(payload.userMessage),
+      message: 'userMessage é obrigatório e deve ser uma string.',
+    },
+    {
+      ok: payload.projectContext === undefined || typeof payload.projectContext === 'string',
+      message: 'projectContext deve ser uma string quando fornecido.',
+    },
+    {
+      ok: payload.conversationHistory === undefined || Array.isArray(payload.conversationHistory),
+      message: 'conversationHistory deve ser um array quando fornecido.',
+    },
+    {
+      ok: payload.element === undefined || (payload.element && typeof payload.element === 'object'),
+      message: 'element deve ser um objeto quando fornecido.',
+    },
+  ]);
+
+  if (Array.isArray(payload.conversationHistory)) {
+    payload.conversationHistory.forEach((entry, index) => {
+      if (!entry || typeof entry !== 'object') {
+        errors.push(`conversationHistory[${index}] deve ser um objeto com role e content.`);
+        return;
+      }
+      if (!isNonEmptyString(entry.role)) {
+        errors.push(`conversationHistory[${index}].role deve ser uma string.`);
+      }
+      if (!isNonEmptyString(entry.content)) {
+        errors.push(`conversationHistory[${index}].content deve ser uma string.`);
+      }
+    });
+  }
+
+  if (payload.element !== undefined) {
+    const { element } = payload;
+    if (!element || typeof element !== 'object') {
+      errors.push('element deve ser um objeto com name, type e path.');
+    } else {
+      if (!isNonEmptyString(element.name)) {
+        errors.push('element.name é obrigatório e deve ser uma string.');
+      }
+      if (!isNonEmptyString(element.type)) {
+        errors.push('element.type é obrigatório e deve ser uma string.');
+      }
+      if (!isNonEmptyString(element.path)) {
+        errors.push('element.path é obrigatório e deve ser uma string.');
+      }
+    }
+  }
+
+  return errors;
+};
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const indexingStorePath = path.join(__dirname, 'indexing-store.json');
@@ -1210,11 +1307,13 @@ const handleGeneratePrompt = async (req, res, session) => {
   const payload = await getJsonPayload(req, res);
   if (!payload) return;
 
-  const { task, context, files } = payload;
-  if (!task) {
-    jsonResponse(res, 400, { error: 'Task is required.' });
+  const validationErrors = validateGeneratePromptPayload(payload);
+  if (validationErrors.length > 0) {
+    jsonResponse(res, 400, { error: validationErrors.join(' ') });
     return;
   }
+
+  const { task, context, files } = payload;
 
   try {
     const response = await generateJsonResponse({
@@ -1259,20 +1358,13 @@ const handleAiContextualChat = async (req, res, session) => {
     return;
   }
 
+  const validationErrors = validateAiChatPayload(payload);
+  if (validationErrors.length > 0) {
+    jsonResponse(res, 400, { error: validationErrors.join(' ') });
+    return;
+  }
+
   const { mode, element, userMessage, conversationHistory, projectContext } = payload;
-
-  // Validar modo
-  const validModes = ['explore', 'create', 'alter', 'fix', 'connect', 'ask'];
-  if (!mode || !validModes.includes(mode)) {
-    jsonResponse(res, 400, { error: 'Invalid mode. Must be one of: explore, create, alter, fix, connect, ask' });
-    return;
-  }
-
-  // Validar mensagem
-  if (typeof userMessage !== 'string' || userMessage.trim().length === 0) {
-    jsonResponse(res, 400, { error: 'userMessage is required.' });
-    return;
-  }
 
   const requestType = AI_REQUEST_SCHEMA.contextualChat.prompt.id;
   const startedAt = Date.now();
