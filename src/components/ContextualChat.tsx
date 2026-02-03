@@ -24,6 +24,8 @@ import {
     Database,
     Server,
     Lightbulb,
+    Bot,
+    User,
 } from 'lucide-react';
 import {
     AIActionMode,
@@ -464,22 +466,39 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     const isPending = message.role === 'assistant' && message.status === 'pending';
     const isFailed = message.role === 'assistant' && message.status === 'failed';
     const isUserFailed = message.role === 'user' && message.status === 'failed';
+    const roleTheme = isUser
+        ? {
+            bubble: 'bg-sky-500/20 border-sky-400/40 text-slate-100',
+            headerText: 'text-sky-100',
+            badge: 'bg-sky-500/25 border-sky-400/40 text-sky-100',
+            icon: <User size={12} />,
+            label: 'Você',
+        }
+        : {
+            bubble: 'bg-slate-800 border-slate-700 text-slate-100',
+            headerText: 'text-slate-200',
+            badge: 'bg-slate-700/60 border-slate-600 text-slate-200',
+            icon: <Bot size={12} />,
+            label: 'IA',
+        };
 
     return (
         <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
             <div
-                className={`max-w-[85%] rounded-lg px-3 py-2 ${isUser
-                    ? 'bg-sky-600 text-white'
-                    : 'bg-slate-800 text-slate-100 border border-slate-700'
-                    }`}
+                className={`max-w-[85%] rounded-lg px-3 py-2 border ${roleTheme.bubble}`}
             >
-                {/* Mode badge for user messages */}
-                {isUser && (
-                    <div className="flex items-center gap-1 mb-1 text-[10px] text-sky-200/70">
-                        {MODE_ICONS[message.mode]}
-                        <span>{AI_ACTION_LABELS[message.mode]}</span>
+                <div className="flex items-center justify-between gap-3 mb-2 text-[11px] font-medium uppercase tracking-wide">
+                    <div className={`flex items-center gap-1.5 ${roleTheme.headerText}`}>
+                        {roleTheme.icon}
+                        <span>{roleTheme.label}</span>
                     </div>
-                )}
+                    <div className={`flex items-center gap-1 rounded-full border px-2 py-0.5 ${roleTheme.badge}`}>
+                        {MODE_ICONS[message.mode]}
+                        <span className="text-[10px] font-semibold normal-case">
+                            {AI_ACTION_LABELS[message.mode]}
+                        </span>
+                    </div>
+                </div>
 
                 {/* Content */}
                 {isPending ? (
