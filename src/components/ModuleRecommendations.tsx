@@ -1,14 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { FlatNode, ModuleInput, SemanticLink } from '../types';
+import { ModuleInput, SemanticLink } from '../types';
+import { useGraphStore } from '../stores/graphStore';
+import { selectAllFilePaths, selectGraphNodes, selectModuleInputs, selectSemanticLinksById } from '../stores/graphSelectors';
 import { Copy, Plus, Trash2 } from 'lucide-react';
-
-interface ModuleRecommendationsProps {
-  modules: ModuleInput[];
-  allFiles: string[];
-  graphNodes: FlatNode[];
-  semanticLinks: SemanticLink[];
-  onChange: (modules: ModuleInput[]) => void;
-}
 
 const buildModulePrompt = (module: ModuleInput) => {
   const files = module.files.length > 0 ? module.files : ['(defina os arquivos do módulo)'];
@@ -41,13 +35,13 @@ const getParentFileId = (nodeId: string) => {
   return fileId !== nodeId ? fileId : null;
 };
 
-const ModuleRecommendations: React.FC<ModuleRecommendationsProps> = ({
-  modules,
-  allFiles,
-  graphNodes,
-  semanticLinks,
-  onChange
-}) => {
+const ModuleRecommendations: React.FC = () => {
+  const modules = useGraphStore(selectModuleInputs);
+  const allFiles = useGraphStore(selectAllFilePaths);
+  const graphNodes = useGraphStore(selectGraphNodes);
+  const semanticLinksById = useGraphStore(selectSemanticLinksById);
+  const setModuleInputs = useGraphStore((state) => state.setModuleInputs);
+  const semanticLinks = useMemo(() => Object.values(semanticLinksById) as SemanticLink[], [semanticLinksById]);
   const [fileFilter, setFileFilter] = useState('');
   const [changeDescription, setChangeDescription] = useState('');
   const [changeNodeId, setChangeNodeId] = useState('');
@@ -146,7 +140,7 @@ const ModuleRecommendations: React.FC<ModuleRecommendationsProps> = ({
   }, [changeNodeId, graphNodes, modules, semanticLinks]);
 
   const updateModule = (id: string, updates: Partial<ModuleInput>) => {
-    onChange(modules.map((module) => (module.id === id ? { ...module, ...updates } : module)));
+    setModuleInputs(modules.map((module) => (module.id === id ? { ...module, ...updates } : module)));
   };
 
   const handleCopy = (module: ModuleInput) => {
@@ -271,7 +265,7 @@ const ModuleRecommendations: React.FC<ModuleRecommendationsProps> = ({
                     className="flex-1 bg-slate-950 border border-slate-700 rounded p-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
                   />
                   <button
-                    onClick={() => onChange(modules.filter((item) => item.id !== module.id))}
+                    onClick={() => setModuleInputs(modules.filter((item) => item.id !== module.id))}
                     className="ml-3 text-slate-500 hover:text-red-400"
                     aria-label="Remover módulo"
                   >
@@ -336,7 +330,7 @@ const ModuleRecommendations: React.FC<ModuleRecommendationsProps> = ({
       <div className="p-4 border-t border-slate-700 bg-slate-900/50">
         <button
           onClick={() =>
-            onChange([
+            setModuleInputs([
               ...modules,
               {
                 id: Date.now().toString(),

@@ -3,7 +3,7 @@ import * as d3 from 'd3';
 import { ClusterData, FlatNode, Link } from '../types';
 import { useGraphStore } from '../stores/graphStore';
 import { usePresenceStore } from '../stores/presenceStore';
-import { selectGraphLinks, selectGraphNodes, selectLoadingPaths, selectRootNode, selectSelectedNode, selectExpandedDirectories, selectFlowPathNodeIds, selectFlowPathLinkIds, selectRequestExpandNode, selectNodesById } from '../stores/graphSelectors';
+import { selectGraphLinks, selectGraphNodes, selectLoadingPaths, selectRootNode, selectSelectedNode, selectExpandedDirectories, selectFlowPathNodeIds, selectFlowPathLinkIds, selectRequestExpandNode, selectNodesById, selectGhostNodes, selectGhostLinks } from '../stores/graphSelectors';
 
 const LAYOUT_DB_NAME = 'graphLayoutCache';
 const LAYOUT_STORE_NAME = 'positions';
@@ -83,15 +83,7 @@ const filterLayoutPositions = (
   return Object.keys(next).length > 0 ? next : null;
 };
 
-type CodeVisualizerProps = {
-  ghostNodes?: FlatNode[];
-  ghostLinks?: Link[];
-};
-
-const CodeVisualizer: React.FC<CodeVisualizerProps> = ({
-  ghostNodes = [],
-  ghostLinks = [],
-}) => {
+const CodeVisualizer: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -103,6 +95,8 @@ const CodeVisualizer: React.FC<CodeVisualizerProps> = ({
   const nodesById = useGraphStore(selectNodesById);
   const flowPathNodeIds = useGraphStore(selectFlowPathNodeIds);
   const flowPathLinkIds = useGraphStore(selectFlowPathLinkIds);
+  const ghostNodes = useGraphStore(selectGhostNodes);
+  const ghostLinks = useGraphStore(selectGhostLinks);
   const selectNode = useGraphStore((state) => state.selectNode);
   const selectedNode = useGraphStore(selectSelectedNode);
   const expandDirectory = useGraphStore((state) => state.expandDirectory);

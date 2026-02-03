@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Sparkles, Loader2, Copy, Check, Database, Server, Shield, RefreshCw } from 'lucide-react';
 import { useGraphStore } from '../stores/graphStore';
 import { FileSystemNode, FlatNode, Link, MissingDependency } from '../types';
-import { selectSelectedNode } from '../stores/graphSelectors';
+import { selectMissingDependencies, selectSelectedNode } from '../stores/graphSelectors';
 import {
     parseComponentIntent,
     analyzeBackendRequirements,
@@ -12,18 +12,13 @@ import {
 
 interface IntentPanelProps {
     className?: string;
-    missingDependencies: MissingDependency[];
-    setGhostData: (nodes: FlatNode[], links: Link[], deps: MissingDependency[]) => void;
-    clearGhostData: () => void;
 }
 
-export const IntentPanel: React.FC<IntentPanelProps> = ({
-    className = '',
-    missingDependencies,
-    setGhostData,
-    clearGhostData,
-}) => {
+export const IntentPanel: React.FC<IntentPanelProps> = ({ className = '' }) => {
     const selectedNode = useGraphStore(selectSelectedNode);
+    const missingDependencies = useGraphStore(selectMissingDependencies);
+    const setGhostData = useGraphStore((state) => state.setGhostData);
+    const clearGhostData = useGraphStore((state) => state.clearGhostData);
     const [isAnalyzingIntent, setIsAnalyzingIntent] = useState(false);
 
     const [userIntent, setUserIntent] = useState('');

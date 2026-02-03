@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useGraphStore } from '../stores/graphStore';
 import {
     Database, Server, Shield, Mail, CreditCard, Users,
     FileText, Clock, ChevronDown, ChevronRight, GripVertical,
@@ -142,20 +143,15 @@ const BACKEND_TEMPLATES: BackendTemplate[] = [
 // ============================================
 
 interface TemplateSidebarProps {
-    onTemplateSelect: (template: BackendTemplate) => void;
-    onTemplateDragStart: (template: BackendTemplate, event: React.DragEvent) => void;
     className?: string;
 }
 
-export const TemplateSidebar: React.FC<TemplateSidebarProps> = ({
-    onTemplateSelect,
-    onTemplateDragStart,
-    className = '',
-}) => {
+export const TemplateSidebar: React.FC<TemplateSidebarProps> = ({ className = '' }) => {
     const [expandedCategories, setExpandedCategories] = useState<Set<TemplateCategory>>(
         new Set(['auth', 'data'])
     );
     const [expandedTemplates, setExpandedTemplates] = useState<Set<string>>(new Set());
+    const setWizardTemplate = useGraphStore((state) => state.setWizardTemplate);
 
     const toggleCategory = (category: TemplateCategory) => {
         setExpandedCategories(prev => {
@@ -247,7 +243,10 @@ export const TemplateSidebar: React.FC<TemplateSidebarProps> = ({
                                                 {/* Template Card */}
                                                 <div
                                                     draggable
-                                                    onDragStart={(e) => onTemplateDragStart(template, e)}
+                                                    onDragStart={(event) => {
+                                                        event.dataTransfer.setData('template', JSON.stringify(template));
+                                                        event.dataTransfer.effectAllowed = 'copy';
+                                                    }}
                                                     onClick={() => toggleTemplate(template.id)}
                                                     className={`p-2 rounded border cursor-grab active:cursor-grabbing transition-all ${getColorClass(template.color)}`}
                                                 >
@@ -293,7 +292,7 @@ export const TemplateSidebar: React.FC<TemplateSidebarProps> = ({
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                onTemplateSelect(template);
+                                                                setWizardTemplate(template);
                                                             }}
                                                             className="w-full mt-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs rounded font-medium transition-colors"
                                                         >
