@@ -368,12 +368,13 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
     // ==========================================
 
     addMessage: (threadId: string, role: 'user' | 'assistant', content: string) => {
+        const timestamp = Date.now();
         const message: ChatMessage = {
-            id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: `msg-${timestamp}-${Math.random().toString(36).substr(2, 9)}`,
             role,
             content,
             mode: get().threads.find(t => t.id === threadId)?.currentMode ?? 'ask',
-            timestamp: Date.now(),
+            timestamp,
             tokenEstimate: estimateTokens(content),
         };
 
@@ -381,9 +382,24 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
             const threads = state.threads.map(t => {
                 if (t.id !== threadId) return t;
 
+                const existingIndex = t.conversation.findIndex(
+                    msg =>
+                        msg.id === message.id ||
+                        (msg.role === message.role &&
+                            msg.content === message.content &&
+                            msg.timestamp === message.timestamp)
+                );
+                const conversation =
+                    existingIndex >= 0
+                        ? t.conversation.map((msg, index) =>
+                              index === existingIndex
+                                  ? { ...msg, ...message, tokenEstimate: message.tokenEstimate }
+                                  : msg
+                          )
+                        : [...t.conversation, message];
                 const updated = {
                     ...t,
-                    conversation: [...t.conversation, message],
+                    conversation,
                     updatedAt: Date.now(),
                 };
                 updated.tokenCount = calculateThreadTokens(updated);
