@@ -7,6 +7,7 @@
 
 import {
     AIActionMode,
+    AiUsageTokens,
     ChatMessage,
     ThreadBaseElement,
     ThreadSuggestion,
@@ -35,11 +36,7 @@ export interface ChatResponse {
     /** Perguntas de follow-up sugeridas */
     followUpQuestions: string[];
     /** Informações de uso de tokens */
-    usage?: {
-        promptTokens?: number;
-        outputTokens?: number;
-        totalTokens?: number;
-    };
+    usage?: AiUsageTokens;
     /** Latência da requisição em ms */
     latencyMs?: number;
 }
@@ -58,6 +55,29 @@ export interface SendMessageOptions {
 // ============================================
 
 const API_BASE = '/api';
+const EMPTY_USAGE: AiUsageTokens = {
+    promptTokens: null,
+    outputTokens: null,
+    totalTokens: null,
+};
+
+function normalizeUsage(usage: unknown): AiUsageTokens | undefined {
+    if (usage === null) {
+        return EMPTY_USAGE;
+    }
+
+    if (typeof usage !== 'object' || usage === undefined) {
+        return undefined;
+    }
+
+    const usageObject = usage as Partial<AiUsageTokens>;
+
+    return {
+        promptTokens: usageObject.promptTokens ?? null,
+        outputTokens: usageObject.outputTokens ?? null,
+        totalTokens: usageObject.totalTokens ?? null,
+    };
+}
 
 /**
  * Envia uma mensagem para o chat contextual da IA.
@@ -108,7 +128,7 @@ export async function sendChatMessage(options: SendMessageOptions): Promise<Chat
         response: data.response || '',
         suggestions,
         followUpQuestions: data.followUpQuestions || [],
-        usage: data.usage,
+        usage: normalizeUsage(data.usage),
         latencyMs: data.latencyMs,
     };
 }
