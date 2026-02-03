@@ -1,14 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Sparkles, Loader2, Copy, Check, Database, Server, Shield, RefreshCw } from 'lucide-react';
 import { useGraphStore } from '../stores/graphStore';
-import { FileSystemNode, FlatNode, Link, MissingDependency } from '../types';
+import { MissingDependency } from '../types';
 import { selectMissingDependencies, selectSelectedNode } from '../stores/graphSelectors';
-import {
-    parseComponentIntent,
-    analyzeBackendRequirements,
-    detectMissingDependencies,
-    generateBackendPrompt,
-} from '../services';
 
 interface IntentPanelProps {
     className?: string;
@@ -17,12 +11,13 @@ interface IntentPanelProps {
 export const IntentPanel: React.FC<IntentPanelProps> = ({ className = '' }) => {
     const selectedNode = useGraphStore(selectSelectedNode);
     const missingDependencies = useGraphStore(selectMissingDependencies);
-    const setGhostData = useGraphStore((state) => state.setGhostData);
     const clearGhostData = useGraphStore((state) => state.clearGhostData);
-    const [isAnalyzingIntent, setIsAnalyzingIntent] = useState(false);
+    const fetchAiOptimization = useGraphStore((state) => state.fetchAiOptimization);
+    const clearAiResponse = useGraphStore((state) => state.clearAiResponse);
+    const isAnalyzingIntent = useGraphStore((state) => state.isLoading);
+    const generatedPrompt = useGraphStore((state) => state.aiResponse);
 
     const [userIntent, setUserIntent] = useState('');
-    const [generatedPrompt, setGeneratedPrompt] = useState('');
     const [copied, setCopied] = useState(false);
     const [preferredStack, setPreferredStack] = useState<'supabase' | 'firebase'>('supabase');
 
@@ -30,82 +25,19 @@ export const IntentPanel: React.FC<IntentPanelProps> = ({ className = '' }) => {
     const isTsxFile = selectedNode?.type === 'file' &&
         /\.(tsx|jsx)$/.test(selectedNode.name);
 
-    const getNodeContent = useCallback((): string => {
-        if (!selectedNode || selectedNode.type !== 'file') return '';
-        const fsNode = selectedNode.data as FileSystemNode | undefined;
-        return fsNode?.content || '';
-    }, [selectedNode]);
-
     const handleAnalyze = async () => {
         if (!selectedNode || !isTsxFile) return;
 
-        const content = getNodeContent();
-        if (!content) {
-            alert('Conteúdo do arquivo não disponível. Clique no arquivo para carregar primeiro.');
-            return;
-        }
-
-        setIsAnalyzingIntent(true);
-        setGeneratedPrompt('');
-
         try {
-            // 1. Parse component intent from TSX
-            const uiSchema = parseComponentIntent(content, selectedNode.name);
-
-            // 2. Analyze backend requirements using AI
-            const requirements = await analyzeBackendRequirements({
-                uiSchema,
-                fileContent: content,
-                selectedNode: {
-                    id: selectedNode.id,
-                    name: selectedNode.name,
-                    path: selectedNode.path,
-                    type: selectedNode.type,
-                },
-                userIntent,
-                existingInfrastructure: [],
-            });
-
-            // 3. Detect missing dependencies
-            const missing = detectMissingDependencies(requirements, [], selectedNode.path);
-
-            // 4. Create ghost nodes for visualization
-            const ghostNodes = createGhostNodes(missing, selectedNode);
-            const ghostLinks = createGhostLinks(missing, selectedNode);
-
-            // 5. Update store
-            setGhostData(ghostNodes, ghostLinks, missing);
-
-            // 6. Generate prompt
-            const prompt = await generateBackendPrompt({
-                userIntent: userIntent || `Implementar funcionalidade para ${selectedNode.name}`,
-                fileContent: content,
-                selectedNode: {
-                    id: selectedNode.id,
-                    name: selectedNode.name,
-                    path: selectedNode.path,
-                    type: selectedNode.type,
-                },
-                uiIntentSchema: uiSchema,
-                projectStructure: {
-                    hasBackend: false,
-                    stack: ['React', 'Vite'],
-                    existingEndpoints: [],
-                },
-                backendRequirements: requirements,
-                preferredStack,
-            });
-
-            setGeneratedPrompt(prompt);
+            await fetchAiOptimization(selectedNode.id, userIntent);
         } catch (error) {
             console.error('Intent analysis failed:', error);
             alert('Erro ao analisar intenção. Verifique o console.');
-        } finally {
-            setIsAnalyzingIntent(false);
         }
     };
 
     const handleCopy = () => {
+        if (!generatedPrompt) return;
         navigator.clipboard.writeText(generatedPrompt);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
@@ -113,7 +45,7 @@ export const IntentPanel: React.FC<IntentPanelProps> = ({ className = '' }) => {
 
     const handleClear = () => {
         clearGhostData();
-        setGeneratedPrompt('');
+        clearAiResponse();
         setUserIntent('');
     };
 
@@ -268,36 +200,6 @@ export const IntentPanel: React.FC<IntentPanelProps> = ({ className = '' }) => {
         </div>
     );
 };
-
-// ============================================
-// Helper Functions
-// ============================================
-
-function createGhostNodes(missing: MissingDependency[], sourceNode: FlatNode): FlatNode[] {
-    return missing.map((dep, index) => ({
-        id: `ghost_${dep.id}`,
-        name: dep.name,
-        type: dep.type === 'table' ? 'ghost_table' :
-            dep.type === 'endpoint' ? 'ghost_endpoint' : 'ghost_service',
-        path: `ghost_${dep.id}`,
-        group: sourceNode.group + 1,
-        relevant: false,
-        isGhost: true,
-        dependencyStatus: 'missing' as const,
-        ghostData: dep,
-        x: (sourceNode.x || 0) + 150 + (index * 50),
-        y: (sourceNode.y || 0) + 50 + (index * 30),
-    }));
-}
-
-function createGhostLinks(missing: MissingDependency[], sourceNode: FlatNode): Link[] {
-    return missing.map((dep) => ({
-        source: sourceNode.id,
-        target: `ghost_${dep.id}`,
-        edgeStyle: 'dashed' as const,
-        dependencyType: 'missing' as const,
-    }));
-}
 
 function getDepStyle(type: MissingDependency['type']): string {
     switch (type) {
