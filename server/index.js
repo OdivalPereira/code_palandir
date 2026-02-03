@@ -1418,13 +1418,26 @@ const handleAiContextualChat = async (req, res, session) => {
     return;
   }
 
-  jsonResponse(res, 200, {
+  if (!success) {
+    const responsePayload = {
+      response: 'Não consegui interpretar a resposta da IA, tente reformular.',
+      suggestions: [],
+      followUpQuestions: [],
+      latencyMs,
+      ...(usage ? { usage } : {}),
+    };
+    jsonResponse(res, 200, responsePayload);
+    return;
+  }
+
+  const responsePayload = {
     response: data?.response ?? '',
     suggestions: Array.isArray(data?.suggestions) ? data.suggestions : [],
     followUpQuestions: Array.isArray(data?.followUpQuestions) ? data.followUpQuestions : [],
-    usage,
     latencyMs,
-  });
+    ...(usage ? { usage } : {}),
+  };
+  jsonResponse(res, 200, responsePayload);
 };
 
 const handleCreateIndexJob = async (req, res) => {
