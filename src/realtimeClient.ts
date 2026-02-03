@@ -46,6 +46,7 @@ type RealtimeClientOptions = {
 
 const buildRealtimeUrl = () => {
   if (typeof window === 'undefined') return '';
+  // In dev, set VITE_REALTIME_URL=ws://localhost:8787 to connect to the local realtime server.
   const baseUrl = import.meta.env.VITE_REALTIME_URL ?? window.location.origin;
   const url = new URL(baseUrl);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
