@@ -1224,11 +1224,12 @@ const handleGeneratePrompt = async (req, res, session) => {
       params: { task, context, files },
     });
 
+    const data = response?.data ?? {};
     const result = {
-      prompt: response.content,
+      prompt: data.content,
       metadata: {
-        techniques: response.techniquesApplied,
-        sections: response.sections,
+        techniques: data.techniquesApplied,
+        sections: data.sections,
       },
       usage: extractUsageTokens(response),
     };
