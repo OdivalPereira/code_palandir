@@ -97,7 +97,6 @@ const CodeVisualizer: React.FC = () => {
   const flowPathLinkIds = useGraphStore(selectFlowPathLinkIds);
   const ghostNodes = useGraphStore(selectGhostNodes);
   const ghostLinks = useGraphStore(selectGhostLinks);
-  const selectNode = useGraphStore((state) => state.selectNode);
   const selectedNode = useGraphStore(selectSelectedNode);
   const expandDirectory = useGraphStore((state) => state.expandDirectory);
   const toggleDirectory = useGraphStore((state) => state.toggleDirectory);
@@ -107,6 +106,9 @@ const CodeVisualizer: React.FC = () => {
   const setSessionLayout = useGraphStore((state) => state.setSessionLayout);
   const localSelection = usePresenceStore((state) => state.localSelection);
   const setLocalCursor = usePresenceStore((state) => state.setLocalCursor);
+  const triggerSelectNode = useCallback((nodeId: string | null) => {
+    useGraphStore.getState().selectNode(nodeId);
+  }, []);
 
   // Memoize peers to prevent new array creation on every render if peers haven't changed
   const peers = usePresenceStore((state) => state.peers);
@@ -519,7 +521,7 @@ const CodeVisualizer: React.FC = () => {
           expandDirectory(parentPath);
           return;
         }
-        selectNode(d.id);
+        triggerSelectNode(d.id);
       })
       .on("dblclick", (event, d) => {
         if (d.type === 'directory') {
@@ -657,7 +659,7 @@ const CodeVisualizer: React.FC = () => {
         expandDirectory(parentPath);
         return;
       }
-      selectNode(d.id);
+      triggerSelectNode(d.id);
     });
 
     node.on("dblclick", (event, d) => {
@@ -744,7 +746,7 @@ const CodeVisualizer: React.FC = () => {
     return () => {
       g.remove();
     };
-  }, [rootNode, dimensions, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading, requestExpandNode, expandDirectory, toggleDirectory, selectNode, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode, peerPresences]);
+  }, [rootNode, dimensions, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading, requestExpandNode, expandDirectory, toggleDirectory, triggerSelectNode, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode, peerPresences]);
 
   const updateNodePositions = useCallback(() => {
     const { width, height } = dimensions;
@@ -1039,7 +1041,7 @@ const CodeVisualizer: React.FC = () => {
           expandDirectory(parentPath);
           return;
         }
-        selectNode(node.id);
+        triggerSelectNode(node.id);
       }, 150);
     };
 
@@ -1075,7 +1077,7 @@ const CodeVisualizer: React.FC = () => {
       canvas.removeEventListener("click", handleClick);
       canvas.removeEventListener("dblclick", handleDoubleClick);
     };
-  }, [expandedDirectories, hoveredNodeId, requestExpandNode, resolveNodeAtPosition, selectNode, toggleDirectory, useCanvasRenderer, expandDirectory]);
+  }, [expandedDirectories, hoveredNodeId, requestExpandNode, resolveNodeAtPosition, triggerSelectNode, toggleDirectory, useCanvasRenderer, expandDirectory]);
 
   useEffect(() => {
     if (!useCanvasRenderer) return;
