@@ -123,8 +123,8 @@ interface BasketStore extends BasketState {
 // ============================================
 
 const DEFAULT_MAX_TOKENS = 100000; // ~100k tokens de contexto
-const DEFAULT_WARNING_THRESHOLD = 0.6; // 60%
-const DEFAULT_DANGER_THRESHOLD = 0.8; // 80%
+const DEFAULT_WARNING_THRESHOLD = 80; // 80%
+const DEFAULT_DANGER_THRESHOLD = 95; // 95%
 
 export const useBasketStore = create<BasketStore>((set, get) => ({
     // Initial state
@@ -337,7 +337,7 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
 
     getTokenUsagePercent: () => {
         const state = get();
-        return state.maxTokens > 0 ? state.totalTokens / state.maxTokens : 0;
+        return state.maxTokens > 0 ? (state.totalTokens / state.maxTokens) * 100 : 0;
     },
 
     getTokenStatus: () => {
