@@ -160,6 +160,7 @@ export function createChatMessage(
         mode,
         timestamp: Date.now(),
         tokenEstimate: Math.ceil(content.length / 4),
+        status: 'sent',
     };
 }
 

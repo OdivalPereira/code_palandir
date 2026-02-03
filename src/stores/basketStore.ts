@@ -149,6 +149,10 @@ function asChatMessages(value: unknown, fallbackMode: AIActionMode, now: number)
             const role = item.role === 'user' || item.role === 'assistant' ? item.role : null;
             const content = asString(item.content, '');
             if (!role || !content) return null;
+            const status =
+                item.status === 'pending' || item.status === 'sent' || item.status === 'failed'
+                    ? item.status
+                    : 'sent';
             return {
                 id: asString(item.id, `msg-${now}-${Math.random().toString(36).substr(2, 9)}`),
                 role,
@@ -156,6 +160,8 @@ function asChatMessages(value: unknown, fallbackMode: AIActionMode, now: number)
                 mode: VALID_MODES.includes(item.mode as AIActionMode) ? (item.mode as AIActionMode) : fallbackMode,
                 timestamp: asNumber(item.timestamp, now),
                 tokenEstimate: typeof item.tokenEstimate === 'number' ? item.tokenEstimate : estimateTokens(content),
+                status,
+                error: typeof item.error === 'string' ? item.error : undefined,
             } satisfies ChatMessage;
         })
         .filter((item): item is ChatMessage => item !== null);
@@ -252,6 +258,12 @@ interface BasketStore extends BasketState {
 
     // Conversation
     addMessage: (threadId: string, role: 'user' | 'assistant', content: string) => void;
+    addPendingAssistantMessage: (threadId: string, content?: string) => string;
+    updateAssistantMessage: (
+        threadId: string,
+        messageId: string,
+        updates: { content?: string; status?: ChatMessage['status']; error?: string | null }
+    ) => void;
     switchMode: (threadId: string, newMode: AIActionMode) => void;
 
     // Suggestions
@@ -376,6 +388,7 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
             mode: get().threads.find(t => t.id === threadId)?.currentMode ?? 'ask',
             timestamp,
             tokenEstimate: estimateTokens(content),
+            status: 'sent',
         };
 
         set(state => {
@@ -397,6 +410,83 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
                                   : msg
                           )
                         : [...t.conversation, message];
+                const updated = {
+                    ...t,
+                    conversation,
+                    updatedAt: Date.now(),
+                };
+                updated.tokenCount = calculateThreadTokens(updated);
+                return updated;
+            });
+
+            return {
+                threads,
+                totalTokens: threads.reduce((sum, t) => sum + t.tokenCount, 0),
+            };
+        });
+    },
+
+    addPendingAssistantMessage: (threadId: string, content = 'Pensando...') => {
+        const timestamp = Date.now();
+        const message: ChatMessage = {
+            id: `msg-${timestamp}-${Math.random().toString(36).substr(2, 9)}`,
+            role: 'assistant',
+            content,
+            mode: get().threads.find(t => t.id === threadId)?.currentMode ?? 'ask',
+            timestamp,
+            tokenEstimate: estimateTokens(content),
+            status: 'pending',
+        };
+
+        set(state => {
+            const threads = state.threads.map(t => {
+                if (t.id !== threadId) return t;
+
+                const updated = {
+                    ...t,
+                    conversation: [...t.conversation, message],
+                    updatedAt: Date.now(),
+                };
+                updated.tokenCount = calculateThreadTokens(updated);
+                return updated;
+            });
+
+            return {
+                threads,
+                totalTokens: threads.reduce((sum, t) => sum + t.tokenCount, 0),
+            };
+        });
+
+        return message.id;
+    },
+
+    updateAssistantMessage: (
+        threadId: string,
+        messageId: string,
+        updates: { content?: string; status?: ChatMessage['status']; error?: string | null }
+    ) => {
+        set(state => {
+            const threads = state.threads.map(t => {
+                if (t.id !== threadId) return t;
+
+                const conversation = t.conversation.map(msg => {
+                    if (msg.id !== messageId || msg.role !== 'assistant') return msg;
+                    const content = updates.content ?? msg.content;
+                    return {
+                        ...msg,
+                        content,
+                        status: updates.status ?? msg.status,
+                        error:
+                            updates.error === null
+                                ? undefined
+                                : updates.error ?? msg.error,
+                        tokenEstimate:
+                            updates.content !== undefined
+                                ? estimateTokens(content)
+                                : msg.tokenEstimate,
+                    };
+                });
+
                 const updated = {
                     ...t,
                     conversation,

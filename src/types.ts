@@ -355,6 +355,8 @@ export interface ChatMessage {
   timestamp: number;
   /** Tokens estimados desta mensagem */
   tokenEstimate?: number;
+  status: 'pending' | 'sent' | 'failed';
+  error?: string;
 }
 
 /**
