@@ -30,6 +30,39 @@ O front-end utiliza o proxy do Vite para encaminhar chamadas REST para `/api` at
 
 Crie um arquivo `.env` na raiz do projeto com base no `.env.example` e ajuste os valores conforme o seu ambiente.
 
+### Variáveis obrigatórias
+
+Estas variáveis precisam estar presentes para o backend iniciar:
+
+- `APP_BASE_URL` (ex.: `http://localhost:5174`)
+- `SERVER_BASE_URL` (ex.: `http://localhost:8787`)
+- `GITHUB_CLIENT_ID`
+- `GITHUB_CLIENT_SECRET`
+- `GITHUB_OAUTH_CALLBACK_URL` (ex.: `http://localhost:8787/api/auth/callback`)
+
+Quando `AI_PROVIDER=google`, também são obrigatórias:
+
+- `AI_PROVIDER=google`
+- `GOOGLE_AI_API_KEY`
+
+Exemplo de `.env` mínimo:
+
+```bash
+APP_BASE_URL=http://localhost:5174
+SERVER_BASE_URL=http://localhost:8787
+GITHUB_CLIENT_ID=seu_client_id
+GITHUB_CLIENT_SECRET=seu_client_secret
+GITHUB_OAUTH_CALLBACK_URL=http://localhost:8787/api/auth/callback
+```
+
+Exemplo adicional para Google AI:
+
+```bash
+AI_PROVIDER=google
+GOOGLE_AI_API_KEY=sua_chave_google
+GOOGLE_AI_MODEL_ID=gemini-2.5-flash
+```
+
 ### Google AI (Gemini)
 
 1. Acesse o [Google AI Studio](https://aistudio.google.com/app/apikey) e gere uma API key.

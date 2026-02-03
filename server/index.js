@@ -30,6 +30,43 @@ const indexingJobDurationMs = Number(process.env.INDEXING_JOB_DURATION_MS ?? '10
 const aiPromptCostPer1k = Number(process.env.AI_COST_PROMPT_PER_1K ?? '0');
 const aiOutputCostPer1k = Number(process.env.AI_COST_OUTPUT_PER_1K ?? '0');
 
+const validateEnv = () => {
+  const errors = [];
+  const requireValue = (name, value) => {
+    if (!value || String(value).trim().length === 0) {
+      errors.push(`${name} é obrigatório.`);
+    }
+  };
+  const requireUrl = (name, value) => {
+    requireValue(name, value);
+    if (!value) return;
+    try {
+      new URL(value);
+    } catch (error) {
+      errors.push(`${name} deve ser uma URL válida.`);
+    }
+  };
+
+  requireUrl('APP_BASE_URL', process.env.APP_BASE_URL);
+  requireUrl('SERVER_BASE_URL', process.env.SERVER_BASE_URL);
+  requireValue('GITHUB_CLIENT_ID', process.env.GITHUB_CLIENT_ID);
+  requireValue('GITHUB_CLIENT_SECRET', process.env.GITHUB_CLIENT_SECRET);
+  requireUrl('GITHUB_OAUTH_CALLBACK_URL', process.env.GITHUB_OAUTH_CALLBACK_URL);
+
+  if (aiProvider === 'google') {
+    requireValue('AI_PROVIDER', process.env.AI_PROVIDER);
+    requireValue('GOOGLE_AI_API_KEY', process.env.GOOGLE_AI_API_KEY);
+  }
+
+  if (errors.length > 0) {
+    const message = `Configuração de ambiente inválida:\n- ${errors.join('\n- ')}`;
+    console.error(message);
+    process.exit(1);
+  }
+};
+
+validateEnv();
+
 const sessions = new Map();
 const rateLimits = new Map();
 const aiClient = aiApiKey ? createAiClient({ apiKey: aiApiKey, provider: aiProvider }) : null;
