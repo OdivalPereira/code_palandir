@@ -8,12 +8,19 @@
    ```
 2. Inicie o servidor:
    ```bash
+   # Porta padrão do backend: 8787
    npm run server
    ```
 3. Em outro terminal, rode o front-end:
    ```bash
+   # Porta padrão do Vite: 5174
    npm run dev
    ```
+
+### Portas padrão recomendadas
+
+- **Backend**: `8787`
+- **Vite**: `5174`
 
 ### Proxy do Vite e WebSocket
 
@@ -36,7 +43,7 @@ Crie um arquivo `.env` na raiz do projeto com base no `.env.example` e ajuste os
 2. Clique em **New OAuth App**.
 3. Preencha:
    - **Application name**: nome livre.
-   - **Homepage URL**: URL do seu front-end (ex.: `http://localhost:8080`).
+   - **Homepage URL**: URL do seu front-end (ex.: `http://localhost:5174`).
    - **Authorization callback URL**: `GITHUB_OAUTH_CALLBACK_URL` (ex.: `http://localhost:8787/api/auth/callback`).
 4. Após criar o app, copie **Client ID** e **Client Secret** para `GITHUB_CLIENT_ID` e `GITHUB_CLIENT_SECRET`.
 
