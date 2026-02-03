@@ -1,4 +1,5 @@
 import {
+  AiAuditEntry,
   AiMetricsResponse,
   BackendRequirements,
   CodeNode,
@@ -41,6 +42,10 @@ type SaveSessionResponse = {
 type OpenSessionResponse = {
   sessionId: string;
   session: SessionPayload;
+};
+
+type AiMetricsApiResponse = Omit<AiMetricsResponse, 'recent'> & {
+  recent: Array<Omit<AiAuditEntry, 'timestamp'> & { timestamp: string | number }>;
 };
 
 const ensureJsonHeaders = (headers: HeadersInit | undefined, hasBody: boolean) => {
@@ -230,10 +235,22 @@ export const projectSummary = async (inputs: {
   };
 };
 
-export const fetchAiMetrics = async (): Promise<AiMetricsResponse> =>
-  requestJson<AiMetricsResponse>('/api/ai/metrics', {}, {
+export const fetchAiMetrics = async (): Promise<AiMetricsResponse> => {
+  const response = await requestJson<AiMetricsApiResponse>('/api/ai/metrics', {}, {
     errorMessage: 'Falha ao carregar métricas.',
   });
+
+  return {
+    ...response,
+    recent: response.recent.map((entry) => ({
+      ...entry,
+      timestamp: (() => {
+        const timestampMs = typeof entry.timestamp === 'string' ? Date.parse(entry.timestamp) : entry.timestamp;
+        return Number.isFinite(timestampMs) ? timestampMs : 0;
+      })(),
+    })),
+  };
+};
 
 export const fetchSessionAccessToken = async (): Promise<string | null> => {
   const response = await requestResponse('/api/session', {}, {

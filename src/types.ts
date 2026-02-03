@@ -264,7 +264,7 @@ export type AiUsageTokens = {
 
 export type AiAuditEntry = {
   id: string;
-  timestamp: string;
+  timestamp: number;
   requestType: string;
   model: string;
   provider: string;
