@@ -97,6 +97,8 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
     // Store hooks
     const createThread = useBasketStore(state => state.createThread);
     const addMessage = useBasketStore(state => state.addMessage);
+    const addPendingAssistantMessage = useBasketStore(state => state.addPendingAssistantMessage);
+    const updateAssistantMessage = useBasketStore(state => state.updateAssistantMessage);
     const switchMode = useBasketStore(state => state.switchMode);
     const addSuggestion = useBasketStore(state => state.addSuggestion);
     const setFollowUpQuestions = useBasketStore(state => state.setFollowUpQuestions);
@@ -149,6 +151,7 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
 
         // Adicionar mensagem do usuário
         addMessage(currentThread.id, 'user', userMessageContent);
+        const pendingMessageId = addPendingAssistantMessage(currentThread.id);
 
         try {
             const context: ChatContext = {
@@ -162,8 +165,12 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
                 context,
             });
 
-            // Adicionar resposta da IA
-            addMessage(currentThread.id, 'assistant', response.response);
+            // Atualizar resposta da IA
+            updateAssistantMessage(currentThread.id, pendingMessageId, {
+                content: response.response,
+                status: 'sent',
+                error: null,
+            });
 
             // Adicionar sugestões
             for (const suggestion of response.suggestions) {
@@ -176,10 +183,24 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Erro ao enviar mensagem';
             setError(message);
+            updateAssistantMessage(currentThread.id, pendingMessageId, {
+                content: message,
+                status: 'failed',
+                error: message,
+            });
         } finally {
             setIsLoading(false);
         }
-    }, [currentThread, inputValue, isLoading, addMessage, addSuggestion, setFollowUpQuestions]);
+    }, [
+        currentThread,
+        inputValue,
+        isLoading,
+        addMessage,
+        addPendingAssistantMessage,
+        updateAssistantMessage,
+        addSuggestion,
+        setFollowUpQuestions,
+    ]);
 
     // Mudar modo
     const handleModeChange = useCallback((mode: AIActionMode) => {
@@ -315,14 +336,6 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
                     ))
                 )}
 
-                {/* Loading indicator */}
-                {isLoading && (
-                    <div className="flex items-center gap-2 text-slate-400">
-                        <Loader2 className="animate-spin" size={16} />
-                        <span className="text-sm">Pensando...</span>
-                    </div>
-                )}
-
                 {/* Error message */}
                 {error && (
                     <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2 text-rose-400 text-sm">
@@ -399,6 +412,8 @@ interface MessageBubbleProps {
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onCopy, copiedId }) => {
     const isUser = message.role === 'user';
+    const isPending = message.role === 'assistant' && message.status === 'pending';
+    const isFailed = message.role === 'assistant' && message.status === 'failed';
 
     return (
         <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -417,10 +432,21 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onCopy, copiedId
                 )}
 
                 {/* Content */}
-                <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                {isPending ? (
+                    <div className="flex items-center gap-2 text-sm text-slate-300">
+                        <Loader2 className="animate-spin" size={14} />
+                        <span>{message.content || 'Pensando...'}</span>
+                    </div>
+                ) : (
+                    <div
+                        className={`text-sm whitespace-pre-wrap ${isFailed ? 'text-rose-300' : ''}`}
+                    >
+                        {message.content}
+                    </div>
+                )}
 
                 {/* Copy button for assistant messages */}
-                {!isUser && (
+                {!isUser && message.status === 'sent' && (
                     <button
                         onClick={() => onCopy(message.id, message.content)}
                         className="mt-2 flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-200 transition-colors"
