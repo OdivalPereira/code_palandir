@@ -74,6 +74,7 @@ export type GraphState = {
   setModuleInputs: (modules: ModuleInput[]) => void;
   setGhostData: (nodes: FlatNode[], links: Link[], deps: MissingDependency[]) => void;
   clearGhostData: () => void;
+  clearAiResponse: () => void;
   setWizardTemplate: (template: BackendTemplate | null) => void;
   // Data actions
   processFiles: (files: FileList) => Promise<void>;
@@ -370,6 +371,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     missingDependencies: deps
   }),
   clearGhostData: () => set({ ghostNodes: [], ghostLinks: [], missingDependencies: [] }),
+  clearAiResponse: () => set({ aiResponse: null }),
   setWizardTemplate: (template) => set({ wizardTemplate: template }),
   processFiles: async (files) => {
     set({ status: AppStatus.LOADING_FILES });
