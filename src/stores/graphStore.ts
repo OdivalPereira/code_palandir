@@ -458,8 +458,20 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (!match) throw new Error('Invalid GitHub URL');
       const [_, owner, repo] = match;
 
+      let defaultBranch = 'main';
+      try {
+        const repoData = await fetchGitHubJson<{ default_branch?: string }>(
+          `https://api.github.com/repos/${owner}/${repo}`
+        );
+        if (repoData.default_branch) {
+          defaultBranch = repoData.default_branch;
+        }
+      } catch (error) {
+        console.warn('Failed to load default branch from GitHub API, using main fallback.', error);
+      }
+
       const treeData = await fetchGitHubJson<{ tree: { type: string; path: string }[] }>(
-        `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`
+        `https://api.github.com/repos/${owner}/${repo}/git/trees/${defaultBranch}?recursive=1`
       );
 
       const paths = treeData.tree.filter((item: { type: string }) => item.type === 'blob').map((item: { path: string }) => item.path);
