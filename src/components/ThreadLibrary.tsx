@@ -16,7 +16,7 @@ import {
     MessageSquare
 } from 'lucide-react';
 import { useBasketStore } from '../stores/basketStore';
-import { SavedThread, AIActionMode } from '../types';
+import { SavedThread, AIActionMode, AI_ACTION_LABELS } from '../types';
 
 // ============================================
 // Types
@@ -182,7 +182,7 @@ const ThreadLibrary: React.FC<ThreadLibraryProps> = ({ onClose, className = '' }
                                         </h3>
                                         <div className="flex items-center gap-2 mt-1">
                                             <span className={`text-[10px] px-1.5 rounded border ${MODE_COLORS[thread.currentMode]}`}>
-                                                {thread.currentMode}
+                                                {AI_ACTION_LABELS[thread.currentMode]}
                                             </span>
                                             <span className="text-[10px] text-slate-500 flex items-center gap-1">
                                                 <Calendar size={10} />

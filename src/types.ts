@@ -304,14 +304,45 @@ export type AIActionMode = 'explore' | 'create' | 'alter' | 'fix' | 'connect' | 
 /**
  * Labels em português para os modos de ação.
  */
-export const AI_ACTION_LABELS: Record<AIActionMode, string> = {
-  explore: 'Explorar',
-  create: 'Criar',
-  alter: 'Alterar',
-  fix: 'Corrigir',
-  connect: 'Conectar',
-  ask: 'Perguntar',
+export const AI_ACTION_METADATA: Record<
+  AIActionMode,
+  {
+    label: string;
+    description: string;
+  }
+> = {
+  explore: {
+    label: 'Explorar',
+    description: 'O que esse elemento faz?',
+  },
+  create: {
+    label: 'Criar',
+    description: 'Criar algo novo aqui',
+  },
+  alter: {
+    label: 'Alterar',
+    description: 'Modificar funcionalidade',
+  },
+  fix: {
+    label: 'Corrigir',
+    description: 'Resolver problema/bug',
+  },
+  connect: {
+    label: 'Conectar',
+    description: 'Ligar a outro elemento',
+  },
+  ask: {
+    label: 'Perguntar',
+    description: 'Pergunta livre',
+  },
 };
+
+export const AI_ACTION_LABELS: Record<AIActionMode, string> = Object.fromEntries(
+  Object.entries(AI_ACTION_METADATA).map(([mode, metadata]) => [
+    mode,
+    metadata.label,
+  ])
+) as Record<AIActionMode, string>;
 
 /**
  * Mensagem individual em uma conversa com a IA.
@@ -462,4 +493,3 @@ export interface GeneratedPrompt {
   /** Timestamp de geração */
   generatedAt: number;
 }
-

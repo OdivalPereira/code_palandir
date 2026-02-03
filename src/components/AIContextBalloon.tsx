@@ -1,6 +1,6 @@
 import React from 'react';
 import { Search, Sparkles, Pencil, Wrench, Link2, HelpCircle, X } from 'lucide-react';
-import { AIActionMode, FlatNode } from '../types';
+import { AI_ACTION_LABELS, AI_ACTION_METADATA, AIActionMode, FlatNode } from '../types';
 
 interface AIContextBalloonProps {
     selectedNode: FlatNode;
@@ -12,8 +12,6 @@ interface AIContextBalloonProps {
 interface ActionItem {
     mode: AIActionMode;
     icon: React.ReactNode;
-    label: string;
-    description: string;
     color: string;
     hoverColor: string;
 }
@@ -22,48 +20,36 @@ const actions: ActionItem[] = [
     {
         mode: 'explore',
         icon: <Search size={16} />,
-        label: 'Explorar',
-        description: 'O que esse elemento faz?',
         color: 'text-sky-400',
         hoverColor: 'hover:bg-sky-500/20',
     },
     {
         mode: 'create',
         icon: <Sparkles size={16} />,
-        label: 'Criar',
-        description: 'Criar algo novo aqui',
         color: 'text-emerald-400',
         hoverColor: 'hover:bg-emerald-500/20',
     },
     {
         mode: 'alter',
         icon: <Pencil size={16} />,
-        label: 'Alterar',
-        description: 'Modificar funcionalidade',
         color: 'text-amber-400',
         hoverColor: 'hover:bg-amber-500/20',
     },
     {
         mode: 'fix',
         icon: <Wrench size={16} />,
-        label: 'Corrigir',
-        description: 'Resolver problema/bug',
         color: 'text-rose-400',
         hoverColor: 'hover:bg-rose-500/20',
     },
     {
         mode: 'connect',
         icon: <Link2 size={16} />,
-        label: 'Conectar',
-        description: 'Ligar a outro elemento',
         color: 'text-violet-400',
         hoverColor: 'hover:bg-violet-500/20',
     },
     {
         mode: 'ask',
         icon: <HelpCircle size={16} />,
-        label: 'Perguntar',
-        description: 'Pergunta livre',
         color: 'text-slate-300',
         hoverColor: 'hover:bg-slate-500/20',
     },
@@ -145,10 +131,10 @@ const AIContextBalloon: React.FC<AIContextBalloonProps> = ({
                                 </span>
                                 <div className="flex-1 min-w-0">
                                     <div className="text-sm font-medium text-slate-200 group-hover:text-white">
-                                        {action.label}
+                                        {AI_ACTION_LABELS[action.mode]}
                                     </div>
                                     <div className="text-[10px] text-slate-500 group-hover:text-slate-400 truncate">
-                                        {action.description}
+                                        {AI_ACTION_METADATA[action.mode].description}
                                     </div>
                                 </div>
                             </button>
