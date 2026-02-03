@@ -495,6 +495,10 @@ const jsonResponse = (res, statusCode, payload) => {
   res.end(body);
 };
 
+const withRequestId = (payload, requestId) => (
+  requestId ? { ...payload, requestId } : payload
+);
+
 const readJsonBody = (req) =>
   new Promise((resolve, reject) => {
     let buffer = '';
@@ -519,15 +523,15 @@ const readJsonBody = (req) =>
     req.on('error', reject);
   });
 
-const getJsonPayload = async (req, res) => {
+const getJsonPayload = async (req, res, requestId) => {
   try {
     return await readJsonBody(req);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Invalid JSON';
     if (message === 'Payload too large') {
-      jsonResponse(res, 413, { error: 'Payload too large.' });
+      jsonResponse(res, 413, withRequestId({ error: 'Payload too large.' }, requestId));
     } else {
-      jsonResponse(res, 400, { error: 'Invalid JSON.' });
+      jsonResponse(res, 400, withRequestId({ error: 'Invalid JSON.' }, requestId));
     }
     return null;
   }
@@ -640,16 +644,16 @@ const getSession = (req, res) => {
   return { id: sessionId, data };
 };
 
-const requireAuthenticatedSession = (req, res) => {
+const requireAuthenticatedSession = (req, res, requestId) => {
   const session = getSession(req, res);
   if (!session.data.accessToken) {
-    jsonResponse(res, 401, { error: 'Authentication required.' });
+    jsonResponse(res, 401, withRequestId({ error: 'Authentication required.' }, requestId));
     return null;
   }
   return session;
 };
 
-const checkRateLimit = (req, res, sessionId) => {
+const checkRateLimit = (req, res, sessionId, requestId) => {
   const key = sessionId ?? req.socket.remoteAddress ?? 'anonymous';
   const now = Date.now();
   const existing = rateLimits.get(key);
@@ -660,7 +664,7 @@ const checkRateLimit = (req, res, sessionId) => {
   if (existing.count >= aiRequestLimit) {
     const retryAfterSeconds = Math.ceil((existing.resetAt - now) / 1000);
     res.setHeader('Retry-After', retryAfterSeconds);
-    jsonResponse(res, 429, { error: 'Rate limit exceeded.' });
+    jsonResponse(res, 429, withRequestId({ error: 'Rate limit exceeded.' }, requestId));
     return false;
   }
   existing.count += 1;
@@ -769,15 +773,15 @@ const handleSession = (req, res) => {
   });
 };
 
-const handleAiAnalyzeFile = async (req, res, session) => {
+const handleAiAnalyzeFile = async (req, res, session, requestId) => {
   if (!aiClient) {
-    jsonResponse(res, 500, { error: 'AI client not configured.' });
+    jsonResponse(res, 500, withRequestId({ error: 'AI client not configured.' }, requestId));
     return;
   }
-  if (!checkRateLimit(req, res, session.id)) {
+  if (!checkRateLimit(req, res, session.id, requestId)) {
     return;
   }
-  const payload = await getJsonPayload(req, res);
+  const payload = await getJsonPayload(req, res, requestId);
   if (!payload) {
     return;
   }
@@ -785,7 +789,7 @@ const handleAiAnalyzeFile = async (req, res, session) => {
   const filename = payload?.filename;
 
   if (typeof code !== 'string' || typeof filename !== 'string') {
-    jsonResponse(res, 400, { error: 'Invalid payload.' });
+    jsonResponse(res, 400, withRequestId({ error: 'Invalid payload.' }, requestId));
     return;
   }
 
@@ -816,6 +820,7 @@ const handleAiAnalyzeFile = async (req, res, session) => {
 
   await appendAiAuditLog({
     id: crypto.randomUUID(),
+    requestId,
     timestamp: new Date().toISOString(),
     requestType,
     model: aiModelId,
@@ -831,18 +836,22 @@ const handleAiAnalyzeFile = async (req, res, session) => {
     throw new Error(errorMessage);
   }
 
-  jsonResponse(res, 200, { nodes: Array.isArray(data) ? data : [] });
+  jsonResponse(
+    res,
+    200,
+    withRequestId({ nodes: Array.isArray(data) ? data : [] }, requestId),
+  );
 };
 
-const handleAiRelevantFiles = async (req, res, session) => {
+const handleAiRelevantFiles = async (req, res, session, requestId) => {
   if (!aiClient) {
-    jsonResponse(res, 500, { error: 'AI client not configured.' });
+    jsonResponse(res, 500, withRequestId({ error: 'AI client not configured.' }, requestId));
     return;
   }
-  if (!checkRateLimit(req, res, session.id)) {
+  if (!checkRateLimit(req, res, session.id, requestId)) {
     return;
   }
-  const payload = await getJsonPayload(req, res);
+  const payload = await getJsonPayload(req, res, requestId);
   if (!payload) {
     return;
   }
@@ -850,7 +859,7 @@ const handleAiRelevantFiles = async (req, res, session) => {
   const filePaths = payload?.filePaths;
 
   if (typeof query !== 'string' || !Array.isArray(filePaths)) {
-    jsonResponse(res, 400, { error: 'Invalid payload.' });
+    jsonResponse(res, 400, withRequestId({ error: 'Invalid payload.' }, requestId));
     return;
   }
 
@@ -881,6 +890,7 @@ const handleAiRelevantFiles = async (req, res, session) => {
 
   await appendAiAuditLog({
     id: crypto.randomUUID(),
+    requestId,
     timestamp: new Date().toISOString(),
     requestType,
     model: aiModelId,
@@ -896,18 +906,22 @@ const handleAiRelevantFiles = async (req, res, session) => {
     throw new Error(errorMessage);
   }
 
-  jsonResponse(res, 200, { relevantFiles: data?.relevantFiles ?? [] });
+  jsonResponse(
+    res,
+    200,
+    withRequestId({ relevantFiles: data?.relevantFiles ?? [] }, requestId),
+  );
 };
 
-const handleAiProjectSummary = async (req, res, session) => {
+const handleAiProjectSummary = async (req, res, session, requestId) => {
   if (!aiClient) {
-    jsonResponse(res, 500, { error: 'AI client not configured.' });
+    jsonResponse(res, 500, withRequestId({ error: 'AI client not configured.' }, requestId));
     return;
   }
-  if (!checkRateLimit(req, res, session.id)) {
+  if (!checkRateLimit(req, res, session.id, requestId)) {
     return;
   }
-  const payload = await getJsonPayload(req, res);
+  const payload = await getJsonPayload(req, res, requestId);
   if (!payload) {
     return;
   }
@@ -922,7 +936,7 @@ const handleAiProjectSummary = async (req, res, session) => {
     : [];
 
   if (!filePaths || !graph || typeof graph !== 'object') {
-    jsonResponse(res, 400, { error: 'Invalid payload.' });
+    jsonResponse(res, 400, withRequestId({ error: 'Invalid payload.' }, requestId));
     return;
   }
 
@@ -961,6 +975,7 @@ const handleAiProjectSummary = async (req, res, session) => {
 
   await appendAiAuditLog({
     id: crypto.randomUUID(),
+    requestId,
     timestamp: new Date().toISOString(),
     requestType,
     model: aiModelId,
@@ -976,21 +991,28 @@ const handleAiProjectSummary = async (req, res, session) => {
     throw new Error(errorMessage);
   }
 
-  jsonResponse(res, 200, {
-    summary: data?.summary ?? '',
-    diagram: data?.diagram ?? '',
-  });
+  jsonResponse(
+    res,
+    200,
+    withRequestId(
+      {
+        summary: data?.summary ?? '',
+        diagram: data?.diagram ?? '',
+      },
+      requestId,
+    ),
+  );
 };
 
-const handleAnalyzeIntent = async (req, res, session) => {
+const handleAnalyzeIntent = async (req, res, session, requestId) => {
   if (!aiClient) {
-    jsonResponse(res, 500, { error: 'AI client not configured.' });
+    jsonResponse(res, 500, withRequestId({ error: 'AI client not configured.' }, requestId));
     return;
   }
-  if (!checkRateLimit(req, res, session.id)) {
+  if (!checkRateLimit(req, res, session.id, requestId)) {
     return;
   }
-  const payload = await getJsonPayload(req, res);
+  const payload = await getJsonPayload(req, res, requestId);
   if (!payload) {
     return;
   }
@@ -1002,7 +1024,7 @@ const handleAnalyzeIntent = async (req, res, session) => {
     : [];
 
   if (!uiSchema || typeof uiSchema !== 'object' || typeof fileContent !== 'string') {
-    jsonResponse(res, 400, { error: 'Invalid payload.' });
+    jsonResponse(res, 400, withRequestId({ error: 'Invalid payload.' }, requestId));
     return;
   }
 
@@ -1095,6 +1117,7 @@ const handleAnalyzeIntent = async (req, res, session) => {
 
   await appendAiAuditLog({
     id: crypto.randomUUID(),
+    requestId,
     timestamp: new Date().toISOString(),
     requestType: 'analyzeIntent',
     model: aiModelId,
@@ -1107,30 +1130,41 @@ const handleAnalyzeIntent = async (req, res, session) => {
   });
 
   if (errorMessage) {
-    jsonResponse(res, 500, { error: 'Intent analysis failed.' });
+    jsonResponse(
+      res,
+      500,
+      withRequestId({ error: 'Intent analysis failed.' }, requestId),
+    );
     return;
   }
 
-  jsonResponse(res, 200, {
-    tables: Array.isArray(data?.tables) ? data.tables : [],
-    endpoints: Array.isArray(data?.endpoints) ? data.endpoints : [],
-    services: Array.isArray(data?.services) ? data.services : [],
-  });
+  jsonResponse(
+    res,
+    200,
+    withRequestId(
+      {
+        tables: Array.isArray(data?.tables) ? data.tables : [],
+        endpoints: Array.isArray(data?.endpoints) ? data.endpoints : [],
+        services: Array.isArray(data?.services) ? data.services : [],
+      },
+      requestId,
+    ),
+  );
 };
 
-const handleAnalyze = async (req, res, session) => {
-  await handleAnalyzeIntent(req, res, session);
+const handleAnalyze = async (req, res, session, requestId) => {
+  await handleAnalyzeIntent(req, res, session, requestId);
 };
 
-const handleOptimizePrompt = async (req, res, session) => {
+const handleOptimizePrompt = async (req, res, session, requestId) => {
   if (!aiClient) {
-    jsonResponse(res, 500, { error: 'AI client not configured.' });
+    jsonResponse(res, 500, withRequestId({ error: 'AI client not configured.' }, requestId));
     return;
   }
-  if (!checkRateLimit(req, res, session.id)) {
+  if (!checkRateLimit(req, res, session.id, requestId)) {
     return;
   }
-  const payload = await getJsonPayload(req, res);
+  const payload = await getJsonPayload(req, res, requestId);
   if (!payload) {
     return;
   }
@@ -1159,7 +1193,7 @@ const handleOptimizePrompt = async (req, res, session) => {
     || typeof resolvedIntent !== 'string'
     || !fileContent
   ) {
-    jsonResponse(res, 400, { error: 'Invalid payload.' });
+    jsonResponse(res, 400, withRequestId({ error: 'Invalid payload.' }, requestId));
     return;
   }
 
@@ -1239,6 +1273,7 @@ Generate a comprehensive, copy-paste-ready prompt for implementing this backend 
 
   await appendAiAuditLog({
     id: crypto.randomUUID(),
+    requestId,
     timestamp: new Date().toISOString(),
     requestType: 'optimizePrompt',
     model: aiModelId,
@@ -1251,15 +1286,19 @@ Generate a comprehensive, copy-paste-ready prompt for implementing this backend 
   });
 
   if (errorMessage) {
-    jsonResponse(res, 500, { error: 'Prompt optimization failed.' });
+    jsonResponse(
+      res,
+      500,
+      withRequestId({ error: 'Prompt optimization failed.' }, requestId),
+    );
     return;
   }
 
-  jsonResponse(res, 200, { prompt });
+  jsonResponse(res, 200, withRequestId({ prompt }, requestId));
 };
 
-const handleOptimize = async (req, res, session) => {
-  await handleOptimizePrompt(req, res, session);
+const handleOptimize = async (req, res, session, requestId) => {
+  await handleOptimizePrompt(req, res, session, requestId);
 };
 
 const handleAiMetrics = async (req, res) => {
@@ -1298,18 +1337,22 @@ const handleAiMetrics = async (req, res) => {
 /**
  * Handler para gerar prompts otimizados via AI Agent.
  */
-const handleGeneratePrompt = async (req, res, session) => {
+const handleGeneratePrompt = async (req, res, session, requestId) => {
   if (!aiClient) {
-    jsonResponse(res, 500, { error: 'AI client not configured.' });
+    jsonResponse(res, 500, withRequestId({ error: 'AI client not configured.' }, requestId));
     return;
   }
 
-  const payload = await getJsonPayload(req, res);
+  const payload = await getJsonPayload(req, res, requestId);
   if (!payload) return;
 
   const validationErrors = validateGeneratePromptPayload(payload);
   if (validationErrors.length > 0) {
-    jsonResponse(res, 400, { error: validationErrors.join(' ') });
+    jsonResponse(
+      res,
+      400,
+      withRequestId({ error: validationErrors.join(' ') }, requestId),
+    );
     return;
   }
 
@@ -1333,10 +1376,19 @@ const handleGeneratePrompt = async (req, res, session) => {
       usage: response?.meta?.usage ?? null,
     };
 
-    jsonResponse(res, 200, result);
+    jsonResponse(res, 200, withRequestId(result, requestId));
   } catch (error) {
-    console.error('Generate prompt error', error);
-    jsonResponse(res, 500, { error: 'Failed to generate prompt.' });
+    console.error({
+      requestId,
+      error,
+      route: req.url,
+      message: 'Generate prompt error',
+    });
+    jsonResponse(
+      res,
+      500,
+      withRequestId({ error: 'Failed to generate prompt.' }, requestId),
+    );
   }
 };
 
@@ -1344,23 +1396,27 @@ const handleGeneratePrompt = async (req, res, session) => {
  * Handler para chat contextual com IA.
  * Suporta 6 modos: explore, create, alter, fix, connect, ask
  */
-const handleAiContextualChat = async (req, res, session) => {
+const handleAiContextualChat = async (req, res, session, requestId) => {
   if (!aiClient) {
-    jsonResponse(res, 500, { error: 'AI client not configured.' });
+    jsonResponse(res, 500, withRequestId({ error: 'AI client not configured.' }, requestId));
     return;
   }
-  if (!checkRateLimit(req, res, session.id)) {
+  if (!checkRateLimit(req, res, session.id, requestId)) {
     return;
   }
 
-  const payload = await getJsonPayload(req, res);
+  const payload = await getJsonPayload(req, res, requestId);
   if (!payload) {
     return;
   }
 
   const validationErrors = validateAiChatPayload(payload);
   if (validationErrors.length > 0) {
-    jsonResponse(res, 400, { error: validationErrors.join(' ') });
+    jsonResponse(
+      res,
+      400,
+      withRequestId({ error: validationErrors.join(' ') }, requestId),
+    );
     return;
   }
 
@@ -1401,6 +1457,7 @@ const handleAiContextualChat = async (req, res, session) => {
 
   await appendAiAuditLog({
     id: crypto.randomUUID(),
+    requestId,
     timestamp: new Date().toISOString(),
     requestType,
     model: aiModelId,
@@ -1414,7 +1471,7 @@ const handleAiContextualChat = async (req, res, session) => {
   });
 
   if (errorMessage) {
-    jsonResponse(res, 500, { error: errorMessage });
+    jsonResponse(res, 500, withRequestId({ error: errorMessage }, requestId));
     return;
   }
 
@@ -1426,7 +1483,7 @@ const handleAiContextualChat = async (req, res, session) => {
       latencyMs,
       ...(usage ? { usage } : {}),
     };
-    jsonResponse(res, 200, responsePayload);
+    jsonResponse(res, 200, withRequestId(responsePayload, requestId));
     return;
   }
 
@@ -1437,7 +1494,7 @@ const handleAiContextualChat = async (req, res, session) => {
     latencyMs,
     ...(usage ? { usage } : {}),
   };
-  jsonResponse(res, 200, responsePayload);
+  jsonResponse(res, 200, withRequestId(responsePayload, requestId));
 };
 
 const handleCreateIndexJob = async (req, res) => {
@@ -1549,74 +1606,122 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/ai/analyze-file') {
+    const requestId = crypto.randomUUID();
     try {
-      const session = requireAuthenticatedSession(req, res);
+      const session = requireAuthenticatedSession(req, res, requestId);
       if (!session) return;
-      await handleAiAnalyzeFile(req, res, session);
+      await handleAiAnalyzeFile(req, res, session, requestId);
     } catch (error) {
-      console.error('AI analyze error', error);
-      jsonResponse(res, 500, { error: 'AI analysis failed.' });
+      console.error({
+        requestId,
+        error,
+        route: url.pathname,
+        message: 'AI analyze error',
+      });
+      jsonResponse(res, 500, withRequestId({ error: 'AI analysis failed.' }, requestId));
     }
     return;
   }
 
   if (req.method === 'POST' && url.pathname === '/api/ai/relevant-files') {
+    const requestId = crypto.randomUUID();
     try {
-      const session = requireAuthenticatedSession(req, res);
+      const session = requireAuthenticatedSession(req, res, requestId);
       if (!session) return;
-      await handleAiRelevantFiles(req, res, session);
+      await handleAiRelevantFiles(req, res, session, requestId);
     } catch (error) {
-      console.error('AI relevance error', error);
-      jsonResponse(res, 500, { error: 'AI relevance failed.' });
+      console.error({
+        requestId,
+        error,
+        route: url.pathname,
+        message: 'AI relevance error',
+      });
+      jsonResponse(res, 500, withRequestId({ error: 'AI relevance failed.' }, requestId));
     }
     return;
   }
 
   if (req.method === 'POST' && url.pathname === '/api/ai/project-summary') {
+    const requestId = crypto.randomUUID();
     try {
-      const session = requireAuthenticatedSession(req, res);
+      const session = requireAuthenticatedSession(req, res, requestId);
       if (!session) return;
-      await handleAiProjectSummary(req, res, session);
+      await handleAiProjectSummary(req, res, session, requestId);
     } catch (error) {
-      console.error('AI summary error', error);
-      jsonResponse(res, 500, { error: 'AI summary failed.' });
+      console.error({
+        requestId,
+        error,
+        route: url.pathname,
+        message: 'AI summary error',
+      });
+      jsonResponse(res, 500, withRequestId({ error: 'AI summary failed.' }, requestId));
     }
     return;
   }
 
   if (req.method === 'POST' && url.pathname === '/api/analyze') {
+    const requestId = crypto.randomUUID();
     try {
-      const session = requireAuthenticatedSession(req, res);
+      const session = requireAuthenticatedSession(req, res, requestId);
       if (!session) return;
-      await handleAnalyze(req, res, session);
+      await handleAnalyze(req, res, session, requestId);
     } catch (error) {
-      console.error('Intent analysis error', error);
-      jsonResponse(res, 500, { error: 'Intent analysis failed.' });
+      console.error({
+        requestId,
+        error,
+        route: url.pathname,
+        message: 'Intent analysis error',
+      });
+      jsonResponse(
+        res,
+        500,
+        withRequestId({ error: 'Intent analysis failed.' }, requestId),
+      );
     }
     return;
   }
 
   if (req.method === 'POST' && url.pathname === '/api/optimize') {
+    const requestId = crypto.randomUUID();
     try {
-      const session = requireAuthenticatedSession(req, res);
+      const session = requireAuthenticatedSession(req, res, requestId);
       if (!session) return;
-      await handleOptimize(req, res, session);
+      await handleOptimize(req, res, session, requestId);
     } catch (error) {
-      console.error('Prompt optimization error', error);
-      jsonResponse(res, 500, { error: 'Prompt optimization failed.' });
+      console.error({
+        requestId,
+        error,
+        route: url.pathname,
+        message: 'Prompt optimization error',
+      });
+      jsonResponse(
+        res,
+        500,
+        withRequestId({ error: 'Prompt optimization failed.' }, requestId),
+      );
     }
     return;
   }
 
   // Alias route for /api/optimize-prompt (used by frontend store)
   if (req.method === 'POST' && url.pathname === '/api/optimize-prompt') {
+    const requestId = crypto.randomUUID();
     try {
-      const session = requireAuthenticatedSession(req, res);
+      const session = requireAuthenticatedSession(req, res, requestId);
       if (!session) return;
-      await handleOptimizePrompt(req, res, session);
+      await handleOptimizePrompt(req, res, session, requestId);
     } catch (error) {
-      console.error('Prompt optimization error', error);
-      jsonResponse(res, 500, { error: 'Prompt optimization failed.' });
+      console.error({
+        requestId,
+        error,
+        route: url.pathname,
+        message: 'Prompt optimization error',
+      });
+      jsonResponse(
+        res,
+        500,
+        withRequestId({ error: 'Prompt optimization failed.' }, requestId),
+      );
     }
     return;
   }
@@ -1632,23 +1737,39 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/ai/generate-prompt') {
+    const requestId = crypto.randomUUID();
     try {
       const session = getSession(req, res);
-      await handleGeneratePrompt(req, res, session);
+      await handleGeneratePrompt(req, res, session, requestId);
     } catch (error) {
-      console.error('Generate prompt error', error);
-      jsonResponse(res, 500, { error: 'Generate prompt failed.' });
+      console.error({
+        requestId,
+        error,
+        route: url.pathname,
+        message: 'Generate prompt error',
+      });
+      jsonResponse(
+        res,
+        500,
+        withRequestId({ error: 'Generate prompt failed.' }, requestId),
+      );
     }
     return;
   }
 
   if (req.method === 'POST' && url.pathname === '/api/ai/chat') {
+    const requestId = crypto.randomUUID();
     try {
       const session = getSession(req, res); // Não requer autenticação GitHub
-      await handleAiContextualChat(req, res, session);
+      await handleAiContextualChat(req, res, session, requestId);
     } catch (error) {
-      console.error('AI contextual chat error', error);
-      jsonResponse(res, 500, { error: 'AI chat failed.' });
+      console.error({
+        requestId,
+        error,
+        route: url.pathname,
+        message: 'AI contextual chat error',
+      });
+      jsonResponse(res, 500, withRequestId({ error: 'AI chat failed.' }, requestId));
     }
     return;
   }
