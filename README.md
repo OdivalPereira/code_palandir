@@ -17,6 +17,20 @@
    npm run dev
    ```
 
+### Smoke test (API)
+
+Com o backend rodando, execute:
+
+```bash
+npm run smoke-test
+```
+
+Por padrão, o script usa `SERVER_BASE_URL` (ou `http://localhost:8787` se não estiver definido). Para apontar para outra base, defina `SMOKE_TEST_BASE_URL`:
+
+```bash
+SMOKE_TEST_BASE_URL=http://localhost:8787 npm run smoke-test
+```
+
 ### Portas padrão recomendadas
 
 - **Backend**: `8787`

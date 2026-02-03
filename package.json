@@ -8,7 +8,8 @@
         "build": "tsc -b && vite build",
         "lint": "eslint .",
         "preview": "vite preview",
-        "server": "node server/index.js"
+        "server": "node server/index.js",
+        "smoke-test": "node scripts/smoke-test.mjs"
     },
     "dependencies": {
         "@google/genai": "latest",
