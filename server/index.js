@@ -20,8 +20,9 @@ const githubClientId = process.env.GITHUB_CLIENT_ID;
 const githubClientSecret = process.env.GITHUB_CLIENT_SECRET;
 const githubCallbackUrl =
   process.env.GITHUB_OAUTH_CALLBACK_URL ?? `${serverBaseUrl}/api/auth/callback`;
+const recommendedGoogleAiModelId = 'gemini-2.5-flash';
 const aiApiKey = process.env.GOOGLE_AI_API_KEY ?? '';
-const aiModelId = process.env.GOOGLE_AI_MODEL_ID ?? 'gemini-2.5-flash';
+const aiModelId = process.env.GOOGLE_AI_MODEL_ID ?? recommendedGoogleAiModelId;
 const aiProvider = normalizeAiProvider(process.env.AI_PROVIDER);
 const aiRequestLimit = Number(process.env.AI_RATE_LIMIT_MAX ?? '30');
 const aiRequestWindowMs = Number(process.env.AI_RATE_LIMIT_WINDOW_MS ?? '300000');
@@ -56,6 +57,14 @@ const validateEnv = () => {
   if (aiProvider === 'google') {
     requireValue('AI_PROVIDER', process.env.AI_PROVIDER);
     requireValue('GOOGLE_AI_API_KEY', process.env.GOOGLE_AI_API_KEY);
+    if (
+      process.env.GOOGLE_AI_MODEL_ID &&
+      process.env.GOOGLE_AI_MODEL_ID !== recommendedGoogleAiModelId
+    ) {
+      console.warn(
+        `GOOGLE_AI_MODEL_ID diferente do recomendado para produção (${recommendedGoogleAiModelId}).`,
+      );
+    }
   }
 
   if (errors.length > 0) {

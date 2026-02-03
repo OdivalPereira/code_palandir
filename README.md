@@ -105,7 +105,7 @@ GOOGLE_AI_MODEL_ID=gemini-2.5-flash
 
 1. Acesse o [Google AI Studio](https://aistudio.google.com/app/apikey) e gere uma API key.
 2. Copie a chave gerada e preencha `GOOGLE_AI_API_KEY`.
-3. Opcional: ajuste `GOOGLE_AI_MODEL_ID` para o modelo desejado (ex.: `gemini-2.5-flash`).
+3. Em produção, utilize `GOOGLE_AI_MODEL_ID=gemini-2.5-flash` (valor oficial recomendado). Ajustes só são indicados se houver necessidade explícita.
 4. Defina `AI_PROVIDER` como `google` para usar a API Gemini.
 
 ### GitHub OAuth
