@@ -4,7 +4,7 @@
  * Permite buscar, filtrar e carregar threads anteriores para continuar o trabalho.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
     Search,
     BookOpen,
@@ -13,7 +13,9 @@ import {
     Trash2,
     CornerUpRight,
     X,
-    MessageSquare
+    MessageSquare,
+    Download,
+    Upload
 } from 'lucide-react';
 import { useBasketStore } from '../stores/basketStore';
 import { SavedThread, AIActionMode, AI_ACTION_LABELS } from '../types';
@@ -57,10 +59,13 @@ const ThreadLibrary: React.FC<ThreadLibraryProps> = ({ onClose, className = '' }
     const library = useBasketStore(state => state.library);
     const loadFromLibrary = useBasketStore(state => state.loadFromLibrary);
     const deleteFromLibrary = useBasketStore(state => state.deleteFromLibrary);
+    const exportThreadsSnapshot = useBasketStore(state => state.exportThreadsSnapshot);
+    const restoreThreadsSnapshot = useBasketStore(state => state.restoreThreadsSnapshot);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [expandedId, setExpandedId] = useState<string | null>(null);
+    const importInputRef = useRef<HTMLInputElement | null>(null);
 
     // Extract all unique tags
     const allTags = useMemo(() => {
@@ -112,6 +117,43 @@ const ThreadLibrary: React.FC<ThreadLibraryProps> = ({ onClose, className = '' }
         );
     };
 
+    const handleExportSnapshot = () => {
+        const json = exportThreadsSnapshot();
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        anchor.href = url;
+        anchor.download = `basket-threads-${timestamp}.json`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleImportClick = () => {
+        if (!confirm('Importar threads substituirá o Basket atual. Deseja continuar?')) {
+            return;
+        }
+        importInputRef.current?.click();
+    };
+
+    const handleImportChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        try {
+            const json = await file.text();
+            const result = restoreThreadsSnapshot(json);
+            if (!result.ok) {
+                alert(result.error ?? 'Não foi possível importar o snapshot.');
+            } else {
+                alert(`Snapshot importado com sucesso (${result.importedThreads ?? 0} threads).`);
+            }
+        } catch {
+            alert('Não foi possível ler o arquivo selecionado.');
+        } finally {
+            event.target.value = '';
+        }
+    };
+
     return (
         <div className={`flex flex-col h-full bg-slate-900 w-full ${className}`}>
             {/* Header */}
@@ -121,9 +163,29 @@ const ThreadLibrary: React.FC<ThreadLibraryProps> = ({ onClose, className = '' }
                         <BookOpen className="text-sky-400" size={20} />
                         <h2 className="font-semibold text-slate-100">Biblioteca</h2>
                     </div>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-200">
-                        <X size={18} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleExportSnapshot}
+                            className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-700 text-slate-300 hover:border-sky-500 hover:text-sky-300 transition-colors"
+                            title="Exportar snapshot do Basket"
+                            type="button"
+                        >
+                            <Download size={12} />
+                            Exportar
+                        </button>
+                        <button
+                            onClick={handleImportClick}
+                            className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-700 text-slate-300 hover:border-sky-500 hover:text-sky-300 transition-colors"
+                            title="Importar snapshot do Basket"
+                            type="button"
+                        >
+                            <Upload size={12} />
+                            Importar
+                        </button>
+                        <button onClick={onClose} className="text-slate-400 hover:text-slate-200">
+                            <X size={18} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Search */}
@@ -156,6 +218,14 @@ const ThreadLibrary: React.FC<ThreadLibraryProps> = ({ onClose, className = '' }
                     </div>
                 )}
             </div>
+
+            <input
+                ref={importInputRef}
+                type="file"
+                accept="application/json"
+                onChange={handleImportChange}
+                className="hidden"
+            />
 
             {/* List */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">

@@ -92,6 +92,154 @@ function saveLibraryToStorage(threads: SavedThread[]): void {
 }
 
 // ============================================
+// Snapshot Serialization
+// ============================================
+
+const THREAD_SNAPSHOT_VERSION = 1;
+
+type ThreadSnapshot = {
+    version: number;
+    exportedAt: number;
+    activeThreadId: string | null;
+    threads: Thread[];
+    metadata: {
+        totalTokens: number;
+        maxTokens: number;
+        warningThreshold: number;
+        dangerThreshold: number;
+    };
+};
+
+const VALID_MODES: AIActionMode[] = ['explore', 'create', 'alter', 'fix', 'connect', 'ask'];
+const VALID_SUGGESTION_TYPES: ThreadSuggestion['type'][] = [
+    'file',
+    'api',
+    'snippet',
+    'migration',
+    'table',
+    'service',
+];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+}
+
+function asString(value: unknown, fallback = ''): string {
+    return typeof value === 'string' ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function asBoolean(value: unknown, fallback = false): boolean {
+    return typeof value === 'boolean' ? value : fallback;
+}
+
+function asStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is string => typeof item === 'string');
+}
+
+function asChatMessages(value: unknown, fallbackMode: AIActionMode, now: number): ChatMessage[] {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map(item => {
+            if (!isRecord(item)) return null;
+            const role = item.role === 'user' || item.role === 'assistant' ? item.role : null;
+            const content = asString(item.content, '');
+            if (!role || !content) return null;
+            return {
+                id: asString(item.id, `msg-${now}-${Math.random().toString(36).substr(2, 9)}`),
+                role,
+                content,
+                mode: VALID_MODES.includes(item.mode as AIActionMode) ? (item.mode as AIActionMode) : fallbackMode,
+                timestamp: asNumber(item.timestamp, now),
+                tokenEstimate: typeof item.tokenEstimate === 'number' ? item.tokenEstimate : estimateTokens(content),
+            } satisfies ChatMessage;
+        })
+        .filter((item): item is ChatMessage => item !== null);
+}
+
+function asSuggestions(value: unknown): ThreadSuggestion[] {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map(item => {
+            if (!isRecord(item)) return null;
+            const type = VALID_SUGGESTION_TYPES.includes(item.type as ThreadSuggestion['type'])
+                ? (item.type as ThreadSuggestion['type'])
+                : null;
+            const title = asString(item.title, '');
+            const description = asString(item.description, '');
+            if (!type || !title || !description) return null;
+            const lines =
+                Array.isArray(item.lines) && item.lines.length === 2
+                    ? (item.lines as [number, number])
+                    : undefined;
+            return {
+                id: asString(item.id, `sug-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`),
+                type,
+                title,
+                description,
+                content: typeof item.content === 'string' ? item.content : undefined,
+                path: typeof item.path === 'string' ? item.path : undefined,
+                lines,
+                included: asBoolean(item.included, true),
+            } satisfies ThreadSuggestion;
+        })
+        .filter((item): item is ThreadSuggestion => item !== null);
+}
+
+function sanitizeThread(input: unknown, now: number): Thread | null {
+    if (!isRecord(input)) return null;
+    const baseElementRaw = isRecord(input.baseElement) ? input.baseElement : null;
+    if (!baseElementRaw) return null;
+    const baseElement: ThreadBaseElement = {
+        nodeId: asString(baseElementRaw.nodeId, ''),
+        name: asString(baseElementRaw.name, ''),
+        path: asString(baseElementRaw.path, ''),
+        type: asString(baseElementRaw.type, ''),
+        codeSnippet: typeof baseElementRaw.codeSnippet === 'string' ? baseElementRaw.codeSnippet : undefined,
+    };
+    if (!baseElement.nodeId || !baseElement.name || !baseElement.path || !baseElement.type) {
+        return null;
+    }
+
+    const currentMode = VALID_MODES.includes(input.currentMode as AIActionMode)
+        ? (input.currentMode as AIActionMode)
+        : 'ask';
+    const modesUsed = Array.isArray(input.modesUsed)
+        ? input.modesUsed.filter((mode): mode is AIActionMode => VALID_MODES.includes(mode as AIActionMode))
+        : [];
+
+    const conversation = asChatMessages(input.conversation, currentMode, now);
+    const suggestions = asSuggestions(input.suggestions);
+    const followUpQuestions = asStringArray(input.followUpQuestions);
+    const status =
+        input.status === 'active' || input.status === 'paused' || input.status === 'completed'
+            ? input.status
+            : 'active';
+
+    const sanitized: Thread = {
+        id: asString(input.id, `thread-${now}-${Math.random().toString(36).substr(2, 9)}`),
+        title: asString(input.title, `${currentMode}: ${baseElement.name}`),
+        baseElement,
+        modesUsed: modesUsed.length > 0 ? modesUsed : [currentMode],
+        currentMode,
+        conversation,
+        suggestions,
+        followUpQuestions,
+        tokenCount: 0,
+        status,
+        createdAt: asNumber(input.createdAt, now),
+        updatedAt: asNumber(input.updatedAt, now),
+    };
+
+    sanitized.tokenCount = calculateThreadTokens(sanitized);
+    return sanitized;
+}
+
+// ============================================
 // Store Interface
 // ============================================
 
@@ -121,6 +269,12 @@ interface BasketStore extends BasketState {
     saveToLibrary: (threadId: string, note: string, tags?: string[]) => void;
     loadFromLibrary: (savedThreadId: string) => void;
     deleteFromLibrary: (savedThreadId: string) => void;
+
+    // Import/Export
+    exportThreadsSnapshot: () => string;
+    restoreThreadsSnapshot: (
+        json: string
+    ) => { ok: boolean; error?: string; importedThreads?: number };
 
     // Prompt generation
     getThreadsForPrompt: () => Thread[];
@@ -411,6 +565,77 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
             saveLibraryToStorage(library);
             return { library };
         });
+    },
+
+    // ==========================================
+    // Import/Export
+    // ==========================================
+
+    exportThreadsSnapshot: () => {
+        const state = get();
+        const snapshot: ThreadSnapshot = {
+            version: THREAD_SNAPSHOT_VERSION,
+            exportedAt: Date.now(),
+            activeThreadId: state.activeThreadId,
+            threads: state.threads,
+            metadata: {
+                totalTokens: state.totalTokens,
+                maxTokens: state.maxTokens,
+                warningThreshold: state.warningThreshold,
+                dangerThreshold: state.dangerThreshold,
+            },
+        };
+        return JSON.stringify(snapshot, null, 2);
+    },
+
+    restoreThreadsSnapshot: (json: string) => {
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(json);
+        } catch {
+            return { ok: false, error: 'JSON inválido. Verifique o arquivo e tente novamente.' };
+        }
+
+        if (!isRecord(parsed)) {
+            return { ok: false, error: 'Snapshot inválido. Estrutura inesperada.' };
+        }
+
+        const now = Date.now();
+        const threadsRaw = Array.isArray(parsed.threads) ? parsed.threads : null;
+        if (!threadsRaw) {
+            return { ok: false, error: 'Snapshot inválido. Lista de threads ausente.' };
+        }
+
+        const threads = threadsRaw
+            .map(thread => sanitizeThread(thread, now))
+            .filter((thread): thread is Thread => thread !== null);
+
+        if (threads.length === 0 && threadsRaw.length > 0) {
+            return { ok: false, error: 'Snapshot inválido. Nenhuma thread válida encontrada.' };
+        }
+
+        const activeThreadId =
+            typeof parsed.activeThreadId === 'string' &&
+            threads.some(thread => thread.id === parsed.activeThreadId)
+                ? parsed.activeThreadId
+                : null;
+
+        const metadata = isRecord(parsed.metadata) ? parsed.metadata : {};
+        const maxTokens = asNumber(metadata.maxTokens, DEFAULT_MAX_TOKENS);
+        const warningThreshold = asNumber(metadata.warningThreshold, DEFAULT_WARNING_THRESHOLD);
+        const dangerThreshold = asNumber(metadata.dangerThreshold, DEFAULT_DANGER_THRESHOLD);
+        const totalTokens = threads.reduce((sum, thread) => sum + thread.tokenCount, 0);
+
+        set({
+            threads,
+            activeThreadId,
+            totalTokens,
+            maxTokens,
+            warningThreshold,
+            dangerThreshold,
+        });
+
+        return { ok: true, importedThreads: threads.length };
     },
 
     // ==========================================
