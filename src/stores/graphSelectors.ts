@@ -15,6 +15,8 @@ export const selectFlowQuery = (state: GraphState) => state.flowQuery;
 export const selectFlowPathNodeIds = (state: GraphState) => state.flowPathNodeIds;
 export const selectFlowPathLinkIds = (state: GraphState) => state.flowPathLinkIds;
 export const selectStatus = (state: GraphState) => state.status;
+export const selectIsAuthenticated = (state: GraphState) => state.isAuthenticated;
+export const selectAuthNotice = (state: GraphState) => state.authNotice;
 export const selectPromptItems = (state: GraphState) => state.promptItems;
 export const selectSearchQuery = (state: GraphState) => state.searchQuery;
 export const selectGithubUrl = (state: GraphState) => state.githubUrl;

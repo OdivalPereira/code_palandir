@@ -577,6 +577,7 @@ const CodeVisualizer: React.FC = () => {
       .on("click", (event, d) => {
         event.stopPropagation();
         if (d.type === 'cluster') {
+          triggerSelectNode(d.id);
           const { parentPath } = d.data as ClusterData;
           requestExpandNode?.(parentPath);
           expandDirectory(parentPath);

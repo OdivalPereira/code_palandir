@@ -248,6 +248,14 @@ export const fetchSessionAccessToken = async (): Promise<string | null> => {
   return data.accessToken ?? null;
 };
 
+export const logoutSession = async (): Promise<void> => {
+  await requestResponse('/api/auth/logout', {
+    method: 'POST',
+  }, {
+    allowedStatuses: [200, 204, 401, 403],
+  });
+};
+
 export const saveSession = async (
   session: SessionPayload,
   sessionId?: string | null,

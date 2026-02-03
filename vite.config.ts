@@ -13,6 +13,11 @@ export default defineConfig({
                 changeOrigin: true,
                 rewrite: (path) => path,
             },
+            '/realtime': {
+                target: 'http://localhost:8787',
+                changeOrigin: true,
+                ws: true,
+            },
         },
     },
 })
