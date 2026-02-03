@@ -99,6 +99,8 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
     const addMessage = useBasketStore(state => state.addMessage);
     const addPendingAssistantMessage = useBasketStore(state => state.addPendingAssistantMessage);
     const updateAssistantMessage = useBasketStore(state => state.updateAssistantMessage);
+    const updateMessage = useBasketStore(state => state.updateMessage);
+    const retryMessage = useBasketStore(state => state.retryMessage);
     const switchMode = useBasketStore(state => state.switchMode);
     const addSuggestion = useBasketStore(state => state.addSuggestion);
     const setFollowUpQuestions = useBasketStore(state => state.setFollowUpQuestions);
@@ -111,6 +113,7 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
     const [error, setError] = useState<string | null>(null);
     const [showModeSelector, setShowModeSelector] = useState(false);
     const [copiedId, setCopiedId] = useState<string | null>(null);
+    const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
     // Refs
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -141,16 +144,17 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
     }, [currentThread?.currentMode]);
 
     // Enviar mensagem
-    const handleSend = useCallback(async () => {
-        if (!currentThread || !inputValue.trim() || isLoading) return;
+    const sendMessageWithContent = useCallback(async (content: string, messageId?: string) => {
+        if (!currentThread || !content.trim() || isLoading) return;
 
-        const userMessageContent = inputValue.trim();
-        setInputValue('');
+        const userMessageContent = content.trim();
         setError(null);
         setIsLoading(true);
 
-        // Adicionar mensagem do usuário
-        addMessage(currentThread.id, 'user', userMessageContent);
+        const userMessageId = messageId ?? addMessage(currentThread.id, 'user', userMessageContent);
+        if (messageId) {
+            retryMessage(currentThread.id, messageId, userMessageContent);
+        }
         const pendingMessageId = addPendingAssistantMessage(currentThread.id);
 
         try {
@@ -165,14 +169,17 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
                 context,
             });
 
-            // Atualizar resposta da IA
             updateAssistantMessage(currentThread.id, pendingMessageId, {
                 content: response.response,
                 status: 'sent',
                 error: null,
             });
 
-            // Adicionar sugestões
+            updateMessage(currentThread.id, userMessageId, {
+                status: 'sent',
+                error: null,
+            });
+
             for (const suggestion of response.suggestions) {
                 addSuggestion(currentThread.id, suggestion);
             }
@@ -188,19 +195,34 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
                 status: 'failed',
                 error: message,
             });
+            updateMessage(currentThread.id, userMessageId, {
+                status: 'failed',
+                error: message,
+            });
         } finally {
             setIsLoading(false);
+            setEditingMessageId(null);
         }
     }, [
         currentThread,
-        inputValue,
         isLoading,
+        retryMessage,
         addMessage,
         addPendingAssistantMessage,
         updateAssistantMessage,
+        updateMessage,
         addSuggestion,
         setFollowUpQuestions,
     ]);
+
+    const handleSend = useCallback(async () => {
+        if (!currentThread || !inputValue.trim() || isLoading) return;
+
+        const userMessageContent = inputValue.trim();
+        const targetMessageId = editingMessageId ?? undefined;
+        setInputValue('');
+        await sendMessageWithContent(userMessageContent, targetMessageId);
+    }, [currentThread, inputValue, isLoading, editingMessageId, sendMessageWithContent]);
 
     // Mudar modo
     const handleModeChange = useCallback((mode: AIActionMode) => {
@@ -216,6 +238,17 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
         navigator.clipboard.writeText(content);
         setCopiedId(id);
         setTimeout(() => setCopiedId(null), 2000);
+    }, []);
+
+    const handleRetry = useCallback((message: ChatMessage) => {
+        if (!currentThread || isLoading) return;
+        sendMessageWithContent(message.content, message.id);
+    }, [currentThread, isLoading, sendMessageWithContent]);
+
+    const handleEdit = useCallback((message: ChatMessage) => {
+        setInputValue(message.content);
+        setEditingMessageId(message.id);
+        inputRef.current?.focus();
     }, []);
 
     // Keyboard handler
@@ -332,6 +365,9 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
                             message={msg}
                             onCopy={handleCopy}
                             copiedId={copiedId}
+                            onRetry={handleRetry}
+                            onEdit={handleEdit}
+                            isLoading={isLoading}
                         />
                     ))
                 )}
@@ -408,12 +444,23 @@ interface MessageBubbleProps {
     message: ChatMessage;
     onCopy: (id: string, content: string) => void;
     copiedId: string | null;
+    onRetry: (message: ChatMessage) => void;
+    onEdit: (message: ChatMessage) => void;
+    isLoading: boolean;
 }
 
-const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onCopy, copiedId }) => {
+const MessageBubble: React.FC<MessageBubbleProps> = ({
+    message,
+    onCopy,
+    copiedId,
+    onRetry,
+    onEdit,
+    isLoading,
+}) => {
     const isUser = message.role === 'user';
     const isPending = message.role === 'assistant' && message.status === 'pending';
     const isFailed = message.role === 'assistant' && message.status === 'failed';
+    const isUserFailed = message.role === 'user' && message.status === 'failed';
 
     return (
         <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -463,6 +510,25 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onCopy, copiedId
                             </>
                         )}
                     </button>
+                )}
+
+                {isUserFailed && (
+                    <div className="mt-2 flex items-center gap-2">
+                        <button
+                            onClick={() => onRetry(message)}
+                            disabled={isLoading}
+                            className="text-[10px] px-2 py-1 rounded border border-rose-400/40 text-rose-100 hover:bg-rose-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            Tentar novamente
+                        </button>
+                        <button
+                            onClick={() => onEdit(message)}
+                            disabled={isLoading}
+                            className="text-[10px] px-2 py-1 rounded border border-slate-400/40 text-slate-100 hover:bg-slate-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            Editar
+                        </button>
+                    </div>
                 )}
             </div>
         </div>

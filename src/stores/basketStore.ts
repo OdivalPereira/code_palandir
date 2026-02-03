@@ -257,13 +257,19 @@ interface BasketStore extends BasketState {
     getActiveThread: () => Thread | null;
 
     // Conversation
-    addMessage: (threadId: string, role: 'user' | 'assistant', content: string) => void;
+    addMessage: (threadId: string, role: 'user' | 'assistant', content: string) => string;
     addPendingAssistantMessage: (threadId: string, content?: string) => string;
     updateAssistantMessage: (
         threadId: string,
         messageId: string,
         updates: { content?: string; status?: ChatMessage['status']; error?: string | null }
     ) => void;
+    updateMessage: (
+        threadId: string,
+        messageId: string,
+        updates: { content?: string; status?: ChatMessage['status']; error?: string | null }
+    ) => void;
+    retryMessage: (threadId: string, messageId: string, content?: string) => void;
     switchMode: (threadId: string, newMode: AIActionMode) => void;
 
     // Suggestions
@@ -424,6 +430,8 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
                 totalTokens: threads.reduce((sum, t) => sum + t.tokenCount, 0),
             };
         });
+
+        return message.id;
     },
 
     addPendingAssistantMessage: (threadId: string, content = 'Pensando...') => {
@@ -500,6 +508,52 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
                 threads,
                 totalTokens: threads.reduce((sum, t) => sum + t.tokenCount, 0),
             };
+        });
+    },
+
+    updateMessage: (
+        threadId: string,
+        messageId: string,
+        updates: { content?: string; status?: ChatMessage['status']; error?: string | null }
+    ) => {
+        set(state => {
+            const threads = state.threads.map(t => {
+                if (t.id !== threadId) return t;
+
+                const conversation = t.conversation.map(msg => {
+                    if (msg.id !== messageId) return msg;
+                    const content = updates.content ?? msg.content;
+                    return {
+                        ...msg,
+                        content,
+                        status: updates.status ?? msg.status,
+                        error: updates.error === null ? undefined : updates.error ?? msg.error,
+                        tokenEstimate:
+                            updates.content !== undefined ? estimateTokens(content) : msg.tokenEstimate,
+                    };
+                });
+
+                const updated = {
+                    ...t,
+                    conversation,
+                    updatedAt: Date.now(),
+                };
+                updated.tokenCount = calculateThreadTokens(updated);
+                return updated;
+            });
+
+            return {
+                threads,
+                totalTokens: threads.reduce((sum, t) => sum + t.tokenCount, 0),
+            };
+        });
+    },
+
+    retryMessage: (threadId: string, messageId: string, content?: string) => {
+        get().updateMessage(threadId, messageId, {
+            status: 'pending',
+            error: null,
+            content,
         });
     },
 
