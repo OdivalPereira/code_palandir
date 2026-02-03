@@ -97,6 +97,7 @@ interface BasketStore extends BasketState {
     // Suggestions
     addSuggestion: (threadId: string, suggestion: Omit<ThreadSuggestion, 'id' | 'included'>) => void;
     toggleSuggestionIncluded: (threadId: string, suggestionId: string) => void;
+    setFollowUpQuestions: (threadId: string, questions: string[]) => void;
 
     // Token management
     recalculateTokens: () => void;
@@ -156,6 +157,7 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
             currentMode: mode,
             conversation: [],
             suggestions: [],
+            followUpQuestions: [],
             tokenCount: 0,
             status: 'active',
             createdAt: now,
@@ -302,6 +304,27 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
         });
     },
 
+    setFollowUpQuestions: (threadId: string, questions: string[]) => {
+        set(state => {
+            const threads = state.threads.map(t => {
+                if (t.id !== threadId) return t;
+
+                const updated = {
+                    ...t,
+                    followUpQuestions: questions,
+                    updatedAt: Date.now(),
+                };
+                updated.tokenCount = calculateThreadTokens(updated);
+                return updated;
+            });
+
+            return {
+                threads,
+                totalTokens: threads.reduce((sum, t) => sum + t.tokenCount, 0),
+            };
+        });
+    },
+
     // ==========================================
     // Token Management
     // ==========================================
@@ -356,6 +379,7 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
         const now = Date.now();
         const newThread: Thread = {
             ...saved,
+            followUpQuestions: saved.followUpQuestions ?? [],
             id: `thread-${now}-${Math.random().toString(36).substr(2, 9)}`,
             status: 'active',
             createdAt: now,

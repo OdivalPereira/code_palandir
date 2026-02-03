@@ -406,6 +406,8 @@ export interface Thread {
   conversation: ChatMessage[];
   /** Sugestões geradas pela IA */
   suggestions: ThreadSuggestion[];
+  /** Perguntas de follow-up sugeridas */
+  followUpQuestions: string[];
   /** Contagem total de tokens estimada */
   tokenCount: number;
   /** Status da thread */
