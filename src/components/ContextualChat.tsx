@@ -99,6 +99,7 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
     const addMessage = useBasketStore(state => state.addMessage);
     const switchMode = useBasketStore(state => state.switchMode);
     const addSuggestion = useBasketStore(state => state.addSuggestion);
+    const setFollowUpQuestions = useBasketStore(state => state.setFollowUpQuestions);
     const getActiveThread = useBasketStore(state => state.getActiveThread);
 
     // Local state
@@ -168,13 +169,17 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
             for (const suggestion of response.suggestions) {
                 addSuggestion(currentThread.id, suggestion);
             }
+
+            if (response.followUpQuestions.length > 0) {
+                setFollowUpQuestions(currentThread.id, response.followUpQuestions);
+            }
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Erro ao enviar mensagem';
             setError(message);
         } finally {
             setIsLoading(false);
         }
-    }, [currentThread, inputValue, isLoading, addMessage, addSuggestion]);
+    }, [currentThread, inputValue, isLoading, addMessage, addSuggestion, setFollowUpQuestions]);
 
     // Mudar modo
     const handleModeChange = useCallback((mode: AIActionMode) => {
