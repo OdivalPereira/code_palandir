@@ -1231,7 +1231,7 @@ const handleGeneratePrompt = async (req, res, session) => {
         techniques: data.techniquesApplied,
         sections: data.sections,
       },
-      usage: extractUsageTokens(response),
+      usage: response?.meta?.usage ?? null,
     };
 
     jsonResponse(res, 200, result);
