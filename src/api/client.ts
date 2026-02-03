@@ -10,6 +10,7 @@ import {
   ProjectSummary,
   SelectedNodePayload,
   SessionPayload,
+  SESSION_SCHEMA_VERSION,
   UIIntentSchema,
 } from '../types';
 import {
@@ -19,6 +20,7 @@ import {
   setCachedAnalysis,
   setCachedRelevantFiles,
 } from '../cacheRepository';
+import { isAiMetricsResponse, isSessionPayload } from '../utils/typeGuards';
 
 type AnalyzeIntentPayload = {
   fileContent: string;
@@ -240,6 +242,24 @@ export const fetchAiMetrics = async (): Promise<AiMetricsResponse> => {
     errorMessage: 'Falha ao carregar métricas.',
   });
 
+  const fallback: AiMetricsResponse = {
+    summary: {
+      totalRequests: 0,
+      successCount: 0,
+      errorCount: 0,
+      hitRate: 0,
+      averageLatencyMs: 0,
+      totalCostUsd: 0,
+      averageCostUsd: 0,
+      lastUpdated: new Date(0).toISOString(),
+    },
+    recent: [],
+  };
+
+  if (!isAiMetricsResponse(response)) {
+    return fallback;
+  }
+
   return {
     ...response,
     recent: response.recent.map((entry) => ({
@@ -276,8 +296,8 @@ export const logoutSession = async (): Promise<void> => {
 export const saveSession = async (
   session: SessionPayload,
   sessionId?: string | null,
-): Promise<SaveSessionResponse> =>
-  requestJson<SaveSessionResponse>('/api/sessions/save', {
+): Promise<SaveSessionResponse> => {
+  const response = await requestJson<unknown>('/api/sessions/save', {
     method: 'POST',
     body: JSON.stringify({
       sessionId: sessionId ?? undefined,
@@ -287,10 +307,48 @@ export const saveSession = async (
     errorMessage: 'Failed to save session.',
   });
 
-export const openSession = async (sessionId: string): Promise<OpenSessionResponse> =>
-  requestJson<OpenSessionResponse>(`/api/sessions/${sessionId}`, {}, {
+  const fallbackSession: SessionPayload = {
+    schemaVersion: SESSION_SCHEMA_VERSION,
+    graph: { rootNode: null, highlightedPaths: [], expandedDirectories: [] },
+    selection: { selectedNodeId: null },
+    prompts: [],
+    layout: null,
+  };
+
+  if (typeof response !== 'object' || response === null) {
+    return { sessionId: sessionId ?? '', session: fallbackSession };
+  }
+
+  const data = response as { sessionId?: unknown; session?: unknown };
+  return {
+    sessionId: typeof data.sessionId === 'string' ? data.sessionId : sessionId ?? '',
+    session: isSessionPayload(data.session) ? data.session : fallbackSession,
+  };
+};
+
+export const openSession = async (sessionId: string): Promise<OpenSessionResponse> => {
+  const response = await requestJson<unknown>(`/api/sessions/${sessionId}`, {}, {
     errorMessage: 'Failed to open session.',
   });
+
+  const fallbackSession: SessionPayload = {
+    schemaVersion: SESSION_SCHEMA_VERSION,
+    graph: { rootNode: null, highlightedPaths: [], expandedDirectories: [] },
+    selection: { selectedNodeId: null },
+    prompts: [],
+    layout: null,
+  };
+
+  if (typeof response !== 'object' || response === null) {
+    return { sessionId, session: fallbackSession };
+  }
+
+  const data = response as { sessionId?: unknown; session?: unknown };
+  return {
+    sessionId: typeof data.sessionId === 'string' ? data.sessionId : sessionId,
+    session: isSessionPayload(data.session) ? data.session : fallbackSession,
+  };
+};
 
 export const generatePromptAgent = async (input: PromptAgentInput): Promise<GeneratedPrompt> => {
   const result = await requestAi<GeneratedPrompt>('generate-prompt', input as any);
