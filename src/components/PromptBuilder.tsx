@@ -1,13 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ModuleInput, PromptItem } from '../types';
+import { useGraphStore } from '../stores/graphStore';
+import { selectModuleInputs, selectPromptItems } from '../stores/graphSelectors';
 import { Trash2, Copy, MessageSquarePlus } from 'lucide-react';
-
-interface PromptBuilderProps {
-  items: PromptItem[];
-  modules: ModuleInput[];
-  onRemove: (id: string) => void;
-  onClear: () => void;
-}
 
 const buildModulesSection = (modules: ModuleInput[]) => {
   if (modules.length === 0) {
@@ -41,7 +36,11 @@ const buildPlanSection = () =>
     '- Risco: divergência de requisitos. Checkpoint: alinhar requisitos com exemplos de uso.'
   ].join('\n');
 
-const PromptBuilder: React.FC<PromptBuilderProps> = ({ items, modules, onRemove, onClear }) => {
+const PromptBuilder: React.FC = () => {
+  const items = useGraphStore(selectPromptItems);
+  const modules = useGraphStore(selectModuleInputs);
+  const removePromptItem = useGraphStore((state) => state.removePromptItem);
+  const clearPromptItems = useGraphStore((state) => state.clearPromptItems);
   const generateFinalPrompt = useCallback(() => {
     let prompt = 'Preciso de ajuda para entender e modificar este código.\n\n';
 
@@ -125,7 +124,7 @@ const PromptBuilder: React.FC<PromptBuilderProps> = ({ items, modules, onRemove,
                   {item.type}
                 </span>
                 <button 
-                  onClick={() => onRemove(item.id)}
+                  onClick={() => removePromptItem(item.id)}
                   className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   <Trash2 size={14} />
@@ -178,7 +177,7 @@ const PromptBuilder: React.FC<PromptBuilderProps> = ({ items, modules, onRemove,
           Copy Optimized Prompt
         </button>
         <button 
-          onClick={onClear}
+          onClick={clearPromptItems}
           disabled={items.length === 0}
           className="w-full text-xs text-slate-500 hover:text-slate-300 py-1"
         >

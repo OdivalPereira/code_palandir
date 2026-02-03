@@ -2,20 +2,15 @@ import React, { useState } from 'react';
 import { X, Check, Database, Server, Shield, ChevronRight, Sparkles } from 'lucide-react';
 import { BackendTemplate, TemplateComponent } from './TemplateSidebar';
 import { FlatNode, Link, MissingDependency } from '../types';
+import { useGraphStore } from '../stores/graphStore';
+import { selectSelectedNode, selectWizardTemplate } from '../stores/graphSelectors';
 
-interface TemplateWizardProps {
-    template: BackendTemplate;
-    targetComponent?: FlatNode | null;
-    onClose: () => void;
-    onApply: (ghostNodes: FlatNode[], ghostLinks: Link[], deps: MissingDependency[]) => void;
-}
-
-export const TemplateWizard: React.FC<TemplateWizardProps> = ({
-    template,
-    targetComponent,
-    onClose,
-    onApply,
-}) => {
+export const TemplateWizard: React.FC = () => {
+    const template = useGraphStore(selectWizardTemplate);
+    const targetComponent = useGraphStore(selectSelectedNode);
+    const setWizardTemplate = useGraphStore((state) => state.setWizardTemplate);
+    const setGhostData = useGraphStore((state) => state.setGhostData);
+    if (!template) return null;
     const [step, setStep] = useState<'customize' | 'preview' | 'done'>('customize');
     const [selectedComponents, setSelectedComponents] = useState<Set<number>>(
         new Set(template.components.map((_, i) => i))
@@ -97,11 +92,11 @@ export const TemplateWizard: React.FC<TemplateWizardProps> = ({
             requiredBy: [targetComponent?.id].filter(Boolean) as string[],
         }));
 
-        onApply(ghostNodes, ghostLinks, deps);
+        setGhostData(ghostNodes, ghostLinks, deps);
         setStep('done');
 
         setTimeout(() => {
-            onClose();
+            setWizardTemplate(null);
         }, 1500);
     };
 
@@ -115,7 +110,7 @@ export const TemplateWizard: React.FC<TemplateWizardProps> = ({
                         <h2 className="font-semibold text-lg text-white">{template.name}</h2>
                     </div>
                     <button
-                        onClick={onClose}
+                        onClick={() => setWizardTemplate(null)}
                         className="p-1 hover:bg-slate-700 rounded transition-colors"
                     >
                         <X size={18} className="text-slate-400" />
