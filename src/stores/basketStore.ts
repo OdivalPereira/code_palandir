@@ -280,7 +280,7 @@ interface BasketStore extends BasketState {
     // Token management
     recalculateTokens: () => void;
     getTokenUsagePercent: () => number;
-    getTokenStatus: () => 'ok' | 'warning' | 'danger';
+    getTokenStatus: () => 'safe' | 'warning' | 'critical';
 
     // Library
     library: SavedThread[];
@@ -670,9 +670,9 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
         const percent = get().getTokenUsagePercent();
         const { warningThreshold, dangerThreshold } = get();
 
-        if (percent >= dangerThreshold) return 'danger';
+        if (percent >= dangerThreshold) return 'critical';
         if (percent >= warningThreshold) return 'warning';
-        return 'ok';
+        return 'safe';
     },
 
     // ==========================================
