@@ -80,6 +80,7 @@ const PromptBuilder: React.FC = () => {
   const [isDirty, setIsDirty] = useState(false);
   const [isRefining, setIsRefining] = useState(false);
   const [refineError, setRefineError] = useState<string | null>(null);
+  const [appliedTechniques, setAppliedTechniques] = useState<string[]>([]);
 
   useEffect(() => {
     if (!isDirty) {
@@ -110,9 +111,10 @@ const PromptBuilder: React.FC = () => {
         files: files.length > 0 ? files : undefined
       });
 
-      if (result && result.content) {
+      if (result) {
         setEditablePrompt(result.content);
         setIsDirty(true);
+        setAppliedTechniques(result.techniquesApplied);
       }
     } catch (e) {
       console.error('AI Agent failed', e);
@@ -130,6 +132,7 @@ const PromptBuilder: React.FC = () => {
   const handleReset = () => {
     setEditablePrompt(generatedPrompt);
     setIsDirty(false);
+    setAppliedTechniques([]);
   };
 
   return (
@@ -215,6 +218,11 @@ const PromptBuilder: React.FC = () => {
         </button>
         {refineError && (
           <p className="text-xs text-red-300 text-center">{refineError}</p>
+        )}
+        {appliedTechniques.length > 0 && (
+          <p className="text-[11px] text-slate-400 text-center">
+            Técnicas aplicadas: {appliedTechniques.join(', ')}
+          </p>
         )}
         <button
           onClick={handleCopy}

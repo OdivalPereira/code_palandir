@@ -357,21 +357,33 @@ export const generatePromptAgent = async (input: PromptAgentInput): Promise<Gene
     typeof response.metadata === 'object' && response.metadata !== null
       ? (response.metadata as Record<string, unknown>)
       : {};
+  const responseSections =
+    typeof response.sections === 'object' && response.sections !== null
+      ? (response.sections as Record<string, unknown>)
+      : {};
   const sections =
     typeof metadata.sections === 'object' && metadata.sections !== null
       ? (metadata.sections as Record<string, unknown>)
-      : {};
+      : responseSections;
   const usage =
     typeof response.usage === 'object' && response.usage !== null
       ? (response.usage as Record<string, unknown>)
       : null;
 
-  const content = typeof response.prompt === 'string' ? response.prompt : '';
-  const techniquesApplied = Array.isArray(metadata.techniques)
-    ? metadata.techniques.filter((technique): technique is string => typeof technique === 'string')
+  const content =
+    typeof response.content === 'string'
+      ? response.content
+      : typeof response.prompt === 'string'
+        ? response.prompt
+        : '';
+  const techniquesSource = Array.isArray(response.techniquesApplied) ? response.techniquesApplied : metadata.techniques;
+  const techniquesApplied = Array.isArray(techniquesSource)
+    ? techniquesSource.filter((technique): technique is string => typeof technique === 'string')
     : [];
   const derivedTokenCount =
-    typeof usage?.totalTokens === 'number'
+    typeof response.tokenCount === 'number'
+      ? response.tokenCount
+      : typeof usage?.totalTokens === 'number'
       ? usage.totalTokens
       : typeof usage?.outputTokens === 'number'
         ? usage.outputTokens
