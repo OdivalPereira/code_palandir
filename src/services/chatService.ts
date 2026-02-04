@@ -61,6 +61,56 @@ const EMPTY_USAGE: AiUsageTokens = {
     outputTokens: null,
     totalTokens: null,
 };
+const IS_MOCK_MODE =
+    import.meta.env.VITE_AI_MODE === 'mock' ||
+    import.meta.env.VITE_OFFLINE_MODE === 'true' ||
+    import.meta.env.VITE_OFFLINE_MODE === '1';
+
+function buildMockResponse(options: SendMessageOptions): ChatResponse {
+    const { userMessage, context } = options;
+    const elementName = context.element?.name ?? 'o elemento selecionado';
+    const elementPath = context.element?.path ? ` (${context.element.path})` : '';
+    const modeDescription = getModeDescription(context.mode);
+    const now = Date.now();
+
+    return {
+        response: [
+            `Modo mock ativo: analisando ${elementName}${elementPath} em modo "${modeDescription}".`,
+            `Resumo rápido: ${elementName} parece central para a conversa atual e a última mensagem foi "${userMessage}".`,
+            'Sugestões abaixo são simuladas para ajudar no fluxo enquanto o backend não está disponível.',
+        ].join(' '),
+        suggestions: [
+            {
+                id: `mock-sug-${now}-1`,
+                type: 'snippet',
+                title: `Checklist rápido para ${elementName}`,
+                description: 'Passos sugeridos para revisar o elemento em modo offline.',
+                content: [
+                    `- Identifique responsabilidades de ${elementName}.`,
+                    '- Verifique dependências diretas e efeitos colaterais.',
+                    '- Anote pontos de melhoria para compartilhar com a equipe.',
+                ].join('\n'),
+                included: true,
+            },
+            {
+                id: `mock-sug-${now}-2`,
+                type: 'file',
+                title: 'Rascunho de documentação',
+                description: 'Arquivo sugerido para registrar decisões enquanto a IA real não responde.',
+                path: `docs/mock-notes/${context.mode}-${elementName.replace(/\s+/g, '-').toLowerCase()}.md`,
+                content: `# Notas (${modeDescription})\n\n- Contexto: ${elementName}${elementPath}\n- Próximos passos:\n  - [ ] Validar hipóteses\n  - [ ] Refatorar se necessário\n`,
+                included: false,
+            },
+        ],
+        followUpQuestions: [
+            `Qual é o objetivo principal para ${elementName} neste fluxo?`,
+            `Você quer que eu gere um plano detalhado para o modo ${modeDescription}?`,
+            'Há dependências críticas que devemos mapear agora?',
+        ],
+        usage: EMPTY_USAGE,
+        latencyMs: 0,
+    };
+}
 
 function normalizeUsage(usage: unknown): AiUsageTokens | undefined {
     if (usage === null) {
@@ -84,6 +134,10 @@ function normalizeUsage(usage: unknown): AiUsageTokens | undefined {
  * Envia uma mensagem para o chat contextual da IA.
  */
 export async function sendChatMessage(options: SendMessageOptions): Promise<ChatResponse> {
+    if (IS_MOCK_MODE) {
+        return buildMockResponse(options);
+    }
+
     const { userMessage, context } = options;
 
     const payload = {

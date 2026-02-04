@@ -68,6 +68,21 @@ O front-end utiliza o proxy do Vite para encaminhar chamadas REST para `/api` at
 
 Crie um arquivo `.env` na raiz do projeto com base no `.env.example` e ajuste os valores conforme o seu ambiente.
 
+### Modo offline/mock (front-end)
+
+Para usar o chat contextual sem depender do backend de IA, habilite o modo mock no Vite. Isso retorna respostas simuladas com sugestões e perguntas de follow-up, úteis para demos ou desenvolvimento offline.
+
+Opções suportadas:
+
+```bash
+# Habilita respostas simuladas do chat
+VITE_AI_MODE=mock
+# ou
+VITE_OFFLINE_MODE=true
+```
+
+Com qualquer uma dessas variáveis ativas, o front-end não chama `/api/ai/chat` e usa uma resposta mock local.
+
 ### Variáveis obrigatórias
 
 Estas variáveis precisam estar presentes para o backend iniciar:
