@@ -78,11 +78,12 @@ const ThreadLibrary: React.FC<ThreadLibraryProps> = ({ onClose, className = '' }
     const filteredThreads = useMemo(() => {
         return library.filter(thread => {
             // Search filter
-            const searchLower = searchTerm.toLowerCase();
+            const searchLower = searchTerm.toLowerCase().replace(/#/g, '');
             const matchesSearch =
                 thread.title.toLowerCase().includes(searchLower) ||
                 thread.userNote?.toLowerCase().includes(searchLower) ||
-                thread.baseElement.name.toLowerCase().includes(searchLower);
+                thread.baseElement.name.toLowerCase().includes(searchLower) ||
+                thread.tags?.some(tag => tag.toLowerCase().includes(searchLower));
 
             if (!matchesSearch) return false;
 
