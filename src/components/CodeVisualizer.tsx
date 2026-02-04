@@ -713,17 +713,6 @@ const CodeVisualizer: React.FC = () => {
         }
       });
 
-    node.on("click", (event, d) => {
-      event.stopPropagation();
-      if (d.type === 'cluster') {
-        const { parentPath } = d.data as ClusterData;
-        requestExpandNode?.(parentPath);
-        expandDirectory(parentPath);
-        return;
-      }
-      triggerSelectNode(d.id);
-    });
-
     node.on("dblclick", (event, d) => {
       if (d.type === 'directory') {
         event.stopPropagation();
