@@ -5,7 +5,7 @@
  * baseado no uso de tokens em relação ao limite máximo.
  */
 
-import React, { useMemo, useId, useState } from 'react';
+import React, { useId, useState } from 'react';
 import { Zap, AlertTriangle, AlertOctagon, Sparkles } from 'lucide-react';
 import { useBasketStore } from '../stores/basketStore';
 
@@ -65,16 +65,21 @@ const TokenMonitor: React.FC<TokenMonitorProps> = ({ compact = false, className 
     // Store hooks
     const totalTokens = useBasketStore(state => state.totalTokens);
     const maxTokens = useBasketStore(state => state.maxTokens);
-    const getTokenUsagePercent = useBasketStore(state => state.getTokenUsagePercent);
-    const getTokenStatus = useBasketStore(state => state.getTokenStatus);
+    const warningThreshold = useBasketStore(state => state.warningThreshold);
+    const dangerThreshold = useBasketStore(state => state.dangerThreshold);
     const threads = useBasketStore(state => state.threads);
     const activeThreadId = useBasketStore(state => state.activeThreadId);
     const compactThread = useBasketStore(state => state.compactThread);
     const [isCompacting, setIsCompacting] = useState(false);
 
     // Derived values
-    const percent = useMemo(() => getTokenUsagePercent(), [getTokenUsagePercent, totalTokens]);
-    const status = useMemo(() => getTokenStatus(), [getTokenStatus, totalTokens]);
+    const percent = maxTokens > 0 ? (totalTokens / maxTokens) * 100 : 0;
+    const status =
+        percent >= dangerThreshold
+            ? 'critical'
+            : percent >= warningThreshold
+              ? 'warning'
+              : 'safe';
     const colors = STATUS_COLORS[status];
 
     // Format numbers
