@@ -17,6 +17,14 @@
    npm run dev
    ```
 
+## Fluxo de uso
+
+1. Selecione um nó no grafo exibido pelo **CodeVisualizer** para abrir o contexto desejado.
+2. Abra o balão/ação de IA associado ao nó para iniciar o fluxo.
+3. Inicie o chat contextual no **ContextualChat** para conversar sobre aquele trecho.
+4. Visualize as sugestões geradas e refine a conversa conforme necessário.
+5. Salve a thread na biblioteca usando a **ThreadLibrary** para consulta posterior.
+
 ## Instalação limpa
 
 Se você suspeitar de problemas com dependências ou lockfile, faça uma instalação limpa:
