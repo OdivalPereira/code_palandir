@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ModuleInput } from '../types';
+import { GeneratedPrompt, ModuleInput } from '../types';
 import { useGraphStore } from '../stores/graphStore';
 import { selectModuleInputs, selectPromptItems } from '../stores/graphSelectors';
 import { Trash2, Copy, MessageSquarePlus, Sparkles, Loader2 } from 'lucide-react';
@@ -81,6 +81,7 @@ const PromptBuilder: React.FC = () => {
   const [isRefining, setIsRefining] = useState(false);
   const [refineError, setRefineError] = useState<string | null>(null);
   const [appliedTechniques, setAppliedTechniques] = useState<string[]>([]);
+  const [generatedSections, setGeneratedSections] = useState<GeneratedPrompt['sections'] | null>(null);
 
   useEffect(() => {
     if (!isDirty) {
@@ -115,6 +116,7 @@ const PromptBuilder: React.FC = () => {
         setEditablePrompt(result.content);
         setIsDirty(true);
         setAppliedTechniques(result.techniquesApplied);
+        setGeneratedSections(result.sections);
       }
     } catch (e) {
       console.error('AI Agent failed', e);
@@ -133,6 +135,7 @@ const PromptBuilder: React.FC = () => {
     setEditablePrompt(generatedPrompt);
     setIsDirty(false);
     setAppliedTechniques([]);
+    setGeneratedSections(null);
   };
 
   return (
@@ -204,6 +207,48 @@ const PromptBuilder: React.FC = () => {
             }}
             className="w-full h-64 bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
           />
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs uppercase tracking-wide text-slate-400">Seções geradas pelo Agent</span>
+            <span className="text-[11px] text-slate-500">Prévia estruturada</span>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {([
+              { key: 'context', title: 'Contexto' },
+              { key: 'tasks', title: 'Tarefas' },
+              { key: 'instructions', title: 'Instruções' },
+              { key: 'validation', title: 'Validação' }
+            ] as const).map((section) => {
+              const value = generatedSections?.[section.key] ?? '';
+              const hasContent = value.trim().length > 0;
+              return (
+                <div
+                  key={section.key}
+                  className="bg-slate-900/60 border border-slate-700 rounded-lg p-3 text-xs text-slate-200"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] uppercase tracking-wide text-slate-400">
+                      {section.title}
+                    </span>
+                    {!hasContent && (
+                      <span className="text-[10px] text-slate-500">Sem conteúdo</span>
+                    )}
+                  </div>
+                  {hasContent ? (
+                    <pre className="whitespace-pre-wrap text-xs text-slate-200 font-sans">
+                      {value}
+                    </pre>
+                  ) : (
+                    <p className="text-xs text-slate-500 italic">
+                      Placeholder: a seção {section.title.toLowerCase()} será exibida aqui quando o Agent gerar.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
