@@ -97,8 +97,8 @@ const ThreadLibrary: React.FC<ThreadLibraryProps> = ({ onClose, className = '' }
         }).sort((a, b) => b.savedAt - a.savedAt); // Most recent first
     }, [library, searchTerm, selectedTags]);
 
-    const handleLoad = (thread: SavedThread) => {
-        loadFromLibrary(thread.id);
+    const handleLoad = (thread: SavedThread, mode: 'restore' | 'duplicate') => {
+        loadFromLibrary(thread.id, mode);
         onClose(); // Close library after loading
     };
 
@@ -302,13 +302,22 @@ const ThreadLibrary: React.FC<ThreadLibraryProps> = ({ onClose, className = '' }
                                         </div>
                                     </div>
 
-                                    <button
-                                        onClick={() => handleLoad(thread)}
-                                        className="w-full flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-500 text-white text-sm py-1.5 rounded transition-colors"
-                                    >
-                                        <CornerUpRight size={14} />
-                                        Carregar no Basket
-                                    </button>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            onClick={() => handleLoad(thread, 'restore')}
+                                            className="flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-500 text-white text-sm py-1.5 rounded transition-colors"
+                                        >
+                                            <CornerUpRight size={14} />
+                                            Restaurar
+                                        </button>
+                                        <button
+                                            onClick={() => handleLoad(thread, 'duplicate')}
+                                            className="flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white text-sm py-1.5 rounded transition-colors"
+                                        >
+                                            <CornerUpRight size={14} />
+                                            Duplicar
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
