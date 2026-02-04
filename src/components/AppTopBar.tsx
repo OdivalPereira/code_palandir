@@ -221,8 +221,8 @@ const AppTopBar: React.FC = () => {
 
           <button
             onClick={() => {
-              const threads = useBasketStore.getState().threads;
-              const md = generateMarkdownExport(threads);
+              const { threads, maxTokens, warningThreshold, dangerThreshold } = useBasketStore.getState();
+              const md = generateMarkdownExport(threads, { maxTokens, warningThreshold, dangerThreshold });
               downloadMarkdown(md, `codemind-session-${new Date().toISOString().slice(0, 10)}.md`);
             }}
             className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors"

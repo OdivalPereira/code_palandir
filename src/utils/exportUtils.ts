@@ -14,10 +14,19 @@ const formatDate = (ts: number): string => {
 /**
  * Gera o conteúdo Markdown para um conjunto de threads.
  */
-export const generateMarkdownExport = (threads: Thread[]): string => {
+type ExportContext = {
+    maxTokens?: number;
+    warningThreshold?: number;
+    dangerThreshold?: number;
+};
+
+export const generateMarkdownExport = (threads: Thread[], context?: ExportContext): string => {
     if (threads.length === 0) {
         return '# CodeMind AI Export\n\nNenhuma thread para exportar.';
     }
+
+    const totalTokenCount = threads.reduce((sum, thread) => sum + thread.tokenCount, 0);
+    const totalMessageCount = threads.reduce((sum, thread) => sum + thread.conversation.length, 0);
 
     const statusCounts = threads.reduce<Record<string, number>>((acc, thread) => {
         acc[thread.status] = (acc[thread.status] ?? 0) + 1;
@@ -31,8 +40,18 @@ export const generateMarkdownExport = (threads: Thread[]): string => {
     let md = `# CodeMind AI Session Export\n`;
     md += `**Date:** ${formatDate(Date.now())}\n`;
     md += `**Total Threads:** ${threads.length}\n`;
+    md += `**Total Messages:** ${totalMessageCount}\n`;
+    md += `**Total Tokens:** ${totalTokenCount}\n`;
     if (statusBreakdown) {
         md += `**Status Breakdown:** ${statusBreakdown}\n`;
+    }
+    if (context?.maxTokens) {
+        md += `**Token Limit:** ${context.maxTokens}\n`;
+    }
+    if (context?.warningThreshold != null || context?.dangerThreshold != null) {
+        const warning = context?.warningThreshold != null ? `${context.warningThreshold}%` : 'N/A';
+        const danger = context?.dangerThreshold != null ? `${context.dangerThreshold}%` : 'N/A';
+        md += `**Warning Thresholds:** ${warning} / ${danger}\n`;
     }
     md += `\n`;
     md += `---\n\n`;
@@ -43,7 +62,12 @@ export const generateMarkdownExport = (threads: Thread[]): string => {
         md += `- **Status:** ${thread.status}\n`;
         md += `- **Mode:** ${thread.currentMode}\n`;
         md += `- **Tokens:** ${thread.tokenCount}\n`;
-        md += `- **Created:** ${formatDate(thread.createdAt)}\n\n`;
+        md += `- **Created:** ${formatDate(thread.createdAt)}\n`;
+        md += `- **Updated:** ${formatDate(thread.updatedAt)}\n`;
+        if (thread.modesUsed.length > 0) {
+            md += `- **Modes Used:** ${thread.modesUsed.join(', ')}\n`;
+        }
+        md += `\n`;
 
         if (thread.conversation.length > 0) {
             md += `### Conversation\n\n`;
