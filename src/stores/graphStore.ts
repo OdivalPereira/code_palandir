@@ -3,6 +3,8 @@ import {
   analyzeFile,
   fetchAiMetrics,
   fetchSessionAccessToken,
+  fetchUserRepos,
+  GitHubRepo,
   logoutSession,
   openSession,
   optimizePrompt,
@@ -20,6 +22,7 @@ import {
   AiMetricsResponse,
   AppStatus,
   CodeNode,
+  DetectedFramework,
   FileSystemNode,
   FlatNode,
   Link,
@@ -35,6 +38,7 @@ import {
   SessionGraphState,
   SessionSelectionState,
   UIIntentSchema,
+  UINode,
 } from '../types';
 
 export type GraphState = {
@@ -59,13 +63,32 @@ export type GraphState = {
   moduleInputs: ModuleInput[];
   ghostNodes: FlatNode[];
   ghostLinks: Link[];
-  missingDependencies: MissingDependency[];
   allFilePaths: string[];
   localFileHandles: Map<string, File>;
   childrenIndex: Map<string, { path: string; name: string; type: 'directory' | 'file' }[]>;
   descendantCount: Map<string, number>;
   autoRestoreSignature: string | null;
   wizardTemplate: BackendTemplate | null;
+  // Phase 1: Cache e Framework Detection
+  projectFileContents: Map<string, string>;
+  detectedFramework: DetectedFramework | null;
+  frameworkStatus: 'idle' | 'detecting' | 'done' | 'error';
+  githubOwnerRepo: { owner: string; repo: string; branch: string } | null;
+  // Phase 1 + 2 + 4 Actions
+  downloadProjectFiles: (paths: string[]) => Promise<void>;
+  detectFramework: () => Promise<void>;
+  buildUIGraph: () => Promise<void>;
+  analyzeDependencies: () => Promise<void>;
+  // Phase 5 Actions
+  toggleMultiSelection: (nodeId: string) => void;
+  clearMultiSelection: () => void;
+  // Phase 5 State
+  missingDependencies: MissingDependency[];
+  selectedNodeIds: Set<string>;
+  // Phase 2: UI Graph
+  uiGraph: UINode | null;
+  uiGraphStatus: 'idle' | 'loading' | 'done' | 'error';
+
   // UI actions
   setSearchQuery: (query: string) => void;
   setGithubUrl: (url: string) => void;
@@ -84,6 +107,10 @@ export type GraphState = {
   setAuthNotice: (notice: string | null) => void;
   refreshAuthSession: () => Promise<void>;
   logout: () => Promise<void>;
+  // User repos
+  userRepos: GitHubRepo[];
+  userReposStatus: 'idle' | 'loading' | 'error';
+  fetchUserRepos: () => Promise<void>;
   // Data actions
   processFiles: (files: FileList) => Promise<void>;
   importGithubRepo: () => Promise<void>;
@@ -362,12 +389,23 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   ghostNodes: [],
   ghostLinks: [],
   missingDependencies: [],
+  selectedNodeIds: new Set(),
   allFilePaths: [],
   localFileHandles: new Map(),
   childrenIndex: new Map(),
   descendantCount: new Map(),
   autoRestoreSignature: null,
   wizardTemplate: null,
+  // Phase 1: Cache e Framework Detection
+  projectFileContents: new Map(),
+  detectedFramework: null,
+  frameworkStatus: 'idle',
+  githubOwnerRepo: null,
+  // Phase 2: UI Graph
+  uiGraph: null,
+  uiGraphStatus: 'idle',
+  userRepos: [],
+  userReposStatus: 'idle',
   setSearchQuery: (query) => set({ searchQuery: query }),
   setGithubUrl: (url) => set({ githubUrl: url }),
   setPromptOpen: (open) => set({ isPromptOpen: open }),
@@ -411,6 +449,234 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     clearSessionAccessToken();
     set({ isAuthenticated: false, authNotice: AUTH_NOTICE_MESSAGE });
   },
+  fetchUserRepos: async () => {
+    if (!get().isAuthenticated) {
+      set({ authNotice: AUTH_NOTICE_MESSAGE });
+      return;
+    }
+    set({ userReposStatus: 'loading' });
+    try {
+      const repos = await fetchUserRepos();
+      set({ userRepos: repos, userReposStatus: 'idle' });
+    } catch (error) {
+      console.error(error);
+      set({ userReposStatus: 'error' });
+    }
+  },
+  // Phase 1: Download project files content from GitHub
+  downloadProjectFiles: async (paths: string[]) => {
+    const { githubOwnerRepo, projectFileContents } = get();
+    if (!githubOwnerRepo) return;
+
+    const { owner, repo, branch } = githubOwnerRepo;
+    const newContents = new Map(projectFileContents);
+
+    for (const filePath of paths) {
+      try {
+        const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}`;
+        const response = await fetch(url);
+        if (response.ok) {
+          const content = await response.text();
+          newContents.set(filePath, content);
+        }
+      } catch (error) {
+        console.warn(`Failed to download ${filePath}:`, error);
+      }
+    }
+
+    set({ projectFileContents: newContents });
+  },
+  // Phase 1: Detect framework via AI
+  detectFramework: async () => {
+    const { projectFileContents, isAuthenticated } = get();
+    if (!isAuthenticated) {
+      console.warn('User not authenticated, skipping framework detection');
+      return;
+    }
+
+    set({ frameworkStatus: 'detecting', status: AppStatus.DETECTING_FRAMEWORK });
+
+    try {
+      // Prepare payload for backend
+      const packageJsonContent = projectFileContents.get('package.json') || '';
+      const entryFiles: Array<{ path: string; content: string }> = [];
+
+      // Get key frontend files
+      const frontendPatterns = [
+        /^src\/(index|main|App)\.(ts|tsx|js|jsx)$/,
+        /^(index|main|App)\.(ts|tsx|js|jsx)$/,
+        /\.vue$/,
+        /\.svelte$/
+      ];
+
+      for (const [path, content] of projectFileContents.entries()) {
+        if (frontendPatterns.some(p => p.test(path)) && entryFiles.length < 5) {
+          entryFiles.push({ path, content: content.slice(0, 2000) }); // Limit size
+        }
+      }
+
+      const baseUrl = import.meta.env.VITE_SERVER_URL || '';
+      const response = await fetch(`${baseUrl}/api/analyze/detect-framework`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ packageJson: packageJsonContent, entryFiles })
+      });
+
+      if (!response.ok) {
+        throw new Error('Framework detection failed');
+      }
+
+      const data = await response.json();
+      set({
+        detectedFramework: data.framework,
+        frameworkStatus: 'done',
+        status: AppStatus.IDLE
+      });
+
+      // Auto-trigger UI Graph build after detection
+      get().buildUIGraph();
+
+    } catch (error) {
+      console.error('Framework detection error:', error);
+      set({ frameworkStatus: 'error', status: AppStatus.IDLE });
+    }
+  },
+
+  // Phase 2: Build UI Graph via AI
+  buildUIGraph: async () => {
+    const { projectFileContents, detectedFramework, isAuthenticated } = get();
+    if (!isAuthenticated || !detectedFramework) return;
+
+    set({ uiGraphStatus: 'loading' });
+
+    try {
+      const files: Array<{ path: string; content: string }> = [];
+
+      // Filter relevant files based on framework
+      const uiPatterns = [
+        /\.(tsx|jsx|vue|svelte)$/, // Components
+        /src\/.*\.(js|ts)$/        // Potential logic/utils
+      ];
+
+      // Basic size limit protection
+      let totalSize = 0;
+      const MAX_SIZE = 150000; // 150KB payload limit
+
+      for (const [path, content] of projectFileContents.entries()) {
+        if (uiPatterns.some(p => p.test(path))) {
+          if (totalSize + content.length < MAX_SIZE) {
+            files.push({ path, content });
+            totalSize += content.length;
+          }
+        }
+      }
+
+      const baseUrl = import.meta.env.VITE_SERVER_URL || '';
+      const response = await fetch(`${baseUrl}/api/analyze/ui-hierarchy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          framework: detectedFramework.name,
+          files,
+          entryPoint: detectedFramework.entryPoint
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('UI Graph build failed');
+      }
+
+      const data = await response.json();
+      set({
+        uiGraph: data.graph.root,
+        uiGraphStatus: 'done',
+        graphViewMode: 'ui'
+      });
+      console.log('UI Graph built:', data.graph);
+
+      // Auto-trigger dependency analysis after UI graph is built
+      get().analyzeDependencies();
+
+    } catch (error) {
+      console.error('UI Graph build error:', error);
+      set({ uiGraphStatus: 'error' });
+    }
+  },
+
+  analyzeDependencies: async () => {
+    const { projectFileContents, detectedFramework, isAuthenticated } = get();
+    if (!isAuthenticated || !detectedFramework) return;
+
+    // Check if we haven't already analyzed (avoid loops unless forced)
+    // For now we run it every time buildUIGraph finishes
+
+    console.log('Starting Dependency Analysis...');
+
+    try {
+      const frontendFiles: Array<{ path: string; content: string }> = [];
+      const backendFiles: Array<{ path: string; content: string }> = [];
+
+      // Filter frontend files (same as UI graph + stores/services)
+      const frontendPatterns = [
+        /\.(tsx|jsx|vue|svelte)$/,
+        /src\/.*\.ts$/,
+        /src\/services\/.*\.ts$/,
+        /src\/api\/.*\.ts$/
+      ];
+
+      // Filter backend files (if any exist in repo)
+      const backendPatterns = [
+        /^server\/.*\.js|ts$/,
+        /^backend\/.*\.js|ts$/,
+        /^api\/.*\.js|ts$/,
+        /route\.ts$/ // Next.js API routes
+      ];
+
+      let totalSize = 0;
+      const MAX_SIZE = 150000; // Shared payload limit
+
+      for (const [path, content] of projectFileContents.entries()) {
+        const isFrontend = frontendPatterns.some(p => p.test(path));
+        const isBackend = backendPatterns.some(p => p.test(path));
+
+        if ((isFrontend || isBackend) && totalSize + content.length < MAX_SIZE) {
+          if (isFrontend) frontendFiles.push({ path, content });
+          if (isBackend) backendFiles.push({ path, content });
+          totalSize += content.length;
+        }
+      }
+
+      const baseUrl = import.meta.env.VITE_SERVER_URL || '';
+      const response = await fetch(`${baseUrl}/api/analyze/dependencies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          framework: detectedFramework.name,
+          frontendFiles,
+          backendFiles
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Dependency analysis failed');
+      }
+
+      const data = await response.json();
+      // Map analysis to MissingDependency format
+      // Ideally we should update a new state store for dependencies
+      console.log('Dependency Analysis Result:', data.analysis);
+
+      set({
+        missingDependencies: data.analysis || []
+      });
+
+    } catch (error) {
+      console.error('Dependency analysis error:', error);
+    }
+  },
   processFiles: async (files) => {
     set({ status: AppStatus.LOADING_FILES });
     const newFileHandles = new Map<string, File>();
@@ -438,9 +704,25 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     };
 
     get().setRootNode(root);
+    // Phase 5 Initial State
+    const initialState: Partial<GraphState> = {
+      projectFileContents: new Map(),
+      detectedFramework: null,
+      frameworkStatus: 'idle',
+      githubOwnerRepo: null,
+      uiGraph: null,
+      uiGraphStatus: 'idle',
+      missingDependencies: [],
+      selectedNodeIds: new Set(),
+      // ... existing initial states ...
+    };
+
     set({
+      ...initialState,
       fileMap: new Map(),
       moduleInputs: [],
+      missingDependencies: [],
+      selectedNodeIds: new Set(),
       status: AppStatus.IDLE,
       sessionLayout: null,
       childrenIndex,
@@ -452,6 +734,42 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const signature = await computeProjectSignature(allPaths, 'local');
     set({ projectSignature: signature });
     await get().tryRestoreSavedSession(signature);
+
+    // Auto-analyze key entry files to build semantic links
+    const keyFilePatterns = [
+      /^[^/]+\/(index|main|App)\.(ts|tsx|js|jsx)$/,
+      /^[^/]+\/stores\/.*\.(ts|tsx)$/,
+      /^[^/]+\/components\/App.*\.(ts|tsx)$/
+    ];
+    const keyFiles = allPaths.filter((p: string) =>
+      keyFilePatterns.some((pattern) => pattern.test(p))
+    ).slice(0, 5);
+
+    if (keyFiles.length > 0 && get().isAuthenticated) {
+      console.log('Auto-analyzing key files:', keyFiles);
+      for (const filePath of keyFiles) {
+        try {
+          await get().ensureFileContent(filePath);
+        } catch (error) {
+          console.warn(`Failed to auto-analyze ${filePath}:`, error);
+        }
+      }
+    }
+  },
+
+  toggleMultiSelection: (nodeId: string) => {
+    const { selectedNodeIds } = get();
+    const next = new Set(selectedNodeIds);
+    if (next.has(nodeId)) {
+      next.delete(nodeId);
+    } else {
+      next.add(nodeId);
+    }
+    set({ selectedNodeIds: next });
+  },
+
+  clearMultiSelection: () => {
+    set({ selectedNodeIds: new Set() });
   },
   importGithubRepo: async () => {
     const githubUrl = get().githubUrl;
@@ -502,12 +820,36 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         childrenIndex,
         descendantCount,
         localFileHandles: new Map(),
-        allFilePaths: paths
+        allFilePaths: paths,
+        // Phase 1: Save GitHub owner/repo for file downloads
+        githubOwnerRepo: { owner, repo, branch: defaultBranch },
+        projectFileContents: new Map(),
+        detectedFramework: null,
+        frameworkStatus: 'idle'
       });
 
       const signature = await computeProjectSignature(paths, `github:${owner}/${repo}`);
       set({ projectSignature: signature });
       await get().tryRestoreSavedSession(signature);
+
+      // Phase 1: Download key files and detect framework
+      if (get().isAuthenticated) {
+        // Files to download for framework detection
+        const filesToDownload = [
+          'package.json',
+          ...paths.filter((p: string) =>
+            /^(src\/)?(index|main|App)\.(ts|tsx|js|jsx)$/.test(p) ||
+            /\.(vue|svelte)$/.test(p) ||
+            /^(vite|next|angular)\.config\.(js|ts|mjs)$/.test(p)
+          ).slice(0, 10)
+        ];
+
+        console.log('Phase 1: Downloading key files...', filesToDownload);
+        await get().downloadProjectFiles(filesToDownload);
+
+        console.log('Phase 1: Detecting framework...');
+        await get().detectFramework();
+      }
     } catch (error) {
       console.error(error);
       alert("Error importing from GitHub. Ensure it's a public repo.");
@@ -951,6 +1293,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       set({ aiResponse: message, isLoading: false });
     }
   },
+
   expandDirectory: (path) => {
     set((state) => {
       if (state.expandedDirectories.has(path)) {
@@ -962,6 +1305,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       return { expandedDirectories, nodes, links, nodesById, linksById };
     });
   },
+
   toggleDirectory: (path) => {
     set((state) => {
       const expandedDirectories = new Set(state.expandedDirectories);
@@ -974,13 +1318,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       return { expandedDirectories, nodes, links, nodesById, linksById };
     });
   },
+
   setRequestExpandNode: (handler) => set({ requestExpandNode: handler }),
+
   restoreSession: (graph, selection) => {
     const expandedDirectories = new Set(graph.expandedDirectories);
     const { nodes, links, nodesById, linksById } = computeGraph(graph.rootNode, graph.highlightedPaths, expandedDirectories);
     const nextSelected = selection.selectedNodeId && nodesById[selection.selectedNodeId]
       ? nodesById[selection.selectedNodeId]
       : null;
+
     const semanticLinksById: Record<string, SemanticLink> = {};
     if (graph.semanticLinks) {
       graph.semanticLinks.forEach((link) => {
@@ -988,6 +1335,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         semanticLinksById[id] = { ...link };
       });
     }
+
     set({
       rootNode: graph.rootNode,
       highlightedPaths: graph.highlightedPaths,
@@ -1002,14 +1350,21 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       graphViewMode: graph.graphViewMode ?? 'structural',
       flowQuery: { sourceId: null, targetId: null },
       flowPathNodeIds: new Set(),
-      flowPathLinkIds: new Set()
+      flowPathLinkIds: new Set(),
+      // Phase 5 restore logic could go here
+      missingDependencies: [],
+      selectedNodeIds: new Set()
     });
   },
+
   setLayoutCache: (hash, positions) => set({ layoutCache: { hash, positions } }),
   setSessionLayout: (layout) => set({ sessionLayout: layout }),
+
   setSemanticLinks: (links, sourceIds) => {
     set((state) => {
       const nextLinks = { ...state.semanticLinksById };
+
+      // Remove old links for this source
       if (sourceIds && sourceIds.size > 0) {
         Object.entries(nextLinks).forEach(([id, link]) => {
           if (sourceIds.has(link.source as string)) {
@@ -1017,6 +1372,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           }
         });
       }
+
       links.forEach((link) => {
         const source = typeof link.source === 'string' ? link.source : link.source.id;
         const target = typeof link.target === 'string' ? link.target : link.target.id;
@@ -1026,16 +1382,21 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       return { semanticLinksById: nextLinks };
     });
   },
+
   setGraphViewMode: (mode) => set({ graphViewMode: mode }),
+
   setFlowQuery: (sourceId, targetId) => set({ flowQuery: { sourceId, targetId } }),
+
   setFlowHighlight: (nodeIds, linkIds) => set({
     flowPathNodeIds: new Set(nodeIds),
     flowPathLinkIds: new Set(linkIds)
   }),
+
   clearFlowHighlight: () => set({
     flowPathNodeIds: new Set(),
     flowPathLinkIds: new Set()
   }),
+
   expandNode: (path) => {
     const { rootNode, loadingPaths, childrenIndex, descendantCount } = get();
     if (!rootNode) return;
@@ -1066,6 +1427,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       get().setLoadingPaths(next);
     }, 250);
   },
+
   optimizeIntent: async (userIntent) => {
     const { selectedNode, ensureFileContent } = get();
     if (!selectedNode) {
@@ -1110,5 +1472,6 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       set({ optimizedPrompt: message, isOptimizing: false });
     }
   },
+
   clearOptimizedPrompt: () => set({ optimizedPrompt: null, isOptimizing: false }),
 }));

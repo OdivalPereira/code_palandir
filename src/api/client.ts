@@ -293,6 +293,22 @@ export const logoutSession = async (): Promise<void> => {
   });
 };
 
+export type GitHubRepo = {
+  full_name: string;
+  name: string;
+  owner: string;
+  description: string;
+  updated_at: string;
+  private: boolean;
+};
+
+export const fetchUserRepos = async (): Promise<GitHubRepo[]> => {
+  const response = await requestJson<{ repos: GitHubRepo[] }>('/api/github/repos', {}, {
+    errorMessage: 'Failed to fetch repositories.',
+  });
+  return Array.isArray(response.repos) ? response.repos : [];
+};
+
 export const saveSession = async (
   session: SessionPayload,
   sessionId?: string | null,
@@ -384,12 +400,12 @@ export const generatePromptAgent = async (input: PromptAgentInput): Promise<Gene
     typeof response.tokenCount === 'number'
       ? response.tokenCount
       : typeof usage?.totalTokens === 'number'
-      ? usage.totalTokens
-      : typeof usage?.outputTokens === 'number'
-        ? usage.outputTokens
-        : content
-          ? Math.max(1, Math.ceil(content.length / 4))
-          : 0;
+        ? usage.totalTokens
+        : typeof usage?.outputTokens === 'number'
+          ? usage.outputTokens
+          : content
+            ? Math.max(1, Math.ceil(content.length / 4))
+            : 0;
 
   return {
     content,

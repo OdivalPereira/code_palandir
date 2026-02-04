@@ -32,13 +32,18 @@ function estimateTokens(text: string): number {
 /**
  * Calcula tokens totais de uma thread.
  */
+/**
+ * Calcula tokens totais de uma thread.
+ */
 function calculateThreadTokens(thread: Thread): number {
     let tokens = 0;
 
-    // Tokens do elemento base
-    tokens += estimateTokens(thread.baseElement.name + thread.baseElement.path);
-    if (thread.baseElement.codeSnippet) {
-        tokens += estimateTokens(thread.baseElement.codeSnippet);
+    // Tokens dos elementos base
+    for (const element of thread.baseElements) {
+        tokens += estimateTokens(element.name + element.path);
+        if (element.codeSnippet) {
+            tokens += estimateTokens(element.codeSnippet);
+        }
     }
 
     // Tokens das mensagens
@@ -167,7 +172,8 @@ function asChatMessages(value: unknown, fallbackMode: AIActionMode, now: number)
                 item.status === 'pending' || item.status === 'sent' || item.status === 'failed'
                     ? item.status
                     : 'sent';
-            return {
+
+            const msg: ChatMessage = {
                 id: asString(item.id, `msg-${now}-${Math.random().toString(36).substr(2, 9)}`),
                 role,
                 content,
@@ -176,7 +182,8 @@ function asChatMessages(value: unknown, fallbackMode: AIActionMode, now: number)
                 tokenEstimate: typeof item.tokenEstimate === 'number' ? item.tokenEstimate : estimateTokens(content),
                 status,
                 error: typeof item.error === 'string' ? item.error : undefined,
-            } satisfies ChatMessage;
+            };
+            return msg;
         })
         .filter((item): item is ChatMessage => item !== null);
 }
@@ -196,7 +203,8 @@ function asSuggestions(value: unknown): ThreadSuggestion[] {
                 Array.isArray(item.lines) && item.lines.length === 2
                     ? (item.lines as [number, number])
                     : undefined;
-            return {
+
+            const sug: ThreadSuggestion = {
                 id: asString(item.id, `sug-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`),
                 type,
                 title,
@@ -205,25 +213,44 @@ function asSuggestions(value: unknown): ThreadSuggestion[] {
                 path: typeof item.path === 'string' ? item.path : undefined,
                 lines,
                 included: asBoolean(item.included, true),
-            } satisfies ThreadSuggestion;
+            };
+            return sug;
         })
         .filter((item): item is ThreadSuggestion => item !== null);
 }
 
 function sanitizeThread(input: unknown, now: number): Thread | null {
     if (!isRecord(input)) return null;
+
+    // Handle both legacy baseElement and new baseElements
     const baseElementRaw = isRecord(input.baseElement) ? input.baseElement : null;
-    if (!baseElementRaw) return null;
-    const baseElement: ThreadBaseElement = {
-        nodeId: asString(baseElementRaw.nodeId, ''),
-        name: asString(baseElementRaw.name, ''),
-        path: asString(baseElementRaw.path, ''),
-        type: asString(baseElementRaw.type, ''),
-        codeSnippet: typeof baseElementRaw.codeSnippet === 'string' ? baseElementRaw.codeSnippet : undefined,
-    };
-    if (!baseElement.nodeId || !baseElement.name || !baseElement.path || !baseElement.type) {
-        return null;
+    let baseElements: ThreadBaseElement[] = [];
+
+    if (Array.isArray(input.baseElements)) {
+        baseElements = input.baseElements
+            .map((raw: any) => ({
+                nodeId: asString(raw.nodeId, ''),
+                name: asString(raw.name, ''),
+                path: asString(raw.path, ''),
+                type: asString(raw.type, ''),
+                codeSnippet: typeof raw.codeSnippet === 'string' ? raw.codeSnippet : undefined,
+            }))
+            .filter(be => be.nodeId && be.name && be.path && be.type);
+    } else if (baseElementRaw) {
+        // Legacy fallback
+        const be: ThreadBaseElement = {
+            nodeId: asString(baseElementRaw.nodeId, ''),
+            name: asString(baseElementRaw.name, ''),
+            path: asString(baseElementRaw.path, ''),
+            type: asString(baseElementRaw.type, ''),
+            codeSnippet: typeof baseElementRaw.codeSnippet === 'string' ? baseElementRaw.codeSnippet : undefined,
+        };
+        if (be.nodeId && be.name && be.path && be.type) {
+            baseElements = [be];
+        }
     }
+
+    if (baseElements.length === 0) return null;
 
     const currentMode = VALID_MODES.includes(input.currentMode as AIActionMode)
         ? (input.currentMode as AIActionMode)
@@ -240,10 +267,12 @@ function sanitizeThread(input: unknown, now: number): Thread | null {
             ? input.status
             : 'active';
 
+    const mainElement = baseElements[0];
+    // Title fallback uses main element name
     const sanitized: Thread = {
         id: asString(input.id, `thread-${now}-${Math.random().toString(36).substr(2, 9)}`),
-        title: asString(input.title, `${currentMode}: ${baseElement.name}`),
-        baseElement,
+        title: asString(input.title, `${currentMode}: ${mainElement.name}${baseElements.length > 1 ? ` +${baseElements.length - 1}` : ''}`),
+        baseElements,
         modesUsed: modesUsed.length > 0 ? modesUsed : [currentMode],
         currentMode,
         conversation,
@@ -265,7 +294,7 @@ function sanitizeThread(input: unknown, now: number): Thread | null {
 
 interface BasketStore extends BasketState {
     // Thread management
-    createThread: (node: FlatNode, mode: AIActionMode) => Thread;
+    createThread: (nodes: FlatNode | FlatNode[], mode: AIActionMode) => Thread;
     deleteThread: (threadId: string) => void;
     setActiveThread: (threadId: string | null) => void;
     getActiveThread: () => Thread | null;
@@ -339,19 +368,22 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
     // Thread Management
     // ==========================================
 
-    createThread: (node: FlatNode, mode: AIActionMode) => {
-        const baseElement: ThreadBaseElement = {
+    createThread: (nodes: FlatNode | FlatNode[], mode: AIActionMode) => {
+        const nodeList = Array.isArray(nodes) ? nodes : [nodes];
+
+        const baseElements: ThreadBaseElement[] = nodeList.map(node => ({
             nodeId: node.id,
             name: node.name,
             path: node.path,
             type: node.type,
-        };
+        }));
 
+        const mainNode = nodeList[0];
         const now = Date.now();
         const newThread: Thread = {
             id: `thread-${now}-${Math.random().toString(36).substr(2, 9)}`,
-            title: `${mode}: ${node.name}`,
-            baseElement,
+            title: `${mode}: ${mainNode.name}${nodeList.length > 1 ? ` +${nodeList.length - 1}` : ''}`,
+            baseElements,
             modesUsed: [mode],
             currentMode: mode,
             conversation: [],
@@ -429,10 +461,10 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
                 const conversation =
                     existingIndex >= 0
                         ? t.conversation.map((msg, index) =>
-                              index === existingIndex
-                                  ? { ...msg, ...message, tokenEstimate: message.tokenEstimate }
-                                  : msg
-                          )
+                            index === existingIndex
+                                ? { ...msg, ...message, tokenEstimate: message.tokenEstimate }
+                                : msg
+                        )
                         : [...t.conversation, message];
                 const updated = {
                     ...t,
@@ -775,12 +807,12 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
         const newThread: Thread =
             mode === 'duplicate'
                 ? {
-                      ...baseThread,
-                      id: `thread-${now}-${Math.random().toString(36).substr(2, 9)}`,
-                      status: 'active',
-                      createdAt: now,
-                      updatedAt: now,
-                  }
+                    ...baseThread,
+                    id: `thread-${now}-${Math.random().toString(36).substr(2, 9)}`,
+                    status: 'active',
+                    createdAt: now,
+                    updatedAt: now,
+                }
                 : { ...baseThread };
 
         newThread.tokenCount = calculateThreadTokens(newThread);
@@ -858,7 +890,7 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
 
         const activeThreadId =
             typeof parsed.activeThreadId === 'string' &&
-            threads.some(thread => thread.id === parsed.activeThreadId)
+                threads.some(thread => thread.id === parsed.activeThreadId)
                 ? parsed.activeThreadId
                 : null;
 

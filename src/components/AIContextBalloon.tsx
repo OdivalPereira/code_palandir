@@ -3,7 +3,7 @@ import { Search, Sparkles, Pencil, Wrench, Link2, HelpCircle, X } from 'lucide-r
 import { AI_ACTION_LABELS, AI_ACTION_METADATA, AIActionMode, FlatNode } from '../types';
 
 interface AIContextBalloonProps {
-    selectedNode: FlatNode;
+    selectedNodes: FlatNode[];
     position: { x: number; y: number };
     onSelectAction: (mode: AIActionMode) => void;
     onClose: () => void;
@@ -56,7 +56,7 @@ const actions: ActionItem[] = [
 ];
 
 const AIContextBalloon: React.FC<AIContextBalloonProps> = ({
-    selectedNode,
+    selectedNodes,
     position,
     onSelectAction,
     onClose,
@@ -74,9 +74,12 @@ const AIContextBalloon: React.FC<AIContextBalloonProps> = ({
         window.innerHeight - balloonHeight - 20
     );
 
+    const mainNode = selectedNodes[0];
+    const isMultiSelect = selectedNodes.length > 1;
+
     return (
         <div
-            className="absolute z-50 animate-in fade-in slide-in-from-left-2 duration-200"
+            className="absolute z-50 animate-in fade-in slide-in-from-left-2 zoom-in-95 duration-200"
             style={{
                 left: Math.max(20, adjustedX),
                 top: Math.max(20, adjustedY),
@@ -101,16 +104,18 @@ const AIContextBalloon: React.FC<AIContextBalloonProps> = ({
                 {/* Selected Node Info */}
                 <div className="px-3 py-2 border-b border-slate-700/30">
                     <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">
-                        Elemento selecionado
+                        {isMultiSelect ? 'Elementos selecionados' : 'Elemento selecionado'}
                     </div>
                     <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${getNodeTypeColor(selectedNode.type)}`} />
-                        <span className="text-sm font-medium text-slate-100 truncate" title={selectedNode.name}>
-                            {selectedNode.name}
+                        <span className={`w-2 h-2 rounded-full ${isMultiSelect ? 'bg-indigo-400' : getNodeTypeColor(mainNode.type)}`} />
+                        <span className="text-sm font-medium text-slate-100 truncate" title={isMultiSelect ? `${selectedNodes.length} itens` : mainNode.name}>
+                            {isMultiSelect ? `${selectedNodes.length} itens` : mainNode.name}
                         </span>
                     </div>
-                    <div className="text-[10px] text-slate-500 mt-1 truncate" title={selectedNode.path}>
-                        {selectedNode.path}
+                    <div className="text-[10px] text-slate-500 mt-1 truncate" title={isMultiSelect ? selectedNodes.map(n => n.name).join(', ') : mainNode.path}>
+                        {isMultiSelect
+                            ? selectedNodes.map(n => n.name).join(', ')
+                            : mainNode.path}
                     </div>
                 </div>
 

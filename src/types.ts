@@ -35,7 +35,7 @@ export interface ClusterData {
 export interface FlatNode extends d3.SimulationNodeDatum {
   id: string;
   name: string;
-  type: 'directory' | 'file' | 'function' | 'class' | 'variable' | 'api_endpoint' | 'cluster' | 'ghost_table' | 'ghost_endpoint' | 'ghost_service';
+  type: string;
   path: string;
   group: number;
   relevant?: boolean;
@@ -47,12 +47,14 @@ export interface FlatNode extends d3.SimulationNodeDatum {
   isGhost?: boolean;
   dependencyStatus?: DependencyStatus;
   ghostData?: MissingDependency;
+  // UI Node reference (Phase 3)
+  uiNode?: UINode;
 }
 
 export interface Link extends d3.SimulationLinkDatum<FlatNode> {
   source: string | FlatNode;
   target: string | FlatNode;
-  kind?: 'structural' | SemanticEdgeType;
+  kind?: 'structural' | SemanticEdgeType | 'dependency';
   // Edge styling for dependency visualization
   edgeStyle?: 'solid' | 'dashed';
   dependencyType?: DependencyStatus;
@@ -64,7 +66,7 @@ export interface SemanticLink extends Link {
   kind: SemanticEdgeType;
 }
 
-export type GraphViewMode = 'structural' | 'semantic';
+export type GraphViewMode = 'structural' | 'semantic' | 'ui';
 
 export interface PromptItem {
   id: string;
@@ -157,8 +159,45 @@ export enum AppStatus {
   LOADING_FILES = 'LOADING_FILES',
   ANALYZING_QUERY = 'ANALYZING_QUERY',
   ANALYZING_INTENT = 'ANALYZING_INTENT',
+  DETECTING_FRAMEWORK = 'DETECTING_FRAMEWORK',
   ERROR = 'ERROR'
 }
+
+// ============================================
+// Framework Detection Types (Phase 1)
+// ============================================
+
+export type FrameworkName = 'react' | 'vue' | 'angular' | 'svelte' | 'nextjs' | 'nuxt' | 'other';
+
+export interface DetectedFramework {
+  name: FrameworkName;
+  confidence: number;
+  entryPoint: string;
+  routerType?: string;
+  stateManagement?: string;
+}
+
+// ============================================
+// UI Hierarchy Types (Phase 2)
+// ============================================
+
+export interface UINode {
+  id: string;
+  name: string;
+  label: string;
+  type: 'app' | 'page' | 'layout' | 'section' | 'component' | 'button' | 'input' | 'form' | 'modal' | 'list';
+  children: UINode[];
+  sourceFile: string;
+  lineRange?: [number, number];
+  props?: Record<string, string>;
+}
+
+export interface UIHierarchyResponse {
+  root: UINode;
+  totalNodes: number;
+  framework: FrameworkName;
+}
+
 
 // ============================================
 // Reverse Dependency Mapping Types
@@ -398,8 +437,8 @@ export interface ThreadSuggestion {
 export interface Thread {
   id: string;
   title: string;
-  /** Elemento base sobre o qual a conversa se baseia */
-  baseElement: ThreadBaseElement;
+  /** Elementos base sobre os quais a conversa se baseia */
+  baseElements: ThreadBaseElement[];
   /** Modos usados durante a conversa (pode mudar sem reset) */
   modesUsed: AIActionMode[];
   /** Modo atual ativo */

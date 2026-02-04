@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import crypto from 'crypto';
 import http from 'http';
 import fs from 'fs/promises';
@@ -773,6 +774,39 @@ const handleLogout = (req, res) => {
   clearSession(req, res);
   res.writeHead(204);
   res.end();
+};
+
+const handleUserRepos = async (req, res, session) => {
+  const accessToken = session.data.accessToken;
+  if (!accessToken) {
+    jsonResponse(res, 401, { error: 'Not authenticated.' });
+    return;
+  }
+  try {
+    const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=30', {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    if (!response.ok) {
+      jsonResponse(res, response.status, { error: 'Failed to fetch repositories.' });
+      return;
+    }
+    const repos = await response.json();
+    const result = repos.map((repo) => ({
+      full_name: repo.full_name,
+      name: repo.name,
+      owner: repo.owner?.login ?? '',
+      description: repo.description ?? '',
+      updated_at: repo.updated_at,
+      private: repo.private ?? false,
+    }));
+    jsonResponse(res, 200, { repos: result });
+  } catch (error) {
+    console.error('Failed to fetch user repos', error);
+    jsonResponse(res, 500, { error: 'Unexpected error fetching repos.' });
+  }
 };
 
 const handleSession = (req, res) => {
@@ -1678,6 +1712,12 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/github/repos') {
+    const session = getSession(req, res);
+    await handleUserRepos(req, res, session);
+    return;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/ai/analyze-file') {
     const requestId = crypto.randomUUID();
     try {
@@ -1694,6 +1734,292 @@ const server = http.createServer(async (req, res) => {
       jsonResponse(res, 500, withRequestId({ error: 'AI analysis failed.' }, requestId));
     }
     return;
+  }
+
+  // Phase 1: Detect framework via AI
+  if (req.method === 'POST' && url.pathname === '/api/analyze/detect-framework') {
+    const requestId = crypto.randomUUID();
+    try {
+      const session = requireAuthenticatedSession(req, res, requestId);
+      if (!session) return;
+
+      const payload = await getJsonPayload(req, res, requestId);
+      if (!payload) return;
+
+      const { packageJson, entryFiles } = payload;
+
+      // Build prompt for AI
+      const prompt = `You are a frontend framework detector. Analyze the following project files and determine which frontend framework is being used.
+
+package.json content:
+${packageJson || 'Not provided'}
+
+Entry files:
+${(entryFiles || []).map(f => `--- ${f.path} ---\n${f.content}`).join('\n\n')}
+
+Based on this analysis, determine:
+1. The main frontend framework (react, vue, angular, svelte, nextjs, nuxt, or other)
+2. Your confidence level (0-1)
+3. The main entry point file
+4. Router library if any (react-router-dom, vue-router, etc)
+5. State management library if any (zustand, redux, vuex, pinia, etc)
+
+Respond in JSON format ONLY.`;
+
+      const schema = {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING, enum: ['react', 'vue', 'angular', 'svelte', 'nextjs', 'nuxt', 'other'] },
+          confidence: { type: Type.NUMBER },
+          entryPoint: { type: Type.STRING },
+          routerType: { type: Type.STRING },
+          stateManagement: { type: Type.STRING }
+        },
+        required: ['name', 'confidence', 'entryPoint']
+      };
+
+      const startMs = Date.now();
+      const result = await withRetryAndTimeout(
+        async (signal) => {
+          const response = await aiClient.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              responseSchema: schema
+            }
+          }, { signal });
+          return response;
+        },
+        { maxRetries: 2, timeoutMs: 30000 }
+      );
+
+      const latencyMs = Date.now() - startMs;
+      const framework = generateJsonResponse(result);
+
+      // Log AI usage
+      const usage = extractUsageTokens(result);
+      await appendAiAuditLog({
+        id: requestId,
+        timestamp: Date.now(),
+        requestType: 'detect-framework',
+        model: aiModelId,
+        provider: aiProvider,
+        latencyMs,
+        success: true,
+        usage,
+        costUsd: estimateAiCostUsd(usage)
+      });
+
+      return jsonResponse(res, 200, withRequestId({ framework }, requestId));
+    } catch (error) {
+      console.error({ requestId, error, route: url.pathname, message: 'Framework detection error' });
+      return jsonResponse(res, 500, withRequestId({ error: 'Framework detection failed.' }, requestId));
+    }
+  }
+
+  // Phase 2: Build UI Graph via AI
+  if (req.method === 'POST' && url.pathname === '/api/analyze/ui-hierarchy') {
+    const requestId = crypto.randomUUID();
+    try {
+      const session = requireAuthenticatedSession(req, res, requestId);
+      if (!session) return;
+
+      const payload = await getJsonPayload(req, res, requestId);
+      if (!payload) return;
+
+      const { framework, files, entryPoint } = payload;
+
+      // Build prompt for AI
+      const prompt = `You are a specialized frontend architect analyzer. 
+      Your goal is to extract the UI COMPONENT HIERARCHY from the provided project files.
+      
+      Framework: ${framework}
+      Entry Point: ${entryPoint || 'unknown'}
+      
+      Files provided:
+      ${(files || []).map(f => `--- ${f.path} ---\n${f.content}`).join('\n\n')}
+      
+      Instructions:
+      1. Start from the root (App or Index).
+      2. Trace down the imports and component usage to build a visual tree.
+      3. Identify:
+         - Pages (routes)
+         - Layouts
+         - Major Sections (Header, Sidebar, Main Content)
+         - Interactive Elements (Buttons, Forms, Inputs, Lists, Modals)
+      4. IGNORE utility functions, helper constants, or backend logic unless they are UI components.
+      5. For each node, extract key props (onClick handlers, unique IDs, etc.).
+      
+      Return a JSON object matching this schema recursively:
+      {
+        "root": {
+          "id": "app-root",
+          "name": "App",
+          "label": "App",
+          "type": "app", // app, page, layout, section, component, button, input, form, modal, list
+          "sourceFile": "path/to/file",
+          "children": [] // recursive
+        },
+        "totalNodes": number,
+        "framework": "${framework}"
+      }
+      `;
+
+      const schema = {
+        type: Type.OBJECT,
+        properties: {
+          root: {
+            type: Type.OBJECT,
+            properties: {
+              id: { type: Type.STRING },
+              name: { type: Type.STRING },
+              label: { type: Type.STRING },
+              type: { type: Type.STRING, enum: ['app', 'page', 'layout', 'section', 'component', 'button', 'input', 'form', 'modal', 'list'] },
+              sourceFile: { type: Type.STRING },
+              props: { type: Type.OBJECT }, // Map<string, string>
+              children: {
+                type: Type.ARRAY,
+                items: { type: Type.OBJECT, properties: {}, description: "Recursive node structure" }
+                // Note: deeply recursive schemas can be tricky for some AI models, 
+                // but Gemini usually handles recursive descriptions well in prompt.
+                // For strict schema validation, we might need a simpler definition here or rely on the prompt instructions.
+              }
+            },
+            required: ['id', 'name', 'type', 'children']
+          },
+          totalNodes: { type: Type.NUMBER },
+          framework: { type: Type.STRING }
+        },
+        required: ['root', 'totalNodes', 'framework']
+      };
+
+      const startMs = Date.now();
+      const result = await withRetryAndTimeout(
+        async (signal) => {
+          const response = await aiClient.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              // Note: omitting strict schema for 'children' recursion issues, relying on prompt
+            }
+          }, { signal });
+          return response;
+        },
+        { maxRetries: 1, timeoutMs: 60000 } // Longer timeout for graph build
+      );
+
+      const latencyMs = Date.now() - startMs;
+      const graph = generateJsonResponse(result);
+
+      // Basic validation/cleanup if AI missed properties
+      if (graph.root && !graph.root.children) graph.root.children = [];
+
+      // Log AI usage
+      const usage = extractUsageTokens(result);
+      await appendAiAuditLog({
+        id: requestId,
+        timestamp: Date.now(),
+        requestType: 'ui-hierarchy',
+        model: aiModelId,
+        provider: aiProvider,
+        latencyMs,
+        success: true,
+        usage,
+        costUsd: estimateAiCostUsd(usage)
+      });
+
+      return jsonResponse(res, 200, withRequestId({ graph }, requestId));
+    } catch (error) {
+      console.error({ requestId, error, route: url.pathname, message: 'UI Graph build error' });
+      return jsonResponse(res, 500, withRequestId({ error: 'UI Graph build failed.' }, requestId));
+    }
+  }
+
+  // Phase 4: Dependency Analysis (Reverse Mapping)
+  if (req.method === 'POST' && url.pathname === '/api/analyze/dependencies') {
+    const requestId = crypto.randomUUID();
+    try {
+      const session = requireAuthenticatedSession(req, res, requestId);
+      if (!session) return;
+
+      const payload = await getJsonPayload(req, res, requestId);
+      if (!payload) return;
+
+      const { frontendFiles, backendFiles, framework } = payload;
+
+      // Build prompt for AI
+      const prompt = `You are a Senior Full Stack Architect.
+      
+      Goal: Perform a "Reverse Dependency Mapping". 
+      1. Analyze the FRONTEND code to identify external requirements (Database Tables, API Endpoints, Services).
+      2. Analyze the BACKEND code (if provided) to check if these requirements are implemented.
+      3. List ALL requirements, marking them as 'existing' (found in backend) or 'missing' (not found).
+      
+      Framework: ${framework}
+      
+      --- FRONTEND FILES (Requirements Source) ---
+      ${(frontendFiles || []).map(f => `FILE: ${f.path}\n${f.content}`).join('\n\n')}
+      
+      --- BACKEND FILES (Implementation Source) ---
+      ${(backendFiles || []).length > 0 ? (backendFiles || []).map(f => `FILE: ${f.path}\n${f.content}`).join('\n\n') : "NO BACKEND FILES PROVIDED."}
+      
+      Instructions:
+      - Infer SQL tables based on data shapes in interfaces and API calls.
+      - Infer API endpoints based on fetch/axios calls.
+      - If a requirement matches a backend route/model, status is 'existing'.
+      - If no backend match is found, status is 'missing'.
+      
+      Return JSON:
+      {
+        "tables": [
+          { "name": "users", "status": "existing" | "missing", "columns": [{"name": "id", "type": "uuid"}], "reason": "Used in UserProfile.tsx" }
+        ],
+        "endpoints": [
+          { "method": "GET", "path": "/api/users", "status": "existing" | "missing", "purpose": "Fetch users", "reason": "Called in UserList.tsx" }
+        ],
+        "services": [
+           { "name": "AuthService", "status": "existing" | "missing", "description": "Handles login", "reason": "Imported in Login.tsx" }
+        ]
+      }
+      `;
+
+      const startMs = Date.now();
+      const result = await withRetryAndTimeout(
+        async (signal) => {
+          const response = await aiClient.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              responseMimeType: 'application/json'
+            }
+          }, { signal });
+          return response;
+        },
+        { maxRetries: 1, timeoutMs: 90000 } // Long timeout for deep analysis
+      );
+
+      const latencyMs = Date.now() - startMs;
+      const analysis = generateJsonResponse(result);
+
+      // Log usage
+      const usage = extractUsageTokens(result);
+      await appendAiAuditLog({
+        id: requestId,
+        timestamp: Date.now(),
+        requestType: 'dependency-analysis',
+        model: aiModelId,
+        provider: aiProvider,
+        latencyMs,
+        success: true,
+        usage,
+        costUsd: estimateAiCostUsd(usage)
+      });
+
+      return jsonResponse(res, 200, withRequestId({ analysis }, requestId));
+
+    } catch (error) {
+      console.error({ requestId, error, route: url.pathname, message: 'Dependency analysis error' });
+      return jsonResponse(res, 500, withRequestId({ error: 'Dependency analysis failed.' }, requestId));
+    }
   }
 
   if (req.method === 'POST' && url.pathname === '/api/ai/relevant-files') {

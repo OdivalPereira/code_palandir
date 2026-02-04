@@ -30,6 +30,7 @@ import {
 import {
     AIActionMode,
     AI_ACTION_LABELS,
+    AI_ACTION_METADATA,
     ChatMessage,
     FlatNode,
     Thread,
@@ -48,8 +49,8 @@ import { TokenMonitorCompact } from './TokenMonitor';
 // ============================================
 
 interface ContextualChatProps {
-    /** Nó selecionado como base da conversa */
-    selectedNode: FlatNode;
+    /** Nós selecionados como base da conversa */
+    selectedNodes: FlatNode[];
     /** Modo inicial (vindo do balão) */
     initialMode: AIActionMode;
     /** Callback para fechar o chat */
@@ -87,12 +88,8 @@ const SUGGESTION_ICONS: Record<string, React.ReactNode> = {
     service: <Server size={14} />,
 };
 
-// ============================================
-// Component
-// ============================================
-
 const ContextualChat: React.FC<ContextualChatProps> = ({
-    selectedNode,
+    selectedNodes,
     initialMode,
     onClose,
 }) => {
@@ -129,9 +126,11 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
 
     // Inicializar thread ao montar
     useEffect(() => {
-        const thread = createThread(selectedNode, initialMode);
-        setCurrentThread(thread);
-    }, [selectedNode, initialMode, createThread]);
+        if (selectedNodes.length > 0) {
+            const thread = createThread(selectedNodes, initialMode);
+            setCurrentThread(thread);
+        }
+    }, [selectedNodes, initialMode, createThread]);
 
     // Atualizar thread quando mudar no store
     useEffect(() => {
@@ -166,7 +165,7 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
         try {
             const context: ChatContext = {
                 mode: currentThread.currentMode,
-                element: currentThread.baseElement,
+                elements: currentThread.baseElements,
                 conversationHistory: currentThread.conversation,
             };
 
@@ -314,6 +313,9 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
         );
     }
 
+    const mainNode = selectedNodes[0];
+    const isMultiSelect = selectedNodes.length > 1;
+
     return (
         <div className="flex flex-col h-full bg-slate-900 border-l border-slate-700">
             {/* Header */}
@@ -342,12 +344,22 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
 
                 {/* Element info */}
                 <div className="px-4 py-2 bg-slate-800/50">
-                    <div className="flex items-center gap-2 text-sm">
-                        <span className="text-slate-500">Sobre:</span>
-                        <span className="font-medium text-slate-200">{selectedNode.name}</span>
-                        <span className="text-xs text-slate-500 px-1.5 py-0.5 bg-slate-700/50 rounded">
-                            {selectedNode.type}
-                        </span>
+                    <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2 text-sm">
+                            <span className="text-slate-500">Sobre:</span>
+                            <span className="font-medium text-slate-200 truncate max-w-[200px]" title={mainNode?.name}>
+                                {mainNode?.name}
+                                {isMultiSelect && <span className="text-slate-400 ml-1">+{selectedNodes.length - 1} outros</span>}
+                            </span>
+                            <span className="text-xs text-slate-500 px-1.5 py-0.5 bg-slate-700/50 rounded">
+                                {isMultiSelect ? 'Múltiplos' : mainNode?.type}
+                            </span>
+                        </div>
+                        {isMultiSelect && (
+                            <div className="text-xs text-slate-500 truncate">
+                                {selectedNodes.map(n => n.name).join(', ')}
+                            </div>
+                        )}
                     </div>
                     {/* Token Monitor */}
                     <TokenMonitorCompact className="mt-2" />
@@ -410,7 +422,7 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
                             Modo: <span className="text-slate-200">{AI_ACTION_LABELS[currentThread.currentMode]}</span>
                         </p>
                         <p className="text-slate-500 text-xs">
-                            Envie uma mensagem para começar a conversa sobre <span className="text-slate-300">{selectedNode.name}</span>
+                            Envie uma mensagem para começar a conversa sobre <span className="text-slate-300">{selectedNodes.length > 1 ? `${selectedNodes.length} itens` : mainNode?.name}</span>
                         </p>
                     </div>
                 ) : (
@@ -728,7 +740,7 @@ const SuggestionCard: React.FC<SuggestionCardProps> = ({ suggestion, onCopy, cop
                 <div className="flex items-center gap-2">
                     <span className="text-amber-400">{SUGGESTION_ICONS[suggestion.type] || <FileCode size={14} />}</span>
                     <span className="text-sm font-medium text-slate-200">{suggestion.title}</span>
-                    <span className="text-[10px] text-slate-500 px-1.5 py-0.5 bg-slate-700/50 rounded">
+                    <span className="text-xs text-slate-500 px-1.5 py-0.5 bg-slate-700/50 rounded">
                         {suggestion.type}
                     </span>
                 </div>

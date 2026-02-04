@@ -1,7 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   BarChart3,
   BookOpen,
+  ChevronDown,
   FileDown,
   FileText,
   FolderOpen,
@@ -54,6 +55,12 @@ const AppTopBar: React.FC = () => {
   const sessionId = useGraphStore((state) => state.sessionId);
   const refreshAuthSession = useGraphStore((state) => state.refreshAuthSession);
   const logout = useGraphStore((state) => state.logout);
+  const userRepos = useGraphStore((state) => state.userRepos);
+  const userReposStatus = useGraphStore((state) => state.userReposStatus);
+  const fetchUserRepos = useGraphStore((state) => state.fetchUserRepos);
+  const detectedFramework = useGraphStore((state) => state.detectedFramework);
+  const frameworkStatus = useGraphStore((state) => state.frameworkStatus);
+  const [showRepoDropdown, setShowRepoDropdown] = useState(false);
 
   useEffect(() => {
     refreshAuthSession();
@@ -119,7 +126,63 @@ const AppTopBar: React.FC = () => {
               />
               <button onClick={importGithubRepo} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-medium">Load</button>
             </div>
+            <div className="relative">
+              <button
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    window.location.href = '/api/auth/login';
+                    return;
+                  }
+                  if (userRepos.length === 0) {
+                    fetchUserRepos();
+                  }
+                  setShowRepoDropdown((prev) => !prev);
+                }}
+                className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors"
+              >
+                {userReposStatus === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <FolderOpen size={14} />}
+                My Repos
+                <ChevronDown size={12} />
+              </button>
+              {showRepoDropdown && userRepos.length > 0 && (
+                <div className="absolute top-full left-0 mt-1 w-72 max-h-64 overflow-y-auto bg-slate-800 border border-slate-700 rounded shadow-lg z-50">
+                  {userRepos.map((repo) => (
+                    <button
+                      key={repo.full_name}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-700 text-sm border-b border-slate-700 last:border-b-0"
+                      onClick={() => {
+                        setGithubUrl(`github.com/${repo.full_name}`);
+                        setShowRepoDropdown(false);
+                        importGithubRepo();
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Github size={14} className="text-slate-500" />
+                        <span className="font-medium text-slate-200">{repo.name}</span>
+                        {repo.private && <span className="text-[10px] px-1 bg-amber-500/20 text-amber-300 rounded">Private</span>}
+                      </div>
+                      {repo.description && <p className="text-xs text-slate-400 truncate mt-0.5">{repo.description}</p>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Phase 1: Framework Badge */}
+          {frameworkStatus === 'detecting' && (
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <Loader2 size={14} className="animate-spin" />
+              <span>Detectando framework...</span>
+            </div>
+          )}
+          {detectedFramework && frameworkStatus === 'done' && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/20 border border-indigo-500/30 rounded text-xs text-indigo-200">
+              <Sparkles size={14} className="text-indigo-400" />
+              <span className="font-medium capitalize">{detectedFramework.name}</span>
+              <span className="text-indigo-400/60">({Math.round(detectedFramework.confidence * 100)}%)</span>
+            </div>
+          )}
         </div>
 
         <div className="flex-1 max-w-xl mx-4">

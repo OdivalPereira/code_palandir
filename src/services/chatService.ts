@@ -21,8 +21,8 @@ import { isChatResponse, isThreadSuggestion } from '../utils/typeGuards';
 export interface ChatContext {
     /** Modo atual da conversa */
     mode: AIActionMode;
-    /** Elemento base sobre o qual a conversa se baseia */
-    element: ThreadBaseElement | null;
+    /** Elementos base sobre os quais a conversa se baseia */
+    elements: ThreadBaseElement[];
     /** Histórico de mensagens anteriores */
     conversationHistory: ChatMessage[];
     /** Contexto opcional do projeto */
@@ -68,14 +68,20 @@ const IS_MOCK_MODE =
 
 function buildMockResponse(options: SendMessageOptions): ChatResponse {
     const { userMessage, context } = options;
-    const elementName = context.element?.name ?? 'o elemento selecionado';
-    const elementPath = context.element?.path ? ` (${context.element.path})` : '';
+    const elements = context.elements || [];
+    const mainElement = elements[0];
+
+    const elementNames = elements.map(e => e.name).join(', ');
+    const countLabel = elements.length > 1 ? ` (${elements.length} itens)` : '';
+
+    const elementName = mainElement?.name ?? 'elementos selecionados';
+    const elementPath = mainElement?.path ? ` (${mainElement.path}${elements.length > 1 ? ' + outros' : ''})` : '';
     const modeDescription = getModeDescription(context.mode);
     const now = Date.now();
 
     return {
         response: [
-            `Modo mock ativo: analisando ${elementName}${elementPath} em modo "${modeDescription}".`,
+            `Modo mock ativo: analisando ${elementNames}${countLabel} em modo "${modeDescription}".`,
             `Resumo rápido: ${elementName} parece central para a conversa atual e a última mensagem foi "${userMessage}".`,
             'Sugestões abaixo são simuladas para ajudar no fluxo enquanto o backend não está disponível.',
         ].join(' '),
@@ -84,10 +90,10 @@ function buildMockResponse(options: SendMessageOptions): ChatResponse {
                 id: `mock-sug-${now}-1`,
                 type: 'snippet',
                 title: `Checklist rápido para ${elementName}`,
-                description: 'Passos sugeridos para revisar o elemento em modo offline.',
+                description: 'Passos sugeridos para revisar os elementos em modo offline.',
                 content: [
-                    `- Identifique responsabilidades de ${elementName}.`,
-                    '- Verifique dependências diretas e efeitos colaterais.',
+                    `- Identifique responsabilidades de ${elementNames}.`,
+                    '- Verifique dependências cruzadas entre eles.',
                     '- Anote pontos de melhoria para compartilhar com a equipe.',
                 ].join('\n'),
                 included: true,
@@ -103,8 +109,8 @@ function buildMockResponse(options: SendMessageOptions): ChatResponse {
             },
         ],
         followUpQuestions: [
-            `Qual é o objetivo principal para ${elementName} neste fluxo?`,
-            `Você quer que eu gere um plano detalhado para o modo ${modeDescription}?`,
+            `Qual é o objetivo principal para ${elementNames} neste fluxo?`,
+            `Como esses ${elements.length} elementos se relacionam?`,
             'Há dependências críticas que devemos mapear agora?',
         ],
         usage: EMPTY_USAGE,
@@ -142,7 +148,7 @@ export async function sendChatMessage(options: SendMessageOptions): Promise<Chat
 
     const payload = {
         mode: context.mode,
-        element: context.element,
+        elements: context.elements, // Changed from element to elements
         userMessage,
         conversationHistory: context.conversationHistory.map(msg => ({
             role: msg.role,

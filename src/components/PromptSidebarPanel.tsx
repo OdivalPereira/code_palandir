@@ -195,6 +195,11 @@ const PromptSidebarPanel: React.FC = () => {
                 <p>Conexões do grafo (estrutural): <span className="text-slate-200">{Object.keys(linksById).length}</span></p>
                 <p>Conexões do grafo (semântico): <span className="text-slate-200">{Object.keys(semanticLinksById).length}</span></p>
               </div>
+              {Object.keys(semanticLinksById).length === 0 && (
+                <div className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded p-2">
+                  <strong>Dica:</strong> Clique em arquivos no grafo para analisar suas dependências e gerar conexões semânticas.
+                </div>
+              )}
               <button
                 onClick={generateSummary}
                 disabled={!rootNode || summaryStatus === 'loading'}
