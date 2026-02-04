@@ -147,3 +147,13 @@ Se `APP_BASE_URL` não corresponder à origem do navegador, as requisições pod
 - **401 ao usar IA**: faça login antes de usar recursos de IA.
 - **500 ao chamar o cliente de IA**: verifique se a chave do provedor (ex.: `GOOGLE_AI_API_KEY`) está configurada.
 - **Erro do GitHub**: pode ser rate limit ou branch default não configurada. Verifique a autenticação, limite de requisições e se o repositório possui uma branch padrão.
+
+## Release checklist
+
+- **Build** (`npm run build`): termina sem erros e gera os artefatos em `dist/`.
+- **Lint** (`npm run lint`): conclui sem warnings nem erros.
+- **Smoke test** (`npm run smoke-test`): retorna sucesso com todas as chamadas básicas da API passando.
+- **Fluxo principal** (seleção → balão → chat → sugestões → salvar thread): o usuário completa o fluxo sem bloqueios, com respostas e sugestões aparecendo e a thread salva com sucesso.
+- **Bug do D3**: o comportamento anteriormente reportado não ocorre mais nas telas que usam D3 (sem travamentos ou renderização quebrada).
+- **Modo mock/offline**: com `VITE_AI_MODE=mock` ou `VITE_OFFLINE_MODE=true`, o chat não chama `/api/ai/chat` e responde com conteúdo simulado.
+- **Revisão de troubleshooting**: itens da seção “Troubleshooting” continuam corretos e refletem o estado atual do projeto.
