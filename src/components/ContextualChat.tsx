@@ -106,7 +106,8 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
     const switchMode = useBasketStore(state => state.switchMode);
     const addSuggestion = useBasketStore(state => state.addSuggestion);
     const setFollowUpQuestions = useBasketStore(state => state.setFollowUpQuestions);
-    const getActiveThread = useBasketStore(state => state.getActiveThread);
+    const activeThreadId = useBasketStore(state => state.activeThreadId);
+    const threads = useBasketStore(state => state.threads);
 
     // Local state
     const [currentThread, setCurrentThread] = useState<Thread | null>(null);
@@ -134,11 +135,9 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
 
     // Atualizar thread quando mudar no store
     useEffect(() => {
-        const active = getActiveThread();
-        if (active && active.id === currentThread?.id) {
-            setCurrentThread(active);
-        }
-    }, [getActiveThread, currentThread?.id]);
+        const active = threads.find(thread => thread.id === activeThreadId) ?? null;
+        setCurrentThread(active);
+    }, [activeThreadId, threads]);
 
     // Scroll para última mensagem
     useEffect(() => {
@@ -300,6 +299,13 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
         }
     }, [currentThread, libraryNote, libraryTags]);
 
+    const handleDeleteThread = useCallback(() => {
+        if (!currentThread) return;
+        const confirmed = confirm('Tem certeza que deseja excluir esta thread?');
+        if (!confirmed) return;
+        useBasketStore.getState().deleteThread(currentThread.id);
+    }, [currentThread]);
+
     if (!currentThread) {
         return (
             <div className="flex items-center justify-center h-full">
@@ -318,12 +324,20 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
                         <div className="w-2 h-2 rounded-full bg-gradient-to-r from-sky-400 to-violet-400 animate-pulse" />
                         <span className="font-semibold text-slate-100">Chat Contextual</span>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="p-1.5 rounded-lg hover:bg-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
-                    >
-                        <X size={18} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleDeleteThread}
+                            className="text-xs px-2 py-1 rounded border border-rose-500/40 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200 transition-colors"
+                        >
+                            Excluir thread
+                        </button>
+                        <button
+                            onClick={onClose}
+                            className="p-1.5 rounded-lg hover:bg-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Element info */}
