@@ -5,7 +5,7 @@
  * baseado no uso de tokens em relação ao limite máximo.
  */
 
-import React, { useMemo, useId } from 'react';
+import React, { useMemo, useId, useState } from 'react';
 import { Zap, AlertTriangle, AlertOctagon, Sparkles } from 'lucide-react';
 import { useBasketStore } from '../stores/basketStore';
 
@@ -68,6 +68,9 @@ const TokenMonitor: React.FC<TokenMonitorProps> = ({ compact = false, className 
     const getTokenUsagePercent = useBasketStore(state => state.getTokenUsagePercent);
     const getTokenStatus = useBasketStore(state => state.getTokenStatus);
     const threads = useBasketStore(state => state.threads);
+    const activeThreadId = useBasketStore(state => state.activeThreadId);
+    const compactThread = useBasketStore(state => state.compactThread);
+    const [isCompacting, setIsCompacting] = useState(false);
 
     // Derived values
     const percent = useMemo(() => getTokenUsagePercent(), [getTokenUsagePercent, totalTokens]);
@@ -94,6 +97,17 @@ const TokenMonitor: React.FC<TokenMonitorProps> = ({ compact = false, className 
 
     // Active threads count
     const activeThreads = threads.filter(t => t.status === 'active').length;
+    const canCompact = Boolean(activeThreadId) && !isCompacting;
+
+    const handleCompact = () => {
+        if (!activeThreadId || isCompacting) return;
+        setIsCompacting(true);
+        try {
+            compactThread(activeThreadId);
+        } finally {
+            window.setTimeout(() => setIsCompacting(false), 300);
+        }
+    };
 
     if (compact) {
         return (
@@ -170,11 +184,12 @@ const TokenMonitor: React.FC<TokenMonitorProps> = ({ compact = false, className 
                         {activeThreads} thread{activeThreads !== 1 ? 's' : ''} ativa{activeThreads !== 1 ? 's' : ''}
                     </span>
                     <button
-                        onClick={() => {/* TODO: Open optimize dialog */ }}
-                        className="flex items-center gap-1 text-sky-400 hover:text-sky-300 transition-colors"
+                        onClick={handleCompact}
+                        disabled={!canCompact}
+                        className="flex items-center gap-1 text-sky-400 hover:text-sky-300 transition-colors disabled:cursor-not-allowed disabled:text-sky-300/50"
                     >
                         <Sparkles size={12} />
-                        <span>Otimizar</span>
+                        <span>{isCompacting ? 'Compactando...' : 'Otimizar'}</span>
                     </button>
                 </div>
             )}
