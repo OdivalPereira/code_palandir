@@ -116,6 +116,11 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
     const [showModeSelector, setShowModeSelector] = useState(false);
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+    const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+    const [libraryNote, setLibraryNote] = useState('');
+    const [libraryTagInput, setLibraryTagInput] = useState('');
+    const [libraryTags, setLibraryTags] = useState<string[]>([]);
+    const [saveFeedback, setSaveFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
     // Refs
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -260,6 +265,40 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
             handleSend();
         }
     }, [handleSend]);
+
+    const handleAddTag = useCallback((rawTag: string) => {
+        const normalized = rawTag.trim().toLowerCase();
+        if (!normalized) return;
+        setLibraryTags(prev => (prev.includes(normalized) ? prev : [...prev, normalized]));
+        setLibraryTagInput('');
+    }, []);
+
+    const handleRemoveTag = useCallback((tag: string) => {
+        setLibraryTags(prev => prev.filter(item => item !== tag));
+    }, []);
+
+    const handleSaveToLibrary = useCallback(() => {
+        if (!currentThread) {
+            setSaveFeedback({ type: 'error', message: 'Nenhuma thread ativa para salvar.' });
+            return;
+        }
+
+        try {
+            useBasketStore.getState().saveToLibrary(
+                currentThread.id,
+                libraryNote.trim(),
+                libraryTags,
+            );
+            setSaveFeedback({ type: 'success', message: 'Thread salva na biblioteca.' });
+            setIsSaveModalOpen(false);
+            setLibraryNote('');
+            setLibraryTagInput('');
+            setLibraryTags([]);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Erro ao salvar na biblioteca.';
+            setSaveFeedback({ type: 'error', message });
+        }
+    }, [currentThread, libraryNote, libraryTags]);
 
     if (!currentThread) {
         return (
@@ -428,15 +467,120 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
                     </button>
                 </div>
 
-                {/* Add to basket button */}
+                {/* Save to library button */}
                 <button
-                    onClick={() => {/* TODO: Add to basket UI */ }}
+                    onClick={() => {
+                        setIsSaveModalOpen(true);
+                        setSaveFeedback(null);
+                    }}
                     className="w-full mt-2 flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-sm text-slate-300 transition-colors"
                 >
                     <Plus size={14} />
-                    <span>Adicionar ao Basket</span>
+                    <span>Salvar na biblioteca</span>
                 </button>
+
+                {saveFeedback && (
+                    <div
+                        className={`mt-2 rounded-lg px-3 py-2 text-xs ${saveFeedback.type === 'success'
+                            ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
+                            : 'bg-rose-500/10 text-rose-300 border border-rose-500/30'
+                            }`}
+                    >
+                        {saveFeedback.message}
+                    </div>
+                )}
             </div>
+
+            {isSaveModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+                    <div className="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
+                        <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
+                            <div>
+                                <h3 className="text-sm font-semibold text-slate-100">Salvar na biblioteca</h3>
+                                <p className="text-xs text-slate-500">
+                                    Adicione uma nota e tags para encontrar esta thread depois.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setIsSaveModalOpen(false)}
+                                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                                aria-label="Fechar modal de biblioteca"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4 px-4 py-4">
+                            <div>
+                                <label className="text-xs font-medium text-slate-300">Nota</label>
+                                <textarea
+                                    value={libraryNote}
+                                    onChange={(event) => setLibraryNote(event.target.value)}
+                                    rows={3}
+                                    className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/20"
+                                    placeholder="Adicione um contexto ou lembrete..."
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-medium text-slate-300">Tags</label>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                    {libraryTags.map(tag => (
+                                        <span
+                                            key={tag}
+                                            className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] text-slate-200"
+                                        >
+                                            #{tag}
+                                            <button
+                                                onClick={() => handleRemoveTag(tag)}
+                                                className="text-slate-400 hover:text-slate-100"
+                                                aria-label={`Remover tag ${tag}`}
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                                <div className="mt-2 flex gap-2">
+                                    <input
+                                        value={libraryTagInput}
+                                        onChange={(event) => setLibraryTagInput(event.target.value)}
+                                        onKeyDown={(event) => {
+                                            if (event.key === 'Enter') {
+                                                event.preventDefault();
+                                                handleAddTag(libraryTagInput);
+                                            }
+                                        }}
+                                        placeholder="Digite uma tag e pressione Enter"
+                                        className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/20"
+                                    />
+                                    <button
+                                        onClick={() => handleAddTag(libraryTagInput)}
+                                        className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-200 transition-colors hover:border-sky-500/40 hover:text-slate-100"
+                                    >
+                                        Adicionar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 border-t border-slate-700 px-4 py-3">
+                            <button
+                                onClick={() => setIsSaveModalOpen(false)}
+                                className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-200 transition-colors hover:border-slate-500 hover:text-slate-100"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleSaveToLibrary}
+                                className="rounded-lg bg-sky-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-sky-500"
+                            >
+                                Salvar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
