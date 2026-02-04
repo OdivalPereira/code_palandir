@@ -6,7 +6,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { Zap, AlertTriangle, Sparkles } from 'lucide-react';
+import { Zap, AlertTriangle, AlertOctagon, Sparkles } from 'lucide-react';
 import { useBasketStore } from '../stores/basketStore';
 
 // ============================================
@@ -25,7 +25,7 @@ interface TokenMonitorProps {
 // ============================================
 
 const STATUS_COLORS = {
-    ok: {
+    safe: {
         bg: 'bg-emerald-500/20',
         bar: 'bg-emerald-500',
         text: 'text-emerald-400',
@@ -37,7 +37,7 @@ const STATUS_COLORS = {
         text: 'text-amber-400',
         border: 'border-amber-500/30',
     },
-    danger: {
+    critical: {
         bg: 'bg-rose-500/20',
         bar: 'bg-rose-500',
         text: 'text-rose-400',
@@ -46,15 +46,15 @@ const STATUS_COLORS = {
 };
 
 const STATUS_ICONS = {
-    ok: <Zap size={14} />,
+    safe: <Zap size={14} />,
     warning: <AlertTriangle size={14} />,
-    danger: <AlertTriangle size={14} />,
+    critical: <AlertOctagon size={14} />,
 };
 
 const STATUS_LABELS = {
-    ok: 'Dentro do limite',
+    safe: 'Dentro do limite',
     warning: 'Próximo do limite',
-    danger: 'Limite excedido',
+    critical: 'Limite excedido',
 };
 
 // ============================================
