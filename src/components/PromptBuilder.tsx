@@ -79,6 +79,7 @@ const PromptBuilder: React.FC = () => {
   const [editablePrompt, setEditablePrompt] = useState(generatedPrompt);
   const [isDirty, setIsDirty] = useState(false);
   const [isRefining, setIsRefining] = useState(false);
+  const [refineError, setRefineError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isDirty) {
@@ -87,6 +88,7 @@ const PromptBuilder: React.FC = () => {
   }, [generatedPrompt, isDirty]);
 
   const handleRefineWithAI = async () => {
+    setRefineError(null);
     setIsRefining(true);
     try {
       // Tentar inferir a tarefa principal a partir dos comentários
@@ -114,7 +116,7 @@ const PromptBuilder: React.FC = () => {
       }
     } catch (e) {
       console.error('AI Agent failed', e);
-      // Fallback ou aviso
+      setRefineError('Falha ao refinar com IA. Tente novamente.');
     } finally {
       setIsRefining(false);
     }
@@ -209,8 +211,11 @@ const PromptBuilder: React.FC = () => {
           className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:text-slate-500 text-white py-2.5 rounded-lg font-medium transition-colors"
         >
           {isRefining ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
-          Refinar com IA (Agent)
+          ✨ Refinar com IA (Agent)
         </button>
+        {refineError && (
+          <p className="text-xs text-red-300 text-center">{refineError}</p>
+        )}
         <button
           onClick={handleCopy}
           disabled={editablePrompt.length === 0}
