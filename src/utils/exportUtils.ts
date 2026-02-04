@@ -15,19 +15,32 @@ const formatDate = (ts: number): string => {
  * Gera o conteúdo Markdown para um conjunto de threads.
  */
 export const generateMarkdownExport = (threads: Thread[]): string => {
-    const activeThreads = threads.filter(t => t.status !== 'completed');
-    if (activeThreads.length === 0) {
-        return '# CodeMind AI Export\n\nNenhuma thread ativa para exportar.';
+    if (threads.length === 0) {
+        return '# CodeMind AI Export\n\nNenhuma thread para exportar.';
     }
+
+    const statusCounts = threads.reduce<Record<string, number>>((acc, thread) => {
+        acc[thread.status] = (acc[thread.status] ?? 0) + 1;
+        return acc;
+    }, {});
+
+    const statusBreakdown = Object.entries(statusCounts)
+        .map(([status, count]) => `${status}: ${count}`)
+        .join(' | ');
 
     let md = `# CodeMind AI Session Export\n`;
     md += `**Date:** ${formatDate(Date.now())}\n`;
-    md += `**Active Threads:** ${activeThreads.length}\n\n`;
+    md += `**Total Threads:** ${threads.length}\n`;
+    if (statusBreakdown) {
+        md += `**Status Breakdown:** ${statusBreakdown}\n`;
+    }
+    md += `\n`;
     md += `---\n\n`;
 
-    activeThreads.forEach((thread, index) => {
+    threads.forEach((thread, index) => {
         md += `## ${index + 1}. ${thread.title}\n\n`;
         md += `- **Element:** \`${thread.baseElement.path}\` (${thread.baseElement.type})\n`;
+        md += `- **Status:** ${thread.status}\n`;
         md += `- **Mode:** ${thread.currentMode}\n`;
         md += `- **Tokens:** ${thread.tokenCount}\n`;
         md += `- **Created:** ${formatDate(thread.createdAt)}\n\n`;
