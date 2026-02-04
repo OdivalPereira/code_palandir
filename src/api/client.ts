@@ -351,6 +351,44 @@ export const openSession = async (sessionId: string): Promise<OpenSessionRespons
 };
 
 export const generatePromptAgent = async (input: PromptAgentInput): Promise<GeneratedPrompt> => {
-  const result = await requestAi<GeneratedPrompt>('generate-prompt', input as any);
-  return result;
+  const result = await requestAi<unknown>('generate-prompt', input as any);
+  const response = typeof result === 'object' && result !== null ? (result as Record<string, unknown>) : {};
+  const metadata =
+    typeof response.metadata === 'object' && response.metadata !== null
+      ? (response.metadata as Record<string, unknown>)
+      : {};
+  const sections =
+    typeof metadata.sections === 'object' && metadata.sections !== null
+      ? (metadata.sections as Record<string, unknown>)
+      : {};
+  const usage =
+    typeof response.usage === 'object' && response.usage !== null
+      ? (response.usage as Record<string, unknown>)
+      : null;
+
+  const content = typeof response.prompt === 'string' ? response.prompt : '';
+  const techniquesApplied = Array.isArray(metadata.techniques)
+    ? metadata.techniques.filter((technique): technique is string => typeof technique === 'string')
+    : [];
+  const derivedTokenCount =
+    typeof usage?.totalTokens === 'number'
+      ? usage.totalTokens
+      : typeof usage?.outputTokens === 'number'
+        ? usage.outputTokens
+        : content
+          ? Math.max(1, Math.ceil(content.length / 4))
+          : 0;
+
+  return {
+    content,
+    tokenCount: derivedTokenCount,
+    techniquesApplied,
+    sections: {
+      context: typeof sections.context === 'string' ? sections.context : '',
+      tasks: typeof sections.tasks === 'string' ? sections.tasks : '',
+      instructions: typeof sections.instructions === 'string' ? sections.instructions : '',
+      validation: typeof sections.validation === 'string' ? sections.validation : '',
+    },
+    generatedAt: typeof response.generatedAt === 'number' ? response.generatedAt : Date.now(),
+  };
 };
