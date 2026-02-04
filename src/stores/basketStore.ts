@@ -300,7 +300,7 @@ interface BasketStore extends BasketState {
     // Library
     library: SavedThread[];
     saveToLibrary: (threadId: string, note: string, tags?: string[]) => void;
-    loadFromLibrary: (savedThreadId: string) => void;
+    loadFromLibrary: (savedThreadId: string, mode?: 'restore' | 'duplicate') => void;
     deleteFromLibrary: (savedThreadId: string) => void;
 
     // Import/Export
@@ -758,26 +758,44 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
         });
     },
 
-    loadFromLibrary: (savedThreadId: string) => {
+    loadFromLibrary: (savedThreadId: string, mode: 'restore' | 'duplicate' = 'restore') => {
         const saved = get().library.find(t => t.id === savedThreadId);
         if (!saved) return;
 
         // Create a new thread based on the saved one
         const now = Date.now();
-        const newThread: Thread = {
+        const baseThread: Thread = {
             ...saved,
             followUpQuestions: saved.followUpQuestions ?? [],
-            id: `thread-${now}-${Math.random().toString(36).substr(2, 9)}`,
-            status: 'active',
-            createdAt: now,
-            updatedAt: now,
         };
 
-        set(state => ({
-            threads: [...state.threads, newThread],
-            activeThreadId: newThread.id,
-            totalTokens: state.totalTokens + newThread.tokenCount,
-        }));
+        const newThread: Thread =
+            mode === 'duplicate'
+                ? {
+                      ...baseThread,
+                      id: `thread-${now}-${Math.random().toString(36).substr(2, 9)}`,
+                      status: 'active',
+                      createdAt: now,
+                      updatedAt: now,
+                  }
+                : { ...baseThread };
+
+        newThread.tokenCount = calculateThreadTokens(newThread);
+
+        set(state => {
+            const threads =
+                mode === 'restore'
+                    ? state.threads.some(thread => thread.id === newThread.id)
+                        ? state.threads.map(thread => (thread.id === newThread.id ? newThread : thread))
+                        : [...state.threads, newThread]
+                    : [...state.threads, newThread];
+
+            return {
+                threads,
+                activeThreadId: newThread.id,
+                totalTokens: threads.reduce((sum, thread) => sum + thread.tokenCount, 0),
+            };
+        });
     },
 
     deleteFromLibrary: (savedThreadId: string) => {
