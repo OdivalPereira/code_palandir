@@ -378,10 +378,13 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
         set(state => {
             const thread = state.threads.find(t => t.id === threadId);
             const tokensToRemove = thread?.tokenCount ?? 0;
+            const remainingThreads = state.threads.filter(t => t.id !== threadId);
+            const nextActiveThreadId =
+                state.activeThreadId === threadId ? remainingThreads[0]?.id ?? null : state.activeThreadId;
 
             return {
-                threads: state.threads.filter(t => t.id !== threadId),
-                activeThreadId: state.activeThreadId === threadId ? null : state.activeThreadId,
+                threads: remainingThreads,
+                activeThreadId: nextActiveThreadId,
                 totalTokens: Math.max(0, state.totalTokens - tokensToRemove),
             };
         });
