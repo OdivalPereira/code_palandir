@@ -56,6 +56,20 @@ function calculateThreadTokens(thread: Thread): number {
     return tokens;
 }
 
+const COMPACT_RECENT_MESSAGES = 6;
+
+function formatSummaryLine(message: ChatMessage): string {
+    const roleLabel = message.role === 'user' ? 'Usuário' : 'Assistente';
+    const normalized = message.content.replace(/\s+/g, ' ').trim();
+    const snippet = normalized.length > 140 ? `${normalized.slice(0, 140)}…` : normalized;
+    return `- (${roleLabel}) ${snippet}`;
+}
+
+function buildConversationSummary(messages: ChatMessage[]): string {
+    const lines = messages.map(formatSummaryLine).filter(Boolean);
+    return `Resumo de mensagens anteriores (${messages.length}):\n${lines.join('\n')}`;
+}
+
 // ============================================
 // Library Storage (LocalStorage)
 // ============================================
@@ -259,6 +273,7 @@ interface BasketStore extends BasketState {
     // Conversation
     addMessage: (threadId: string, role: 'user' | 'assistant', content: string) => string;
     addPendingAssistantMessage: (threadId: string, content?: string) => string;
+    compactThread: (threadId: string) => void;
     updateAssistantMessage: (
         threadId: string,
         messageId: string,
@@ -466,6 +481,52 @@ export const useBasketStore = create<BasketStore>((set, get) => ({
         });
 
         return message.id;
+    },
+
+    compactThread: (threadId: string) => {
+        set(state => {
+            let totalTokens = 0;
+            const threads = state.threads.map(thread => {
+                if (thread.id !== threadId) {
+                    totalTokens += thread.tokenCount;
+                    return thread;
+                }
+
+                if (thread.conversation.length <= COMPACT_RECENT_MESSAGES + 1) {
+                    totalTokens += thread.tokenCount;
+                    return thread;
+                }
+
+                const cutoffIndex = thread.conversation.length - COMPACT_RECENT_MESSAGES;
+                const messagesToSummarize = thread.conversation.slice(0, cutoffIndex);
+                const recentMessages = thread.conversation.slice(cutoffIndex);
+                const summaryContent = buildConversationSummary(messagesToSummarize);
+
+                const summaryMessage: ChatMessage = {
+                    id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    role: 'assistant',
+                    content: summaryContent,
+                    mode: thread.currentMode,
+                    timestamp: Date.now(),
+                    tokenEstimate: estimateTokens(summaryContent),
+                    status: 'sent',
+                };
+
+                const updated: Thread = {
+                    ...thread,
+                    conversation: [summaryMessage, ...recentMessages],
+                    updatedAt: Date.now(),
+                };
+                updated.tokenCount = calculateThreadTokens(updated);
+                totalTokens += updated.tokenCount;
+                return updated;
+            });
+
+            return {
+                threads,
+                totalTokens,
+            };
+        });
     },
 
     updateAssistantMessage: (
