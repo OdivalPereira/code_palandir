@@ -5,7 +5,7 @@
  * baseado no uso de tokens em relação ao limite máximo.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useId } from 'react';
 import { Zap, AlertTriangle, AlertOctagon, Sparkles } from 'lucide-react';
 import { useBasketStore } from '../stores/basketStore';
 
@@ -81,13 +81,28 @@ const TokenMonitor: React.FC<TokenMonitorProps> = ({ compact = false, className 
         }
         return n.toString();
     };
+    const formatFullTokens = (n: number) =>
+        new Intl.NumberFormat('pt-BR').format(n);
+    const formatPercent = (n: number) =>
+        new Intl.NumberFormat('pt-BR', {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1,
+        }).format(n);
+
+    const tooltipId = useId();
+    const tooltipText = `${formatFullTokens(totalTokens)} / ${formatFullTokens(maxTokens)} tokens (${formatPercent(percent)}%)`;
 
     // Active threads count
     const activeThreads = threads.filter(t => t.status === 'active').length;
 
     if (compact) {
         return (
-            <div className={`flex items-center gap-2 ${className}`}>
+            <div
+                className={`flex items-center gap-2 ${className}`}
+                title={tooltipText}
+                aria-describedby={tooltipId}
+                tabIndex={0}
+            >
                 <div className={`p-1 rounded ${colors.bg}`}>
                     <span className={colors.text}>{STATUS_ICONS[status]}</span>
                 </div>
@@ -101,6 +116,9 @@ const TokenMonitor: React.FC<TokenMonitorProps> = ({ compact = false, className 
                 </div>
                 <span className={`text-xs ${colors.text} font-medium`}>
                     {formatTokens(totalTokens)}
+                </span>
+                <span id={tooltipId} className="sr-only">
+                    {tooltipText}
                 </span>
             </div>
         );
@@ -128,12 +146,20 @@ const TokenMonitor: React.FC<TokenMonitorProps> = ({ compact = false, className 
             </div>
 
             {/* Stats */}
-            <div className="flex items-center justify-between text-xs">
+            <div
+                className="flex items-center justify-between text-xs"
+                title={tooltipText}
+                aria-describedby={tooltipId}
+                tabIndex={0}
+            >
                 <span className="text-slate-400">
                     {formatTokens(totalTokens)} / {formatTokens(maxTokens)} tokens
                 </span>
                 <span className={colors.text}>
                     {percent.toFixed(1)}%
+                </span>
+                <span id={tooltipId} className="sr-only">
+                    {tooltipText}
                 </span>
             </div>
 
