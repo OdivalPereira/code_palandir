@@ -114,7 +114,9 @@ export const downloadMarkdown = (content: string, filename: string = 'codemind-e
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    setTimeout(() => {
+        URL.revokeObjectURL(url);
+    }, 0);
 };
 
 const getLangFromPath = (path?: string): string => {
