@@ -17,6 +17,7 @@ import { clearSessionAccessToken } from '../authClient';
 import { getCachedFileContent, hashContent, setCachedFileContent } from '../cacheRepository';
 import { fetchGitHubJson } from '../githubClient';
 import { buildSemanticLinksForFile, SymbolIndex } from '../dependencyParser';
+import { convertUIGraphToFlatNodes } from '../utils/uiGraphTransformer';
 import type { BackendTemplate } from '../components/TemplateSidebar';
 import {
   AiMetricsResponse,
@@ -589,9 +590,26 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       }
 
       const data = await response.json();
+      const { nodes, links } = convertUIGraphToFlatNodes(data.graph.root, get().missingDependencies);
+      const nodesById: Record<string, FlatNode> = {};
+      for (const node of nodes) {
+        nodesById[node.id] = node;
+      }
+      const linksById: Record<string, Link> = {};
+      for (const link of links) {
+        const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
+        const targetId = typeof link.target === 'string' ? link.target : link.target.id;
+        const linkId = `${sourceId}->${targetId}:${link.kind ?? 'structural'}`;
+        linksById[linkId] = { ...link, source: sourceId, target: targetId };
+      }
+
       set({
         uiGraph: data.graph.root,
         uiGraphStatus: 'done',
+        nodes,
+        links,
+        nodesById,
+        linksById,
         graphViewMode: 'ui'
       });
       console.log('UI Graph built:', data.graph);
@@ -755,6 +773,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         }
       }
     }
+
+    await get().detectFramework();
   },
 
   toggleMultiSelection: (nodeId: string) => {
