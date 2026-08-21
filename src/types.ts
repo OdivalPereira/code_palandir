@@ -664,4 +664,67 @@ export interface CreatePrPayload {
   }>;
 }
 
+// ==============================================================================
+// Visual Context Inspector & Execution Trail Types
+// ==============================================================================
+
+export type TrailStage = 'ui' | 'state' | 'network' | 'type' | 'util';
+export type TrailNodeType = 'component' | 'hook' | 'store' | 'api' | 'type' | 'schema' | 'util';
+
+export interface TrailNode {
+  id: string;
+  name: string;
+  path: string;
+  stage: TrailStage;
+  type: TrailNodeType;
+  description?: string;
+  codeSnippet?: string;
+  lineRange?: [number, number];
+  metadata?: {
+    hookName?: string;
+    actionName?: string;
+    endpoint?: string;
+    httpMethod?: string;
+    typeName?: string;
+    props?: string[];
+  };
+  includedInContext?: boolean;
+}
+
+export interface TrailLink {
+  source: string;
+  target: string;
+  label?: string; // 'dispara' | 'invoca hook' | 'chama API' | 'tipado com' | 'importa'
+  kind: 'call' | 'state' | 'api' | 'type' | 'import';
+}
+
+export interface ComponentTrail {
+  rootNodeId: string;
+  rootName: string;
+  rootPath: string;
+  nodes: TrailNode[];
+  links: TrailLink[];
+  summary: string;
+  estimatedTokens: number;
+}
+
+export type VisualSurfaceMode = 'hierarchy' | 'preview';
+
+export interface RoutePageInfo {
+  id: string;
+  name: string;
+  route: string;
+  path: string;
+  type: 'page' | 'layout' | 'component';
+  childrenCount: number;
+  components: Array<{
+    id: string;
+    name: string;
+    path: string;
+    type: 'button' | 'form' | 'modal' | 'card' | 'input' | 'component';
+    description?: string;
+  }>;
+}
+
+
 

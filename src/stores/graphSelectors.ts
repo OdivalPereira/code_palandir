@@ -51,6 +51,12 @@ export const selectIsImportModalOpen = (state: GraphState) => state.isImportModa
 export const selectUserRepos = (state: GraphState) => state.userRepos;
 export const selectUserReposStatus = (state: GraphState) => state.userReposStatus;
 
+export const selectActiveTrail = (state: GraphState) => state.activeTrail;
+export const selectVisualSurfaceMode = (state: GraphState) => state.visualSurfaceMode;
+export const selectPreviewUrl = (state: GraphState) => state.previewUrl;
+export const selectSelectedUiElementId = (state: GraphState) => state.selectedUiElementId;
+export const selectRoutesAndPages = (state: GraphState) => state.routesAndPages;
+
 export const selectNodes = (state: GraphState) => state.nodes;
 export const selectLinks = (state: GraphState) => state.links;
 

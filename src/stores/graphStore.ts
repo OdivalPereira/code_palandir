@@ -35,11 +35,14 @@ import {
 import { openDirectoryPicker, extractZipFile } from '../utils/localFileSystem';
 import { buildSemanticLinksForFile, SymbolIndex } from '../dependencyParser';
 import { convertUIGraphToFlatNodes } from '../utils/uiGraphTransformer';
+import { extractComponentTrail, discoverRoutesAndPages } from '../utils/trailExtractor';
+import { useBasketStore } from './basketStore';
 import type { BackendTemplate } from '../components/TemplateSidebar';
 import {
   AiMetricsResponse,
   AppStatus,
   CodeNode,
+  ComponentTrail,
   CreatePrPayload,
   DetectedFramework,
   FileSystemNode,
@@ -58,6 +61,7 @@ import {
   PromptItem,
   ProjectGraphInput,
   ProjectSummary,
+  RoutePageInfo,
   SemanticLink,
   SESSION_SCHEMA_VERSION,
   SessionPayload,
@@ -65,6 +69,7 @@ import {
   SessionSelectionState,
   UIIntentSchema,
   UINode,
+  VisualSurfaceMode,
 } from '../types';
 
 export type GraphState = {
@@ -86,6 +91,20 @@ export type GraphState = {
   sidebarTab: 'prompt' | 'summary' | 'recommendations' | 'flow' | 'metrics' | 'library' | 'github-pr';
   sessionId: string | null;
   projectSignature: string | null;
+
+  // Visual Context Inspector & Execution Trail State
+  activeTrail: ComponentTrail | null;
+  visualSurfaceMode: VisualSurfaceMode;
+  previewUrl: string;
+  selectedUiElementId: string | null;
+  routesAndPages: RoutePageInfo[];
+  inspectComponentTrail: (path: string) => Promise<ComponentTrail | null>;
+  setVisualSurfaceMode: (mode: VisualSurfaceMode) => void;
+  setPreviewUrl: (url: string) => void;
+  setSelectedUiElementId: (id: string | null) => void;
+  addCurrentTrailToBasket: () => void;
+  toggleTrailNodeSelection: (nodeId: string) => void;
+  refreshRoutesAndPages: () => void;
   summaryPromptBase: string;
   projectSummary: ProjectSummary | null;
   summaryStatus: 'idle' | 'loading' | 'error';
@@ -507,6 +526,87 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   githubRateLimit: null,
   diffStatusByPath: new Map(),
 
+  // Visual Context Inspector & Execution Trail Initial State
+  activeTrail: null,
+  visualSurfaceMode: 'hierarchy',
+  previewUrl: '',
+  selectedUiElementId: null,
+  routesAndPages: [],
+
+  inspectComponentTrail: async (path: string) => {
+    const { allFilePaths, fileMap, projectFileContents } = get();
+    await get().ensureFileContent(path);
+    const trail = extractComponentTrail({
+      targetPath: path,
+      allFilePaths,
+      fileMap,
+      projectFileContents
+    });
+    set({ activeTrail: trail, selectedUiElementId: `ui:${path}` });
+    return trail;
+  },
+
+  setVisualSurfaceMode: (mode) => set({ visualSurfaceMode: mode }),
+  setPreviewUrl: (url) => set({ previewUrl: url }),
+  setSelectedUiElementId: (id) => set({ selectedUiElementId: id }),
+
+  addCurrentTrailToBasket: () => {
+    const { activeTrail } = get();
+    if (!activeTrail) return;
+    const basketStore = useBasketStore.getState();
+    const includedNodes = activeTrail.nodes.filter((n) => n.includedInContext !== false);
+
+    const flatNodes: FlatNode[] = includedNodes.map((n) => ({
+      id: n.id,
+      name: n.name,
+      path: n.path,
+      type: (n.type || 'component') as any,
+      group: n.stage === 'ui' ? 1 : n.stage === 'state' ? 2 : n.stage === 'network' ? 3 : 4,
+      relevant: true,
+      data: {
+        id: n.id,
+        name: n.name,
+        type: n.type,
+        path: n.path,
+        codeSnippet: n.codeSnippet,
+      } as any,
+      x: 0,
+      y: 0,
+    }));
+
+    if (flatNodes.length > 0) {
+      basketStore.createThread(flatNodes, 'explore');
+      set({ sidebarTab: 'prompt', isPromptOpen: true });
+    }
+  },
+
+  toggleTrailNodeSelection: (nodeId: string) => {
+    const { activeTrail } = get();
+    if (!activeTrail) return;
+    const updatedNodes = activeTrail.nodes.map((node) => {
+      if (node.id === nodeId) {
+        return { ...node, includedInContext: !node.includedInContext };
+      }
+      return node;
+    });
+    set({ activeTrail: { ...activeTrail, nodes: updatedNodes } });
+  },
+
+  refreshRoutesAndPages: () => {
+    const { allFilePaths, fileMap, projectFileContents, activeTrail } = get();
+    const routes = discoverRoutesAndPages(allFilePaths, fileMap, projectFileContents);
+    set({ routesAndPages: routes });
+
+    // Auto-inspect the first discovered route/component if none is active
+    if (!activeTrail && routes.length > 0) {
+      const firstPage = routes[0];
+      const target = firstPage.components[0]?.path || firstPage.path;
+      if (target) {
+        get().inspectComponentTrail(target);
+      }
+    }
+  },
+
   // Phase 2: UI Graph
   uiGraph: null,
   uiGraphStatus: 'idle',
@@ -918,6 +1018,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
 
     await get().detectFramework();
+    get().refreshRoutesAndPages();
   },
 
   openLocalDirectory: async () => {
@@ -1053,6 +1154,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         console.log('Phase 1: Detecting framework...');
         await get().detectFramework();
       }
+
+      get().refreshRoutesAndPages();
 
       // Fetch GitHub branches, PRs, commits, and rate limit in background
       get().fetchBranchesAndTags();
