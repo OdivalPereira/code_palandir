@@ -297,8 +297,22 @@ export const VisualSurfacePanel: React.FC<VisualSurfacePanelProps> = ({ classNam
                   src={previewUrl}
                   title="App Live Preview"
                   className="w-full flex-1 border-none bg-white"
-                  sandbox="allow-scripts allow-same-origin allow-forms"
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
                 />
+                <div className="p-2 bg-slate-900/90 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
+                  <span className="truncate">
+                    Se o site bloquear o preview (Código 11 / Bot Checkpoint):
+                  </span>
+                  <a
+                    href={previewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1 ml-2 flex-shrink-0"
+                  >
+                    <span>Abrir em Nova Aba</span>
+                    <ExternalLink size={10} />
+                  </a>
+                </div>
               </div>
             ) : (
               <div className="flex-1 border border-dashed border-slate-800 rounded-xl flex flex-col items-center justify-center p-6 text-center space-y-2 text-slate-500 text-xs">
