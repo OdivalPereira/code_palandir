@@ -625,6 +625,34 @@ export interface GitHubRateLimit {
   used: number;
 }
 
+export interface GitHubUserProfile {
+  login: string;
+  id: number;
+  avatar_url: string;
+  name?: string | null;
+  html_url: string;
+  public_repos?: number;
+  total_private_repos?: number;
+  owned_private_repos?: number;
+}
+
+export interface GitHubRepoItem {
+  id: number;
+  full_name: string;
+  name: string;
+  owner: {
+    login: string;
+    avatar_url?: string;
+  };
+  description?: string | null;
+  updated_at: string;
+  private: boolean;
+  default_branch: string;
+  html_url: string;
+  stargazers_count?: number;
+  fork?: boolean;
+}
+
 export interface CreatePrPayload {
   branchName: string;
   commitMessage: string;
@@ -635,4 +663,5 @@ export interface CreatePrPayload {
     content: string;
   }>;
 }
+
 

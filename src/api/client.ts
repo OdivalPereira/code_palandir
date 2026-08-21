@@ -293,20 +293,20 @@ export const logoutSession = async (): Promise<void> => {
   });
 };
 
-export type GitHubRepo = {
-  full_name: string;
-  name: string;
-  owner: string;
-  description: string;
-  updated_at: string;
-  private: boolean;
-};
+export type GitHubRepo = import('../types').GitHubRepoItem;
 
 export const fetchUserRepos = async (): Promise<GitHubRepo[]> => {
   const response = await requestJson<{ repos: GitHubRepo[] }>('/api/github/repos', {}, {
     errorMessage: 'Failed to fetch repositories.',
   });
-  return Array.isArray(response.repos) ? response.repos : [];
+  return Array.isArray(response?.repos) ? response.repos : [];
+};
+
+export const fetchUserProfile = async (): Promise<import('../types').GitHubUserProfile | null> => {
+  const response = await requestJson<{ user: import('../types').GitHubUserProfile }>('/api/github/user', {}, {
+    errorMessage: 'Failed to fetch user profile.',
+  });
+  return response?.user ?? null;
 };
 
 export const saveSession = async (

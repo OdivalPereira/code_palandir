@@ -313,4 +313,21 @@ export const createBranchAndOpenPr = async (
   return pr;
 };
 
+/**
+ * Fetch authenticated GitHub user profile (via OAuth token or PAT).
+ */
+export const fetchAuthenticatedUser = async (): Promise<import('./types').GitHubUserProfile> => {
+  return fetchGitHubJson<import('./types').GitHubUserProfile>('https://api.github.com/user');
+};
+
+/**
+ * Fetch all repositories the authenticated user has access to (public, private, organizations).
+ */
+export const fetchUserRepositories = async (): Promise<import('./types').GitHubRepoItem[]> => {
+  return fetchGitHubJson<import('./types').GitHubRepoItem[]>(
+    'https://api.github.com/user/repos?sort=updated&per_page=100&affiliation=owner,collaborator,organization_member'
+  );
+};
+
+
 

@@ -46,6 +46,10 @@ export const selectActivePullRequest = (state: GraphState) => state.activePullRe
 export const selectRecentCommits = (state: GraphState) => state.recentCommits;
 export const selectGithubRateLimit = (state: GraphState) => state.githubRateLimit;
 export const selectGithubOwnerRepo = (state: GraphState) => state.githubOwnerRepo;
+export const selectUserProfile = (state: GraphState) => state.userProfile;
+export const selectIsImportModalOpen = (state: GraphState) => state.isImportModalOpen;
+export const selectUserRepos = (state: GraphState) => state.userRepos;
+export const selectUserReposStatus = (state: GraphState) => state.userReposStatus;
 
 export const selectNodes = (state: GraphState) => state.nodes;
 export const selectLinks = (state: GraphState) => state.links;

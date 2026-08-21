@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { Maximize2, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { Maximize2, RotateCcw, ZoomIn, ZoomOut, Github, FolderOpen, Archive, Sparkles } from 'lucide-react';
 import { AIActionMode, ClusterData, FlatNode, Link } from '../types';
 import { useGraphStore } from '../stores/graphStore';
 import { usePresenceStore } from '../stores/presenceStore';
@@ -917,11 +917,61 @@ const CodeVisualizerContent: React.FC = () => {
     }
   }, [useCanvasRenderer]);
 
+  const setImportModalOpen = useGraphStore((state) => state.setImportModalOpen);
+  const openLocalDirectory = useGraphStore((state) => state.openLocalDirectory);
+
   if (!rootNode) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-slate-500 bg-slate-900/50 rounded-lg border-2 border-dashed border-slate-700 p-8">
-        <p className="text-lg font-medium mb-2">No Project Loaded</p>
-        <p className="text-sm">Import a GitHub repository, open a local directory, or upload a .ZIP to visualize the graph.</p>
+      <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-slate-950 p-8 select-none">
+        <div className="max-w-md w-full text-center space-y-6">
+          <div className="w-16 h-16 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto shadow-inner">
+            <Sparkles size={32} />
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-xl font-bold text-slate-100">Bem-vindo ao Code Palandir</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Mapeie, navegue e analise a arquitetura do seu código através de grafos de dependência interativos em 60 FPS.
+            </p>
+          </div>
+
+          <div className="space-y-2.5 pt-2">
+            <button
+              onClick={() => setImportModalOpen(true)}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition-all shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2.5"
+            >
+              <Github size={16} />
+              <span>Importar do GitHub (Públicos e Privados)</span>
+            </button>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                onClick={openLocalDirectory}
+                className="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-xl text-xs font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                <FolderOpen size={14} className="text-amber-400" />
+                <span>Abrir Pasta Local</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.zip,application/zip';
+                  input.onchange = (e: any) => {
+                    const file = e.target?.files?.[0];
+                    if (file) useGraphStore.getState().processZipFile(file);
+                  };
+                  input.click();
+                }}
+                className="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-xl text-xs font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                <Archive size={14} className="text-cyan-400" />
+                <span>Upload .ZIP</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

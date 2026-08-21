@@ -798,29 +798,76 @@ const handleUserRepos = async (req, res, session) => {
     return;
   }
   try {
-    const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=30', {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+    const response = await fetch(
+      'https://api.github.com/user/repos?sort=updated&per_page=100&affiliation=owner,collaborator,organization_member',
+      {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
     if (!response.ok) {
       jsonResponse(res, response.status, { error: 'Failed to fetch repositories.' });
       return;
     }
     const repos = await response.json();
     const result = repos.map((repo) => ({
+      id: repo.id,
       full_name: repo.full_name,
       name: repo.name,
-      owner: repo.owner?.login ?? '',
+      owner: {
+        login: repo.owner?.login ?? '',
+        avatar_url: repo.owner?.avatar_url ?? '',
+      },
       description: repo.description ?? '',
       updated_at: repo.updated_at,
-      private: repo.private ?? false,
+      private: Boolean(repo.private),
+      default_branch: repo.default_branch || 'main',
+      html_url: repo.html_url || `https://github.com/${repo.full_name}`,
+      stargazers_count: repo.stargazers_count ?? 0,
+      fork: Boolean(repo.fork),
     }));
     jsonResponse(res, 200, { repos: result });
   } catch (error) {
     console.error('Failed to fetch user repos', error);
     jsonResponse(res, 500, { error: 'Unexpected error fetching repos.' });
+  }
+};
+
+const handleUserProfile = async (req, res, session) => {
+  const accessToken = session.data.accessToken;
+  if (!accessToken) {
+    jsonResponse(res, 401, { error: 'Not authenticated.' });
+    return;
+  }
+  try {
+    const response = await fetch('https://api.github.com/user', {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    if (!response.ok) {
+      jsonResponse(res, response.status, { error: 'Failed to fetch user profile.' });
+      return;
+    }
+    const user = await response.json();
+    jsonResponse(res, 200, {
+      user: {
+        login: user.login,
+        id: user.id,
+        avatar_url: user.avatar_url,
+        name: user.name,
+        html_url: user.html_url,
+        public_repos: user.public_repos,
+        total_private_repos: user.total_private_repos,
+        owned_private_repos: user.owned_private_repos,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to fetch user profile', error);
+    jsonResponse(res, 500, { error: 'Unexpected error fetching profile.' });
   }
 };
 
@@ -1730,6 +1777,12 @@ export const handleRequest = async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/api/github/repos') {
     const session = getSession(req, res);
     await handleUserRepos(req, res, session);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/github/user') {
+    const session = getSession(req, res);
+    await handleUserProfile(req, res, session);
     return;
   }
 

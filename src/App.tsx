@@ -7,6 +7,7 @@ import AppTopBar from './components/AppTopBar';
 import AppVisualization from './components/AppVisualization';
 import PromptSidebarPanel from './components/PromptSidebarPanel';
 import AppEffects from './components/AppEffects';
+import GitHubImportModal from './components/GitHubImportModal';
 
 const App: React.FC = () => (
     <div className="flex h-screen w-full bg-slate-950 text-slate-200 overflow-hidden font-sans">
@@ -22,6 +23,7 @@ const App: React.FC = () => (
         <ErrorBoundary name="TemplateWizard">
             <TemplateWizard />
         </ErrorBoundary>
+        <GitHubImportModal />
         <AppEffects />
     </div>
 );

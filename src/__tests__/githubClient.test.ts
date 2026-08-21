@@ -7,6 +7,8 @@ import {
   listRepoTags,
   listRepoPullRequests,
   getPullRequestFiles,
+  fetchAuthenticatedUser,
+  fetchUserRepositories,
   listRepoCommits,
   getRateLimitStatus,
 } from '../githubClient';
@@ -23,6 +25,57 @@ describe('githubClient', () => {
     expect(getGitHubPat()).toBe('ghp_test1234567890');
     clearGitHubPat();
     expect(getGitHubPat()).toBeNull();
+  });
+
+  it('should fetch authenticated user profile', async () => {
+    const mockUser = {
+      login: 'octocat',
+      id: 1,
+      avatar_url: 'https://avatars.githubusercontent.com/u/1',
+      name: 'The Octocat',
+      html_url: 'https://github.com/octocat',
+      public_repos: 8,
+      total_private_repos: 5,
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => mockUser,
+    });
+    globalThis.fetch = fetchMock;
+    window.fetch = fetchMock;
+
+    const user = await fetchAuthenticatedUser();
+    expect(user).toEqual(mockUser);
+  });
+
+  it('should fetch user repositories including private ones', async () => {
+    const mockRepos = [
+      {
+        id: 101,
+        full_name: 'octocat/private-backend',
+        name: 'private-backend',
+        owner: { login: 'octocat', avatar_url: '' },
+        description: 'Internal API',
+        updated_at: '2026-08-01T00:00:00Z',
+        private: true,
+        default_branch: 'main',
+        html_url: 'https://github.com/octocat/private-backend',
+      },
+    ];
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => mockRepos,
+    });
+    globalThis.fetch = fetchMock;
+    window.fetch = fetchMock;
+
+    const repos = await fetchUserRepositories();
+    expect(repos).toEqual(mockRepos);
+    expect(repos[0].private).toBe(true);
   });
 
   it('should fetch branches for a repository', async () => {

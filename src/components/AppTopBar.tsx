@@ -39,7 +39,8 @@ import {
   selectSearchQuery,
   selectSidebarTab,
   selectStatus,
-  selectGithubUrl
+  selectGithubUrl,
+  selectUserProfile,
 } from '../stores/graphSelectors';
 import { AppStatus } from '../types';
 
@@ -84,6 +85,8 @@ const AppTopBar: React.FC = () => {
   const availableTags = useGraphStore(selectAvailableTags);
   const activePullRequest = useGraphStore(selectActivePullRequest);
   const githubRateLimit = useGraphStore(selectGithubRateLimit);
+  const userProfile = useGraphStore(selectUserProfile);
+  const setImportModalOpen = useGraphStore((state) => state.setImportModalOpen);
   const switchBranch = useGraphStore((state) => state.switchBranch);
 
   const [showRepoDropdown, setShowRepoDropdown] = useState(false);
@@ -178,23 +181,32 @@ const AppTopBar: React.FC = () => {
 
             <span className="text-slate-600 text-xs">OR</span>
 
-            {/* GitHub Repo Ingestion */}
-            <div className="flex items-center bg-slate-800 border border-slate-700 rounded overflow-hidden">
+            {/* GitHub Import Modal Button */}
+            <button
+              onClick={() => setImportModalOpen(true)}
+              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 border border-indigo-500/40 px-3 py-1.5 rounded text-sm font-medium transition-colors text-white shadow-sm"
+              title="Importar repositórios públicos ou privados do GitHub"
+            >
+              <Github size={14} /> Importar do GitHub
+            </button>
+
+            {/* GitHub Direct URL Quick Ingestion */}
+            <div className="hidden lg:flex items-center bg-slate-800 border border-slate-700 rounded overflow-hidden">
               <div className="px-2 text-slate-500"><Github size={14} /></div>
               <input
                 type="text"
                 placeholder="github.com/owner/repo"
-                className="bg-transparent border-none text-sm px-2 py-1.5 w-44 focus:outline-none text-slate-300"
+                className="bg-transparent border-none text-sm px-2 py-1.5 w-40 focus:outline-none text-slate-300"
                 value={githubUrl}
                 onChange={event => setGithubUrl(event.target.value)}
                 onKeyDown={event => event.key === 'Enter' && importGithubRepo()}
               />
               <button
-                onClick={importGithubRepo}
+                onClick={() => importGithubRepo()}
                 disabled={status === AppStatus.LOADING_FILES}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 text-xs font-medium text-white transition-colors"
+                className="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-xs font-medium text-white transition-colors"
               >
-                {status === AppStatus.LOADING_FILES ? <Loader2 size={12} className="animate-spin" /> : 'Load'}
+                {status === AppStatus.LOADING_FILES ? <Loader2 size={12} className="animate-spin" /> : 'Carregar'}
               </button>
             </div>
 
@@ -478,26 +490,34 @@ const AppTopBar: React.FC = () => {
           </button>
 
           <div className="flex items-center gap-2 border-l border-slate-700 ml-2 pl-2">
-            {isAuthenticated ? (
-              <>
-                <span className="text-xs px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                  Conectado
-                </span>
+            {isAuthenticated || githubPat ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setImportModalOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs transition-colors text-slate-200"
+                  title="Abrir gerenciador de repositórios do GitHub"
+                >
+                  {userProfile?.avatar_url ? (
+                    <img src={userProfile.avatar_url} alt="" className="w-4 h-4 rounded-full" />
+                  ) : (
+                    <Github size={13} className="text-indigo-400" />
+                  )}
+                  <span className="max-w-[90px] truncate">{userProfile?.login || 'Conectado'}</span>
+                </button>
                 <button
                   onClick={logout}
-                  className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors text-slate-200"
+                  className="p-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs transition-colors text-slate-400 hover:text-rose-300"
+                  title="Sair / Desconectar"
                 >
-                  <LogOut size={14} /> Sair
+                  <LogOut size={13} />
                 </button>
-              </>
+              </div>
             ) : (
               <button
-                onClick={() => {
-                  window.location.href = '/api/auth/login';
-                }}
-                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors text-slate-200"
+                onClick={() => setImportModalOpen(true)}
+                className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-xs font-medium transition-colors text-white shadow-sm"
               >
-                <Github size={14} /> Entrar com GitHub
+                <Github size={14} /> Conectar GitHub
               </button>
             )}
           </div>

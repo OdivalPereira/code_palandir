@@ -3,6 +3,7 @@ import {
   analyzeFile,
   fetchAiMetrics,
   fetchSessionAccessToken,
+  fetchUserProfile as apiFetchUserProfile,
   fetchUserRepos,
   GitHubRepo,
   logoutSession,
@@ -27,7 +28,9 @@ import {
   getPullRequestFiles,
   listRepoCommits,
   getRateLimitStatus,
-  createBranchAndOpenPr
+  createBranchAndOpenPr,
+  fetchAuthenticatedUser,
+  fetchUserRepositories,
 } from '../githubClient';
 import { openDirectoryPicker, extractZipFile } from '../utils/localFileSystem';
 import { buildSemanticLinksForFile, SymbolIndex } from '../dependencyParser';
@@ -47,6 +50,7 @@ import {
   GitHubPullRequestDetail,
   GitHubRateLimit,
   GitHubTag,
+  GitHubUserProfile,
   Link,
   GraphViewMode,
   MissingDependency,
@@ -71,6 +75,10 @@ export type GraphState = {
   githubPat: string | null;
   setGithubPat: (pat: string) => void;
   clearGithubPat: () => void;
+  userProfile: GitHubUserProfile | null;
+  isImportModalOpen: boolean;
+  setImportModalOpen: (isOpen: boolean) => void;
+  fetchUserProfile: () => Promise<void>;
   promptItems: PromptItem[];
   searchQuery: string;
   githubUrl: string;
@@ -161,7 +169,7 @@ export type GraphState = {
   processFiles: (files: FileList | File[]) => Promise<void>;
   openLocalDirectory: () => Promise<void>;
   processZipFile: (file: File) => Promise<void>;
-  importGithubRepo: () => Promise<void>;
+  importGithubRepo: (targetUrlOrOwnerRepo?: string) => Promise<void>;
   searchRelevantFiles: () => Promise<void>;
   ensureFileContent: (path: string) => Promise<string | undefined>;
   analyzeSelectedFile: (selectedNode: FlatNode | null) => Promise<void>;
@@ -441,14 +449,22 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   status: AppStatus.IDLE,
   isAuthenticated: false,
   authNotice: null,
+  userProfile: null,
+  isImportModalOpen: false,
+  setImportModalOpen: (open) => set({ isImportModalOpen: open }),
   githubPat: getGitHubPat(),
   setGithubPat: (pat) => {
     setStoredPat(pat);
     set({ githubPat: pat });
+    if (pat) {
+      get().fetchUserProfile();
+      get().fetchUserRepos();
+      get().fetchRateLimit();
+    }
   },
   clearGithubPat: () => {
     clearStoredPat();
-    set({ githubPat: null });
+    set({ githubPat: null, userProfile: null, userRepos: [] });
   },
   promptItems: [],
   searchQuery: '',
@@ -525,9 +541,33 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         isAuthenticated,
         authNotice: isAuthenticated ? null : AUTH_NOTICE_MESSAGE
       });
+      if (isAuthenticated || get().githubPat) {
+        get().fetchUserProfile();
+        get().fetchUserRepos();
+        get().fetchRateLimit();
+      }
     } catch (error) {
       console.error(error);
       set({ isAuthenticated: false, authNotice: AUTH_NOTICE_MESSAGE });
+    }
+  },
+  fetchUserProfile: async () => {
+    const { isAuthenticated, githubPat } = get();
+    if (!isAuthenticated && !githubPat) {
+      set({ userProfile: null });
+      return;
+    }
+    try {
+      let profile: GitHubUserProfile | null = null;
+      if (isAuthenticated) {
+        profile = await apiFetchUserProfile();
+      } else if (githubPat) {
+        profile = await fetchAuthenticatedUser();
+      }
+      set({ userProfile: profile });
+    } catch (error) {
+      console.warn('Failed to fetch user profile:', error);
+      set({ userProfile: null });
     }
   },
   logout: async () => {
@@ -537,16 +577,29 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       console.error(error);
     }
     clearSessionAccessToken();
-    set({ isAuthenticated: false, authNotice: AUTH_NOTICE_MESSAGE });
+    clearStoredPat();
+    set({
+      isAuthenticated: false,
+      githubPat: null,
+      userProfile: null,
+      userRepos: [],
+      authNotice: AUTH_NOTICE_MESSAGE
+    });
   },
   fetchUserRepos: async () => {
-    if (!get().isAuthenticated) {
+    const { isAuthenticated, githubPat } = get();
+    if (!isAuthenticated && !githubPat) {
       set({ authNotice: AUTH_NOTICE_MESSAGE });
       return;
     }
     set({ userReposStatus: 'loading' });
     try {
-      const repos = await fetchUserRepos();
+      let repos: GitHubRepo[] = [];
+      if (isAuthenticated) {
+        repos = await fetchUserRepos();
+      } else if (githubPat) {
+        repos = await fetchUserRepositories();
+      }
       set({ userRepos: repos, userReposStatus: 'idle' });
     } catch (error) {
       console.error(error);
@@ -913,7 +966,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set({ selectedNodeIds: new Set() });
   },
 
-  importGithubRepo: async () => {
+  importGithubRepo: async (targetUrlOrOwnerRepo?: string) => {
+    if (targetUrlOrOwnerRepo) {
+      const clean = targetUrlOrOwnerRepo.trim();
+      const normalized = clean.startsWith('http')
+        ? clean
+        : clean.startsWith('github.com/')
+        ? clean
+        : `github.com/${clean}`;
+      set({ githubUrl: normalized });
+    }
     const githubUrl = get().githubUrl;
     if (!githubUrl) return;
     set({ status: AppStatus.LOADING_FILES });
