@@ -15,7 +15,20 @@ import {
 } from '../api/client';
 import { clearSessionAccessToken } from '../authClient';
 import { getCachedFileContent, hashContent, setCachedFileContent } from '../cacheRepository';
-import { fetchGitHubJson, fetchGitHubFileContent, getGitHubPat, setGitHubPat as setStoredPat, clearGitHubPat as clearStoredPat } from '../githubClient';
+import {
+  fetchGitHubJson,
+  fetchGitHubFileContent,
+  getGitHubPat,
+  setGitHubPat as setStoredPat,
+  clearGitHubPat as clearStoredPat,
+  listRepoBranches,
+  listRepoTags,
+  listRepoPullRequests,
+  getPullRequestFiles,
+  listRepoCommits,
+  getRateLimitStatus,
+  createBranchAndOpenPr
+} from '../githubClient';
 import { openDirectoryPicker, extractZipFile } from '../utils/localFileSystem';
 import { buildSemanticLinksForFile, SymbolIndex } from '../dependencyParser';
 import { convertUIGraphToFlatNodes } from '../utils/uiGraphTransformer';
@@ -24,9 +37,16 @@ import {
   AiMetricsResponse,
   AppStatus,
   CodeNode,
+  CreatePrPayload,
   DetectedFramework,
   FileSystemNode,
   FlatNode,
+  GitHubBranch,
+  GitHubCommitItem,
+  GitHubPullRequest,
+  GitHubPullRequestDetail,
+  GitHubRateLimit,
+  GitHubTag,
   Link,
   GraphViewMode,
   MissingDependency,
@@ -55,7 +75,7 @@ export type GraphState = {
   searchQuery: string;
   githubUrl: string;
   isPromptOpen: boolean;
-  sidebarTab: 'prompt' | 'summary' | 'recommendations' | 'flow' | 'metrics' | 'library';
+  sidebarTab: 'prompt' | 'summary' | 'recommendations' | 'flow' | 'metrics' | 'library' | 'github-pr';
   sessionId: string | null;
   projectSignature: string | null;
   summaryPromptBase: string;
@@ -79,6 +99,17 @@ export type GraphState = {
   detectedFramework: DetectedFramework | null;
   frameworkStatus: 'idle' | 'detecting' | 'done' | 'error';
   githubOwnerRepo: { owner: string; repo: string; branch: string } | null;
+
+  // GitHub Advanced Integration State
+  availableBranches: GitHubBranch[];
+  currentBranch: string;
+  availableTags: GitHubTag[];
+  availablePullRequests: GitHubPullRequest[];
+  activePullRequest: GitHubPullRequestDetail | null;
+  recentCommits: GitHubCommitItem[];
+  githubRateLimit: GitHubRateLimit | null;
+  diffStatusByPath: Map<string, { status: 'added' | 'modified' | 'removed'; additions: number; deletions: number; patch?: string }>;
+
   // Phase 1 + 2 + 4 Actions
   downloadProjectFiles: (paths: string[]) => Promise<void>;
   detectFramework: () => Promise<void>;
@@ -98,7 +129,7 @@ export type GraphState = {
   setSearchQuery: (query: string) => void;
   setGithubUrl: (url: string) => void;
   setPromptOpen: (open: boolean) => void;
-  setSidebarTab: (tab: 'prompt' | 'summary' | 'recommendations' | 'flow' | 'metrics' | 'library') => void;
+  setSidebarTab: (tab: 'prompt' | 'summary' | 'recommendations' | 'flow' | 'metrics' | 'library' | 'github-pr') => void;
   setSummaryPromptBase: (base: string) => void;
   setPromptItems: (items: PromptItem[]) => void;
   addPromptItem: (item: PromptItem) => void;
@@ -116,6 +147,16 @@ export type GraphState = {
   userRepos: GitHubRepo[];
   userReposStatus: 'idle' | 'loading' | 'error';
   fetchUserRepos: () => Promise<void>;
+
+  // GitHub Advanced Integration Actions
+  fetchBranchesAndTags: () => Promise<void>;
+  switchBranch: (branchName: string) => Promise<void>;
+  fetchPullRequests: () => Promise<void>;
+  loadPullRequest: (prNumber: number) => Promise<void>;
+  clearPullRequestMode: () => void;
+  fetchCommits: () => Promise<void>;
+  fetchRateLimit: () => Promise<void>;
+  createPrFromSuggestion: (payload: CreatePrPayload) => Promise<GitHubPullRequest>;
   // Data actions
   processFiles: (files: FileList | File[]) => Promise<void>;
   openLocalDirectory: () => Promise<void>;
@@ -370,8 +411,30 @@ const buildGraphHashData = (
 const computeGraph = (
   rootNode: FileSystemNode | null,
   highlightedPaths: string[],
-  expandedDirectories: Set<string>
-) => buildGraphHashData(rootNode, highlightedPaths, expandedDirectories);
+  expandedDirectories: Set<string>,
+  diffStatusByPath?: Map<string, { status: 'added' | 'modified' | 'removed'; additions: number; deletions: number; patch?: string }>
+) => {
+  const result = buildGraphHashData(rootNode, highlightedPaths, expandedDirectories);
+  if (diffStatusByPath && diffStatusByPath.size > 0) {
+    const nodes = result.nodes.map((node) => {
+      const pathKey = node.path || node.id;
+      const diff = pathKey ? diffStatusByPath.get(pathKey) : undefined;
+      if (!diff) return node;
+      return {
+        ...node,
+        diffStatus: diff.status,
+        diffAdditions: diff.additions,
+        diffDeletions: diff.deletions
+      };
+    });
+    const nodesById: Record<string, FlatNode> = {};
+    nodes.forEach((n) => {
+      nodesById[n.id] = n;
+    });
+    return { ...result, nodes, nodesById };
+  }
+  return result;
+};
 
 export const useGraphStore = create<GraphState>((set, get) => ({
   fileMap: new Map(),
@@ -417,6 +480,17 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   detectedFramework: null,
   frameworkStatus: 'idle',
   githubOwnerRepo: null,
+
+  // GitHub Advanced Integration Initial State
+  availableBranches: [],
+  currentBranch: 'main',
+  availableTags: [],
+  availablePullRequests: [],
+  activePullRequest: null,
+  recentCommits: [],
+  githubRateLimit: null,
+  diffStatusByPath: new Map(),
+
   // Phase 2: UI Graph
   uiGraph: null,
   uiGraphStatus: 'idle',
@@ -917,11 +991,254 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         console.log('Phase 1: Detecting framework...');
         await get().detectFramework();
       }
+
+      // Fetch GitHub branches, PRs, commits, and rate limit in background
+      get().fetchBranchesAndTags();
+      get().fetchPullRequests();
+      get().fetchRateLimit();
+      get().fetchCommits();
     } catch (error: any) {
       console.error('[importGithubRepo] Error:', error);
       alert(error.message || 'Error importing from GitHub. If private, please configure a GitHub PAT.');
       set({ status: AppStatus.ERROR });
     }
+  },
+
+  fetchRateLimit: async () => {
+    try {
+      const rateLimit = await getRateLimitStatus();
+      set({ githubRateLimit: rateLimit });
+    } catch (err) {
+      console.warn('Failed to fetch rate limit:', err);
+    }
+  },
+
+  fetchBranchesAndTags: async () => {
+    const ownerRepo = get().githubOwnerRepo;
+    if (!ownerRepo) return;
+    try {
+      const [branches, tags] = await Promise.all([
+        listRepoBranches(ownerRepo.owner, ownerRepo.repo).catch(() => []),
+        listRepoTags(ownerRepo.owner, ownerRepo.repo).catch(() => [])
+      ]);
+      set({
+        availableBranches: branches,
+        availableTags: tags,
+        currentBranch: ownerRepo.branch
+      });
+    } catch (error) {
+      console.warn('Error fetching branches and tags:', error);
+    }
+  },
+
+  switchBranch: async (branchName: string) => {
+    const ownerRepo = get().githubOwnerRepo;
+    if (!ownerRepo) return;
+    const { owner, repo } = ownerRepo;
+    set({ status: AppStatus.LOADING_FILES, currentBranch: branchName });
+    try {
+      const treeData = await fetchGitHubJson<{ tree: { type: string; path: string }[] }>(
+        `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branchName)}?recursive=1`
+      );
+
+      const paths = treeData.tree.filter((item: { type: string }) => item.type === 'blob').map((item: { path: string }) => item.path);
+      const childrenIndex = buildChildrenIndex(paths);
+      const descendantCount = computeDescendantCounts(childrenIndex);
+
+      const rootChildren = buildChildNodes('', childrenIndex, descendantCount);
+      const root: FileSystemNode = {
+        id: 'root',
+        name: repo,
+        type: 'directory',
+        path: '',
+        children: rootChildren,
+        hasChildren: rootChildren.length > 0,
+        descendantCount: descendantCount.get('') ?? rootChildren.length
+      };
+
+      get().setRootNode(root);
+      set({
+        fileMap: new Map(),
+        status: AppStatus.IDLE,
+        sessionLayout: null,
+        childrenIndex,
+        descendantCount,
+        allFilePaths: paths,
+        githubOwnerRepo: { owner, repo, branch: branchName },
+        projectFileContents: new Map(),
+        activePullRequest: null,
+        diffStatusByPath: new Map()
+      });
+
+      const signature = await computeProjectSignature(paths, `github:${owner}/${repo}@${branchName}`);
+      set({ projectSignature: signature });
+      get().fetchCommits();
+      get().fetchRateLimit();
+    } catch (error: any) {
+      console.error('[switchBranch] Error:', error);
+      alert(error.message || `Failed to switch to branch ${branchName}`);
+      set({ status: AppStatus.ERROR });
+    }
+  },
+
+  fetchPullRequests: async () => {
+    const ownerRepo = get().githubOwnerRepo;
+    if (!ownerRepo) return;
+    try {
+      const prs = await listRepoPullRequests(ownerRepo.owner, ownerRepo.repo, 'all');
+      set({ availablePullRequests: prs });
+    } catch (error) {
+      console.warn('Error fetching pull requests:', error);
+    }
+  },
+
+  loadPullRequest: async (prNumber: number) => {
+    const ownerRepo = get().githubOwnerRepo;
+    if (!ownerRepo) return;
+    const { owner, repo } = ownerRepo;
+    set({ status: AppStatus.LOADING_FILES });
+    try {
+      const prFiles = await getPullRequestFiles(owner, repo, prNumber);
+      const prs = get().availablePullRequests;
+      const basePr = prs.find(p => p.number === prNumber) || {
+        id: prNumber,
+        number: prNumber,
+        title: `PR #${prNumber}`,
+        state: 'open',
+        user: { login: 'github', avatar_url: '' },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        html_url: `https://github.com/${owner}/${repo}/pull/${prNumber}`,
+        head: { ref: 'head', sha: '' },
+        base: { ref: 'base', sha: '' }
+      };
+
+      const diffStatusByPath = new Map<string, { status: 'added' | 'modified' | 'removed'; additions: number; deletions: number; patch?: string }>();
+      let totalAdditions = 0;
+      let totalDeletions = 0;
+      const directoriesToExpand = new Set<string>();
+
+      prFiles.forEach(file => {
+        const normStatus: 'added' | 'modified' | 'removed' = file.status === 'removed' ? 'removed' : file.status === 'added' ? 'added' : 'modified';
+        diffStatusByPath.set(file.filename, {
+          status: normStatus,
+          additions: file.additions,
+          deletions: file.deletions,
+          patch: file.patch
+        });
+        totalAdditions += file.additions;
+        totalDeletions += file.deletions;
+
+        // Auto-expand directory chain
+        const parts = file.filename.split('/');
+        parts.pop();
+        let currentPath = '';
+        for (const part of parts) {
+          currentPath = currentPath ? `${currentPath}/${part}` : part;
+          directoriesToExpand.add(currentPath);
+        }
+      });
+
+      const detail: GitHubPullRequestDetail = {
+        ...basePr,
+        files: prFiles,
+        totalAdditions,
+        totalDeletions
+      };
+
+      if (get().rootNode) {
+        const nextExpanded = new Set([...get().expandedDirectories, ...directoriesToExpand]);
+        const { nodes, links, nodesById, linksById } = computeGraph(get().rootNode, get().highlightedPaths, nextExpanded, diffStatusByPath);
+        set({
+          expandedDirectories: nextExpanded,
+          activePullRequest: detail,
+          diffStatusByPath,
+          nodes,
+          links,
+          nodesById,
+          linksById,
+          status: AppStatus.IDLE,
+          sidebarTab: 'github-pr',
+          isPromptOpen: true
+        });
+      } else {
+        const currentNodes = get().nodes;
+        const updatedNodes = currentNodes.map(node => {
+          const pathKey = node.path || node.id;
+          const diffInfo = pathKey ? diffStatusByPath.get(pathKey) : undefined;
+          if (diffInfo) {
+            return {
+              ...node,
+              diffStatus: diffInfo.status,
+              diffAdditions: diffInfo.additions,
+              diffDeletions: diffInfo.deletions
+            };
+          }
+          return {
+            ...node,
+            diffStatus: undefined,
+            diffAdditions: undefined,
+            diffDeletions: undefined
+          };
+        });
+
+        set({
+          activePullRequest: detail,
+          diffStatusByPath,
+          nodes: updatedNodes,
+          status: AppStatus.IDLE,
+          sidebarTab: 'github-pr',
+          isPromptOpen: true
+        });
+      }
+    } catch (error: any) {
+      console.error('[loadPullRequest] Error:', error);
+      alert(error.message || `Failed to load PR #${prNumber}`);
+      set({ status: AppStatus.ERROR });
+    }
+  },
+
+  clearPullRequestMode: () => {
+    const currentNodes = get().nodes;
+    const updatedNodes = currentNodes.map(node => ({
+      ...node,
+      diffStatus: undefined,
+      diffAdditions: undefined,
+      diffDeletions: undefined
+    }));
+    set({
+      activePullRequest: null,
+      diffStatusByPath: new Map(),
+      nodes: updatedNodes
+    });
+  },
+
+  fetchCommits: async () => {
+    const ownerRepo = get().githubOwnerRepo;
+    if (!ownerRepo) return;
+    try {
+      const commits = await listRepoCommits(ownerRepo.owner, ownerRepo.repo, ownerRepo.branch, 30);
+      set({ recentCommits: commits });
+    } catch (error) {
+      console.warn('Error fetching commits:', error);
+    }
+  },
+
+  createPrFromSuggestion: async (payload: CreatePrPayload) => {
+    const ownerRepo = get().githubOwnerRepo;
+    if (!ownerRepo) {
+      throw new Error('No GitHub repository currently loaded.');
+    }
+    const pr = await createBranchAndOpenPr(
+      ownerRepo.owner,
+      ownerRepo.repo,
+      ownerRepo.branch,
+      payload
+    );
+    // Refresh PR list and commits in background
+    get().fetchPullRequests();
+    get().fetchCommits();
+    return pr;
   },
 
   searchRelevantFiles: async () => {
@@ -969,8 +1286,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         try {
           const cacheKey = await hashContent(`file-content:${owner}/${repo}:${path}`);
           const cached = await getCachedFileContent(cacheKey);
-          if (cached?.content) {
-            content = cached.content;
+          if (cached) {
+            content = cached;
             set((state) => ({
               fileMap: new Map(state.fileMap).set(path, content!)
             }));

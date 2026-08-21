@@ -38,6 +38,14 @@ export const selectAllFilePaths = (state: GraphState) => state.allFilePaths;
 export const selectSessionId = (state: GraphState) => state.sessionId;
 export const selectProjectSignature = (state: GraphState) => state.projectSignature;
 export const selectWizardTemplate = (state: GraphState) => state.wizardTemplate;
+export const selectAvailableBranches = (state: GraphState) => state.availableBranches;
+export const selectCurrentBranch = (state: GraphState) => state.currentBranch;
+export const selectAvailableTags = (state: GraphState) => state.availableTags;
+export const selectAvailablePullRequests = (state: GraphState) => state.availablePullRequests;
+export const selectActivePullRequest = (state: GraphState) => state.activePullRequest;
+export const selectRecentCommits = (state: GraphState) => state.recentCommits;
+export const selectGithubRateLimit = (state: GraphState) => state.githubRateLimit;
+export const selectGithubOwnerRepo = (state: GraphState) => state.githubOwnerRepo;
 
 export const selectNodes = (state: GraphState) => state.nodes;
 export const selectLinks = (state: GraphState) => state.links;

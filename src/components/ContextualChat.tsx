@@ -26,6 +26,7 @@ import {
     Lightbulb,
     Bot,
     User,
+    GitPullRequest,
 } from 'lucide-react';
 import {
     AIActionMode,
@@ -36,6 +37,7 @@ import {
     ThreadSuggestion,
 } from '../types';
 import { useBasketStore } from '../stores/basketStore';
+import { useGraphStore } from '../stores/graphStore';
 import {
     sendChatMessage,
     getInputPlaceholder,
@@ -304,6 +306,35 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
         useBasketStore.getState().deleteThread(currentThread.id);
     }, [currentThread]);
 
+    const handleCreatePrFromSuggestion = useCallback(async (suggestion: ThreadSuggestion) => {
+        const ownerRepo = useGraphStore.getState().githubOwnerRepo;
+        if (!ownerRepo) {
+            alert('Nenhum repositório do GitHub conectado. Carregue um repositório via barra superior para abrir Pull Requests.');
+            return;
+        }
+        const activeNode = selectedNodes[0];
+        const defaultBranchName = `ai-refactor/${(activeNode?.name || 'patch').toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString().slice(-4)}`;
+        const branchName = window.prompt('Nome da nova branch no GitHub:', defaultBranchName);
+        if (!branchName) return;
+
+        const targetPath = suggestion.path || activeNode?.path || 'src/suggested_change.ts';
+        const prTitle = window.prompt('Título do Pull Request:', `AI Refactoring: ${suggestion.title}`);
+        if (!prTitle) return;
+
+        try {
+            const pr = await useGraphStore.getState().createPrFromSuggestion({
+                branchName,
+                commitMessage: `feat: apply AI suggestion (${suggestion.title})`,
+                prTitle,
+                prBody: `## Sugestão de IA aplicada via Code Palandir\n\n**Elemento:** \`${activeNode?.name || 'N/A'}\`\n**Arquivo:** \`${targetPath}\`\n\n${suggestion.description || ''}`,
+                files: [{ path: targetPath, content: suggestion.content || '' }]
+            });
+            alert(`Pull Request criado com sucesso! PR #${pr.number}: ${pr.html_url}`);
+        } catch (err: any) {
+            alert(`Erro ao criar Pull Request: ${err.message}`);
+        }
+    }, [selectedNodes]);
+
     if (!currentThread) {
         return (
             <div className="flex items-center justify-center h-full">
@@ -465,6 +496,7 @@ const ContextualChat: React.FC<ContextualChatProps> = ({
                                 suggestion={sug}
                                 onCopy={handleCopy}
                                 copiedId={copiedId}
+                                onCreatePr={handleCreatePrFromSuggestion}
                             />
                         ))}
                     </div>
@@ -730,30 +762,44 @@ interface SuggestionCardProps {
     suggestion: ThreadSuggestion;
     onCopy: (id: string, content: string) => void;
     copiedId: string | null;
+    onCreatePr?: (suggestion: ThreadSuggestion) => void;
 }
 
-const SuggestionCard: React.FC<SuggestionCardProps> = ({ suggestion, onCopy, copiedId }) => {
+const SuggestionCard: React.FC<SuggestionCardProps> = ({ suggestion, onCopy, copiedId, onCreatePr }) => {
     return (
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-2">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-2.5 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                     <span className="text-amber-400">{SUGGESTION_ICONS[suggestion.type] || <FileCode size={14} />}</span>
-                    <span className="text-sm font-medium text-slate-200">{suggestion.title}</span>
-                    <span className="text-xs text-slate-500 px-1.5 py-0.5 bg-slate-700/50 rounded">
+                    <span className="text-sm font-medium text-slate-200 truncate">{suggestion.title}</span>
+                    <span className="text-[10px] text-slate-400 px-1.5 py-0.5 bg-slate-700/50 rounded flex-shrink-0">
                         {suggestion.type}
                     </span>
                 </div>
-                {suggestion.content && (
-                    <button
-                        onClick={() => onCopy(suggestion.id, suggestion.content!)}
-                        className="p-1 text-slate-400 hover:text-slate-200 transition-colors"
-                    >
-                        {copiedId === suggestion.id ? <Check size={14} /> : <Copy size={14} />}
-                    </button>
-                )}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                    {suggestion.content && onCreatePr && (
+                        <button
+                            onClick={() => onCreatePr(suggestion)}
+                            className="flex items-center gap-1 px-2 py-0.5 text-[11px] bg-indigo-600/80 hover:bg-indigo-600 text-white rounded transition-colors"
+                            title="Criar Branch e abrir Pull Request no GitHub"
+                        >
+                            <GitPullRequest size={12} />
+                            <span>Criar PR</span>
+                        </button>
+                    )}
+                    {suggestion.content && (
+                        <button
+                            onClick={() => onCopy(suggestion.id, suggestion.content!)}
+                            className="p-1 text-slate-400 hover:text-slate-200 transition-colors"
+                            title="Copiar código"
+                        >
+                            {copiedId === suggestion.id ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                        </button>
+                    )}
+                </div>
             </div>
             {suggestion.description && (
-                <p className="text-xs text-slate-400 mt-1">{suggestion.description}</p>
+                <p className="text-xs text-slate-400 leading-relaxed">{suggestion.description}</p>
             )}
         </div>
     );

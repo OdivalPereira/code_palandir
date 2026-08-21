@@ -24,6 +24,7 @@ import {
 import PromptBuilder from './PromptBuilder';
 import ModuleRecommendations from './ModuleRecommendations';
 import ThreadLibrary from './ThreadLibrary';
+import GitHubPRPanel from './GitHubPRPanel';
 import { Link } from '../types';
 
 const formatCurrency = (value: number) =>
@@ -405,6 +406,8 @@ const PromptSidebarPanel: React.FC = () => {
           </div>
         ) : sidebarTab === 'library' ? (
           <ThreadLibrary onClose={() => setPromptOpen(false)} />
+        ) : sidebarTab === 'github-pr' ? (
+          <GitHubPRPanel onClose={() => setPromptOpen(false)} />
         ) : (
           <ModuleRecommendations />
         )}

@@ -129,3 +129,188 @@ export const fetchGitHubFileContent = async (
   return await response.text();
 };
 
+/**
+ * Generic authenticated API mutation helper (POST, PUT, DELETE)
+ */
+export const sendGitHubMutation = async <T>(
+  url: string,
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  body?: unknown
+): Promise<T> => {
+  const pat = getGitHubPat();
+  const sessionToken = await getSessionAccessToken();
+  const token = pat || sessionToken;
+
+  if (!token) {
+    throw new Error('Authentication required for this GitHub operation. Please configure a GitHub PAT or log in.');
+  }
+
+  const headers: HeadersInit = {
+    Accept: GITHUB_ACCEPT_HEADER,
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  };
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => ({}));
+    const message = (errBody as any).message || response.statusText;
+    throw new Error(`GitHub API error (${response.status}): ${message}`);
+  }
+
+  if (response.status === 204) {
+    return {} as T;
+  }
+
+  return (await response.json()) as T;
+};
+
+/**
+ * List branches for a repository.
+ */
+export const listRepoBranches = async (owner: string, repo: string): Promise<import('./types').GitHubBranch[]> => {
+  return fetchGitHubJson<import('./types').GitHubBranch[]>(
+    `https://api.github.com/repos/${owner}/${repo}/branches?per_page=100`
+  );
+};
+
+/**
+ * List tags for a repository.
+ */
+export const listRepoTags = async (owner: string, repo: string): Promise<import('./types').GitHubTag[]> => {
+  return fetchGitHubJson<import('./types').GitHubTag[]>(
+    `https://api.github.com/repos/${owner}/${repo}/tags?per_page=100`
+  );
+};
+
+/**
+ * List pull requests for a repository.
+ */
+export const listRepoPullRequests = async (
+  owner: string,
+  repo: string,
+  state: 'open' | 'closed' | 'all' = 'open'
+): Promise<import('./types').GitHubPullRequest[]> => {
+  return fetchGitHubJson<import('./types').GitHubPullRequest[]>(
+    `https://api.github.com/repos/${owner}/${repo}/pulls?state=${state}&per_page=30`
+  );
+};
+
+/**
+ * Get files changed in a specific pull request with diff stats and patches.
+ */
+export const getPullRequestFiles = async (
+  owner: string,
+  repo: string,
+  pullNumber: number
+): Promise<import('./types').GitHubPullRequestFile[]> => {
+  return fetchGitHubJson<import('./types').GitHubPullRequestFile[]>(
+    `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/files?per_page=100`
+  );
+};
+
+/**
+ * List recent commits for a repository / branch.
+ */
+export const listRepoCommits = async (
+  owner: string,
+  repo: string,
+  branch?: string,
+  perPage: number = 20
+): Promise<import('./types').GitHubCommitItem[]> => {
+  const branchParam = branch ? `&sha=${encodeURIComponent(branch)}` : '';
+  return fetchGitHubJson<import('./types').GitHubCommitItem[]>(
+    `https://api.github.com/repos/${owner}/${repo}/commits?per_page=${perPage}${branchParam}`
+  );
+};
+
+/**
+ * Get current rate limit status for GitHub API.
+ */
+export const getRateLimitStatus = async (): Promise<import('./types').GitHubRateLimit> => {
+  const data = await fetchGitHubJson<{ resources: { core: import('./types').GitHubRateLimit } }>(
+    'https://api.github.com/rate_limit'
+  );
+  return data.resources.core;
+};
+
+/**
+ * Creates a new branch from a base branch, commits one or more files, and opens a Pull Request.
+ */
+export const createBranchAndOpenPr = async (
+  owner: string,
+  repo: string,
+  baseBranch: string,
+  payload: import('./types').CreatePrPayload
+): Promise<import('./types').GitHubPullRequest> => {
+  const { branchName, commitMessage, prTitle, prBody, files } = payload;
+
+  // 1. Get base branch latest commit SHA
+  const refData = await fetchGitHubJson<{ object: { sha: string } }>(
+    `https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${baseBranch}`
+  );
+  const baseSha = refData.object.sha;
+
+  // 2. Create the new branch reference
+  await sendGitHubMutation(
+    `https://api.github.com/repos/${owner}/${repo}/git/refs`,
+    'POST',
+    {
+      ref: `refs/heads/${branchName}`,
+      sha: baseSha,
+    }
+  );
+
+  // 3. Commit files (via content API or sequential commits)
+  for (const file of files) {
+    // Check if file already exists on the new branch to get its sha
+    let existingSha: string | undefined;
+    try {
+      const existing = await fetchGitHubJson<{ sha: string }>(
+        `https://api.github.com/repos/${owner}/${repo}/contents/${file.path}?ref=${branchName}`
+      );
+      existingSha = existing.sha;
+    } catch {
+      // File does not exist yet (creating new)
+    }
+
+    const utf8Bytes = new TextEncoder().encode(file.content);
+    let binary = '';
+    for (let i = 0; i < utf8Bytes.length; i++) {
+      binary += String.fromCharCode(utf8Bytes[i]);
+    }
+    const base64Content = btoa(binary);
+
+    await sendGitHubMutation(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${file.path}`,
+      'PUT',
+      {
+        message: commitMessage,
+        content: base64Content,
+        branch: branchName,
+        sha: existingSha,
+      }
+    );
+  }
+
+  // 4. Create Pull Request
+  const pr = await sendGitHubMutation<import('./types').GitHubPullRequest>(
+    `https://api.github.com/repos/${owner}/${repo}/pulls`,
+    'POST',
+    {
+      title: prTitle,
+      body: prBody || `Automated refactoring / code suggestion generated by **Code Palandir AI**.`,
+      head: branchName,
+      base: baseBranch,
+    }
+  );
+
+  return pr;
+};
+
+

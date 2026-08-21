@@ -36,32 +36,39 @@ type CachedHttpResponse = {
   createdAt: number;
 };
 
-let dbPromise: Promise<IDBDatabase> | null = null;
+let dbPromise: Promise<IDBDatabase | null> | null = null;
 
-const openDb = (): Promise<IDBDatabase> => {
+const openDb = (): Promise<IDBDatabase | null> => {
+  if (typeof indexedDB === 'undefined') {
+    return Promise.resolve(null);
+  }
   if (dbPromise) return dbPromise;
 
-  dbPromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+  dbPromise = new Promise((resolve) => {
+    try {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(ANALYSIS_STORE)) {
-        db.createObjectStore(ANALYSIS_STORE, { keyPath: 'key' });
-      }
-      if (!db.objectStoreNames.contains(RELEVANCE_STORE)) {
-        db.createObjectStore(RELEVANCE_STORE, { keyPath: 'key' });
-      }
-      if (!db.objectStoreNames.contains(FILE_CONTENT_STORE)) {
-        db.createObjectStore(FILE_CONTENT_STORE, { keyPath: 'key' });
-      }
-      if (!db.objectStoreNames.contains(HTTP_CACHE_STORE)) {
-        db.createObjectStore(HTTP_CACHE_STORE, { keyPath: 'key' });
-      }
-    };
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(ANALYSIS_STORE)) {
+          db.createObjectStore(ANALYSIS_STORE, { keyPath: 'key' });
+        }
+        if (!db.objectStoreNames.contains(RELEVANCE_STORE)) {
+          db.createObjectStore(RELEVANCE_STORE, { keyPath: 'key' });
+        }
+        if (!db.objectStoreNames.contains(FILE_CONTENT_STORE)) {
+          db.createObjectStore(FILE_CONTENT_STORE, { keyPath: 'path' });
+        }
+        if (!db.objectStoreNames.contains(HTTP_CACHE_STORE)) {
+          db.createObjectStore(HTTP_CACHE_STORE, { keyPath: 'key' });
+        }
+      };
 
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
   });
 
   return dbPromise;
@@ -71,18 +78,23 @@ const withStore = async <T>(
   storeName: string,
   mode: IDBTransactionMode,
   callback: (store: IDBObjectStore) => void,
-): Promise<T> => {
+): Promise<T | undefined> => {
   const db = await openDb();
+  if (!db) return undefined;
 
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(storeName, mode);
-    const store = transaction.objectStore(storeName);
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction(storeName, mode);
+      const store = transaction.objectStore(storeName);
 
-    transaction.oncomplete = () => resolve(undefined as T);
-    transaction.onerror = () => reject(transaction.error);
-    transaction.onabort = () => reject(transaction.error);
+      transaction.oncomplete = () => resolve(undefined as T);
+      transaction.onerror = () => resolve(undefined as T);
+      transaction.onabort = () => resolve(undefined as T);
 
-    callback(store);
+      callback(store);
+    } catch {
+      resolve(undefined as T);
+    }
   });
 };
 
@@ -107,29 +119,34 @@ export const hashContent = async (content: string): Promise<string> => {
 
 export const getCachedAnalysis = async (key: string): Promise<CodeNode[] | null> => {
   const db = await openDb();
+  if (!db) return null;
 
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(ANALYSIS_STORE, 'readwrite');
-    const store = transaction.objectStore(ANALYSIS_STORE);
-    const request = store.get(key);
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction(ANALYSIS_STORE, 'readwrite');
+      const store = transaction.objectStore(ANALYSIS_STORE);
+      const request = store.get(key);
 
-    request.onsuccess = () => {
-      const result = request.result as CachedAnalysis | undefined;
-      if (!result) {
-        resolve(null);
-        return;
-      }
+      request.onsuccess = () => {
+        const result = request.result as CachedAnalysis | undefined;
+        if (!result) {
+          resolve(null);
+          return;
+        }
 
-      if (result.expiresAt && Date.now() > result.expiresAt) {
-        store.delete(key);
-        resolve(null);
-        return;
-      }
+        if (result.expiresAt && Date.now() > result.expiresAt) {
+          store.delete(key);
+          resolve(null);
+          return;
+        }
 
-      resolve(result.value);
-    };
+        resolve(result.value);
+      };
 
-    request.onerror = () => reject(request.error);
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
   });
 };
 
@@ -156,35 +173,38 @@ export const getCachedRelevantFiles = async (
   repoHash: string,
 ): Promise<string[] | null> => {
   const db = await openDb();
+  if (!db) return null;
 
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(RELEVANCE_STORE, 'readwrite');
-    const store = transaction.objectStore(RELEVANCE_STORE);
-    const request = store.get(key);
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction(RELEVANCE_STORE, 'readonly');
+      const store = transaction.objectStore(RELEVANCE_STORE);
+      const request = store.get(key);
 
-    request.onsuccess = () => {
-      const result = request.result as CachedRelevance | undefined;
-      if (!result) {
-        resolve(null);
-        return;
-      }
+      request.onsuccess = () => {
+        const result = request.result as CachedRelevance | undefined;
+        if (!result) {
+          resolve(null);
+          return;
+        }
 
-      if (result.repoHash !== repoHash) {
-        store.delete(key);
-        resolve(null);
-        return;
-      }
+        if (result.repoHash !== repoHash) {
+          resolve(null);
+          return;
+        }
 
-      if (result.expiresAt && Date.now() > result.expiresAt) {
-        store.delete(key);
-        resolve(null);
-        return;
-      }
+        if (result.expiresAt && Date.now() > result.expiresAt) {
+          resolve(null);
+          return;
+        }
 
-      resolve(result.value);
-    };
+        resolve(result.value);
+      };
 
-    request.onerror = () => reject(request.error);
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
   });
 };
 
@@ -201,42 +221,45 @@ export const setCachedRelevantFiles = async (
     store.put({
       key,
       value,
+      repoHash,
       createdAt: now,
       expiresAt,
-      repoHash,
     });
   });
 };
 
-export const getCachedFileContent = async (
-  key: string,
-): Promise<CachedFileContent | null> => {
+export const getCachedFileContent = async (path: string): Promise<string | null> => {
   const db = await openDb();
+  if (!db) return null;
 
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(FILE_CONTENT_STORE, 'readonly');
-    const store = transaction.objectStore(FILE_CONTENT_STORE);
-    const request = store.get(key);
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction(FILE_CONTENT_STORE, 'readonly');
+      const store = transaction.objectStore(FILE_CONTENT_STORE);
+      const request = store.get(path);
 
-    request.onsuccess = () => {
-      const result = request.result as CachedFileContent | undefined;
-      resolve(result ?? null);
-    };
+      request.onsuccess = () => {
+        const result = request.result as CachedFileContent | undefined;
+        resolve(result?.content ?? null);
+      };
 
-    request.onerror = () => reject(request.error);
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
   });
 };
 
 export const setCachedFileContent = async (
-  key: string,
+  path: string,
   content: string,
 ): Promise<string> => {
-  const contentHash = await hashContent(content);
   const now = Date.now();
+  const contentHash = await hashContent(content);
 
   await withStore<void>(FILE_CONTENT_STORE, 'readwrite', (store) => {
     store.put({
-      key,
+      path,
       content,
       contentHash,
       createdAt: now,
@@ -250,18 +273,23 @@ export const getCachedHttpResponse = async (
   key: string,
 ): Promise<CachedHttpResponse | null> => {
   const db = await openDb();
+  if (!db) return null;
 
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(HTTP_CACHE_STORE, 'readonly');
-    const store = transaction.objectStore(HTTP_CACHE_STORE);
-    const request = store.get(key);
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction(HTTP_CACHE_STORE, 'readonly');
+      const store = transaction.objectStore(HTTP_CACHE_STORE);
+      const request = store.get(key);
 
-    request.onsuccess = () => {
-      const result = request.result as CachedHttpResponse | undefined;
-      resolve(result ?? null);
-    };
+      request.onsuccess = () => {
+        const result = request.result as CachedHttpResponse | undefined;
+        resolve(result ?? null);
+      };
 
-    request.onerror = () => reject(request.error);
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
   });
 };
 

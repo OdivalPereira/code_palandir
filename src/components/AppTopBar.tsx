@@ -8,6 +8,8 @@ import {
   FileText,
   FolderOpen,
   Github,
+  GitBranch,
+  GitPullRequest,
   Key,
   Lightbulb,
   Loader2,
@@ -17,13 +19,20 @@ import {
   Save,
   Search,
   Sparkles,
+  Tag,
   X
 } from 'lucide-react';
 import { useBasketStore } from '../stores/basketStore';
 import { generateMarkdownExport, downloadMarkdown } from '../utils/exportUtils';
 import { useGraphStore } from '../stores/graphStore';
 import {
+  selectActivePullRequest,
   selectAuthNotice,
+  selectAvailableBranches,
+  selectAvailableTags,
+  selectCurrentBranch,
+  selectGithubOwnerRepo,
+  selectGithubRateLimit,
   selectIsPromptOpen,
   selectIsAuthenticated,
   selectPromptItems,
@@ -69,7 +78,16 @@ const AppTopBar: React.FC = () => {
   const fetchUserRepos = useGraphStore((state) => state.fetchUserRepos);
   const detectedFramework = useGraphStore((state) => state.detectedFramework);
   const frameworkStatus = useGraphStore((state) => state.frameworkStatus);
+  const ownerRepo = useGraphStore(selectGithubOwnerRepo);
+  const availableBranches = useGraphStore(selectAvailableBranches);
+  const currentBranch = useGraphStore(selectCurrentBranch);
+  const availableTags = useGraphStore(selectAvailableTags);
+  const activePullRequest = useGraphStore(selectActivePullRequest);
+  const githubRateLimit = useGraphStore(selectGithubRateLimit);
+  const switchBranch = useGraphStore((state) => state.switchBranch);
+
   const [showRepoDropdown, setShowRepoDropdown] = useState(false);
+  const [showBranchDropdown, setShowBranchDropdown] = useState(false);
   const [showPatModal, setShowPatModal] = useState(false);
   const [patInputValue, setPatInputValue] = useState('');
 
@@ -96,7 +114,7 @@ const AppTopBar: React.FC = () => {
     }
   };
 
-  const toggleSidebar = (tab: 'prompt' | 'summary' | 'flow' | 'recommendations' | 'metrics' | 'library') => {
+  const toggleSidebar = (tab: 'prompt' | 'summary' | 'flow' | 'recommendations' | 'metrics' | 'library' | 'github-pr') => {
     if (isPromptOpen && sidebarTab === tab) {
       setPromptOpen(false);
     } else {
@@ -179,6 +197,67 @@ const AppTopBar: React.FC = () => {
                 {status === AppStatus.LOADING_FILES ? <Loader2 size={12} className="animate-spin" /> : 'Load'}
               </button>
             </div>
+
+            {/* Branch / Tag Dropdown Selector */}
+            {ownerRepo && availableBranches.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowBranchDropdown((prev) => !prev)}
+                  className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1.5 rounded text-xs font-mono text-indigo-300 transition-colors"
+                  title={`Branch atual: ${currentBranch}`}
+                >
+                  <GitBranch size={13} className="text-indigo-400" />
+                  <span className="max-w-[110px] truncate">{currentBranch}</span>
+                  <ChevronDown size={11} />
+                </button>
+
+                {showBranchDropdown && (
+                  <div className="absolute top-full left-0 mt-1 w-60 max-h-64 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg shadow-2xl z-50 p-1 space-y-1">
+                    <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Branches ({availableBranches.length})
+                    </div>
+                    {availableBranches.map((branch) => (
+                      <button
+                        key={branch.name}
+                        className={`w-full text-left px-2.5 py-1.5 rounded text-xs flex items-center justify-between transition-colors ${
+                          branch.name === currentBranch
+                            ? 'bg-indigo-600/30 text-indigo-200 font-medium'
+                            : 'hover:bg-slate-700 text-slate-300'
+                        }`}
+                        onClick={() => {
+                          setShowBranchDropdown(false);
+                          switchBranch(branch.name);
+                        }}
+                      >
+                        <span className="truncate">{branch.name}</span>
+                        {branch.name === currentBranch && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />}
+                      </button>
+                    ))}
+
+                    {availableTags.length > 0 && (
+                      <>
+                        <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-t border-slate-700 mt-1 pt-1">
+                          Tags ({availableTags.length})
+                        </div>
+                        {availableTags.map((tag) => (
+                          <button
+                            key={tag.name}
+                            className="w-full text-left px-2.5 py-1.5 rounded text-xs hover:bg-slate-700 text-slate-300 flex items-center gap-1.5"
+                            onClick={() => {
+                              setShowBranchDropdown(false);
+                              switchBranch(tag.name);
+                            }}
+                          >
+                            <Tag size={11} className="text-amber-400" />
+                            <span className="truncate">{tag.name}</span>
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* PAT Config Button */}
             <button
@@ -324,6 +403,19 @@ const AppTopBar: React.FC = () => {
             <BookOpen size={20} />
           </button>
           <button
+            onClick={() => toggleSidebar('github-pr')}
+            className={`p-2 rounded-lg transition-colors relative ${isPromptOpen && sidebarTab === 'github-pr' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-400'}`}
+            aria-label="Open GitHub PRs & Commits"
+            title="GitHub Pull Requests & Commits"
+          >
+            <GitPullRequest size={20} />
+            {activePullRequest && (
+              <span className="absolute -top-1 -right-1 px-1 bg-emerald-500 text-white text-[9px] font-bold rounded-full">
+                PR
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => toggleSidebar('metrics')}
             className={`p-2 rounded-lg transition-colors ${isPromptOpen && sidebarTab === 'metrics' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-400'}`}
             aria-label="Open AI metrics"
@@ -333,8 +425,18 @@ const AppTopBar: React.FC = () => {
           </button>
         </div>
 
-        {/* View mode & session export buttons */}
+        {/* View mode & Rate Limit & session buttons */}
         <div className="ml-2 flex items-center gap-2">
+          {githubRateLimit && (
+            <div
+              className="flex items-center gap-1.5 text-[11px] font-mono px-2 py-1 rounded-full bg-slate-950 border border-slate-800 text-slate-400"
+              title={`Limite da API GitHub: ${githubRateLimit.remaining}/${githubRateLimit.limit} requisições restantes`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${githubRateLimit.remaining < 50 ? 'bg-rose-400 animate-pulse' : 'bg-emerald-400'}`} />
+              <span>{githubRateLimit.remaining}</span>
+            </div>
+          )}
+
           <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-full p-1 text-xs">
             <button
               onClick={() => setGraphViewMode('structural')}

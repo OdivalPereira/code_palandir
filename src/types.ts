@@ -49,6 +49,10 @@ export interface FlatNode extends d3.SimulationNodeDatum {
   ghostData?: MissingDependency;
   // UI Node reference (Phase 3)
   uiNode?: UINode;
+  // GitHub PR Diff status
+  diffStatus?: 'added' | 'modified' | 'removed';
+  diffAdditions?: number;
+  diffDeletions?: number;
 }
 
 export interface Link extends d3.SimulationLinkDatum<FlatNode> {
@@ -536,3 +540,99 @@ export interface GeneratedPrompt {
   /** Timestamp de geração */
   generatedAt: number;
 }
+
+// ==============================================================================
+// GitHub Integration Types
+// ==============================================================================
+
+export interface GitHubBranch {
+  name: string;
+  commit: {
+    sha: string;
+    url: string;
+  };
+  protected?: boolean;
+}
+
+export interface GitHubTag {
+  name: string;
+  commit: {
+    sha: string;
+    url: string;
+  };
+}
+
+export interface GitHubPullRequest {
+  id: number;
+  number: number;
+  title: string;
+  body?: string | null;
+  state: 'open' | 'closed';
+  user: {
+    login: string;
+    avatar_url: string;
+  };
+  created_at: string;
+  updated_at: string;
+  html_url: string;
+  head: {
+    ref: string;
+    sha: string;
+  };
+  base: {
+    ref: string;
+    sha: string;
+  };
+}
+
+export interface GitHubPullRequestFile {
+  sha: string;
+  filename: string;
+  status: 'added' | 'modified' | 'removed' | 'renamed' | 'copied' | 'changed';
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+  previous_filename?: string;
+}
+
+export interface GitHubPullRequestDetail extends GitHubPullRequest {
+  files: GitHubPullRequestFile[];
+  totalAdditions: number;
+  totalDeletions: number;
+}
+
+export interface GitHubCommitItem {
+  sha: string;
+  commit: {
+    message: string;
+    author: {
+      name: string;
+      date: string;
+    };
+  };
+  author?: {
+    login: string;
+    avatar_url: string;
+  } | null;
+  html_url: string;
+}
+
+export interface GitHubRateLimit {
+  limit: number;
+  remaining: number;
+  reset: number;
+  used: number;
+}
+
+export interface CreatePrPayload {
+  branchName: string;
+  commitMessage: string;
+  prTitle: string;
+  prBody?: string;
+  files: Array<{
+    path: string;
+    content: string;
+  }>;
+}
+

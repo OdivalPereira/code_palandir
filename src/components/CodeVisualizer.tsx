@@ -256,6 +256,9 @@ const CodeVisualizerContent: React.FC = () => {
 
   const getNodeFill = (node: FlatNode) => {
     if (isFlowNode(node)) return "#f97316";
+    if (node.diffStatus === 'added') return "rgba(16, 185, 129, 0.3)";
+    if (node.diffStatus === 'modified') return "rgba(245, 158, 11, 0.3)";
+    if (node.diffStatus === 'removed') return "rgba(244, 63, 94, 0.3)";
     if (isGhostNode(node)) {
       switch (node.type) {
         case 'ghost_table': return "rgba(59, 130, 246, 0.3)";
@@ -288,6 +291,9 @@ const CodeVisualizerContent: React.FC = () => {
 
   const getNodeStroke = (node: FlatNode) => {
     if (isFlowNode(node)) return "#fdba74";
+    if (node.diffStatus === 'added') return "#10b981";
+    if (node.diffStatus === 'modified') return "#f59e0b";
+    if (node.diffStatus === 'removed') return "#f43f5e";
     if (isGhostNode(node)) {
       switch (node.type) {
         case 'ghost_table': return "#3b82f6";
@@ -306,6 +312,7 @@ const CodeVisualizerContent: React.FC = () => {
 
   const getNodeStrokeWidth = (node: FlatNode) => {
     if (isFlowNode(node)) return 3;
+    if (node.diffStatus) return 3.5;
     if (isGhostNode(node)) return 2;
     if (['app', 'page', 'layout'].includes(node.type)) return 3;
     if (['component', 'form'].includes(node.type)) return 2;
