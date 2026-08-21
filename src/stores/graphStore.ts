@@ -15,7 +15,8 @@ import {
 } from '../api/client';
 import { clearSessionAccessToken } from '../authClient';
 import { getCachedFileContent, hashContent, setCachedFileContent } from '../cacheRepository';
-import { fetchGitHubJson } from '../githubClient';
+import { fetchGitHubJson, fetchGitHubFileContent, getGitHubPat, setGitHubPat as setStoredPat, clearGitHubPat as clearStoredPat } from '../githubClient';
+import { openDirectoryPicker, extractZipFile } from '../utils/localFileSystem';
 import { buildSemanticLinksForFile, SymbolIndex } from '../dependencyParser';
 import { convertUIGraphToFlatNodes } from '../utils/uiGraphTransformer';
 import type { BackendTemplate } from '../components/TemplateSidebar';
@@ -47,6 +48,9 @@ export type GraphState = {
   status: AppStatus;
   isAuthenticated: boolean;
   authNotice: string | null;
+  githubPat: string | null;
+  setGithubPat: (pat: string) => void;
+  clearGithubPat: () => void;
   promptItems: PromptItem[];
   searchQuery: string;
   githubUrl: string;
@@ -113,7 +117,9 @@ export type GraphState = {
   userReposStatus: 'idle' | 'loading' | 'error';
   fetchUserRepos: () => Promise<void>;
   // Data actions
-  processFiles: (files: FileList) => Promise<void>;
+  processFiles: (files: FileList | File[]) => Promise<void>;
+  openLocalDirectory: () => Promise<void>;
+  processZipFile: (file: File) => Promise<void>;
   importGithubRepo: () => Promise<void>;
   searchRelevantFiles: () => Promise<void>;
   ensureFileContent: (path: string) => Promise<string | undefined>;
@@ -372,6 +378,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   status: AppStatus.IDLE,
   isAuthenticated: false,
   authNotice: null,
+  githubPat: getGitHubPat(),
+  setGithubPat: (pat) => {
+    setStoredPat(pat);
+    set({ githubPat: pat });
+  },
+  clearGithubPat: () => {
+    clearStoredPat();
+    set({ githubPat: null });
+  },
   promptItems: [],
   searchQuery: '',
   githubUrl: '',
@@ -474,12 +489,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     for (const filePath of paths) {
       try {
-        const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}`;
-        const response = await fetch(url);
-        if (response.ok) {
-          const content = await response.text();
-          newContents.set(filePath, content);
-        }
+        const content = await fetchGitHubFileContent(owner, repo, branch, filePath);
+        newContents.set(filePath, content);
       } catch (error) {
         console.warn(`Failed to download ${filePath}:`, error);
       }
@@ -695,16 +706,23 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       console.error('Dependency analysis error:', error);
     }
   },
-  processFiles: async (files) => {
+  processFiles: async (files: FileList | File[]) => {
     set({ status: AppStatus.LOADING_FILES });
     const newFileHandles = new Map<string, File>();
     const allPaths: string[] = [];
+    const fileArray = Array.isArray(files) ? files : Array.from(files);
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (file.webkitRelativePath.includes('/.') || file.name.startsWith('.')) continue;
-      newFileHandles.set(file.webkitRelativePath, file);
-      allPaths.push(file.webkitRelativePath);
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i];
+      const relPath = file.webkitRelativePath || file.name;
+      if (relPath.includes('/.') || relPath.startsWith('.')) continue;
+      newFileHandles.set(relPath, file);
+      allPaths.push(relPath);
+    }
+
+    if (allPaths.length === 0) {
+      set({ status: AppStatus.IDLE });
+      return;
     }
 
     const childrenIndex = buildChildrenIndex(allPaths);
@@ -722,7 +740,6 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     };
 
     get().setRootNode(root);
-    // Phase 5 Initial State
     const initialState: Partial<GraphState> = {
       projectFileContents: new Map(),
       detectedFramework: null,
@@ -732,7 +749,6 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       uiGraphStatus: 'idle',
       missingDependencies: [],
       selectedNodeIds: new Set(),
-      // ... existing initial states ...
     };
 
     set({
@@ -777,6 +793,37 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     await get().detectFramework();
   },
 
+  openLocalDirectory: async () => {
+    try {
+      const files = await openDirectoryPicker();
+      if (files && files.length > 0) {
+        await get().processFiles(files);
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error('Failed to open local directory:', err);
+        alert(err.message || 'Failed to open directory.');
+      }
+    }
+  },
+
+  processZipFile: async (zipFile: File) => {
+    set({ status: AppStatus.LOADING_FILES });
+    try {
+      const files = await extractZipFile(zipFile);
+      if (files && files.length > 0) {
+        await get().processFiles(files);
+      } else {
+        alert('No valid files found in ZIP archive.');
+        set({ status: AppStatus.IDLE });
+      }
+    } catch (err: any) {
+      console.error('Failed to extract ZIP archive:', err);
+      alert(err.message || 'Failed to extract ZIP archive.');
+      set({ status: AppStatus.IDLE });
+    }
+  },
+
   toggleMultiSelection: (nodeId: string) => {
     const { selectedNodeIds } = get();
     const next = new Set(selectedNodeIds);
@@ -791,14 +838,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   clearMultiSelection: () => {
     set({ selectedNodeIds: new Set() });
   },
+
   importGithubRepo: async () => {
     const githubUrl = get().githubUrl;
     if (!githubUrl) return;
     set({ status: AppStatus.LOADING_FILES });
     try {
       const match = githubUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
-      if (!match) throw new Error('Invalid GitHub URL');
-      const [_, owner, repo] = match;
+      if (!match) throw new Error('Invalid GitHub URL format. Expected: github.com/owner/repo');
+      const [_, owner, repoRaw] = match;
+      const repo = repoRaw.replace(/\.git$/, '');
 
       let defaultBranch = 'main';
       try {
@@ -841,7 +890,6 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         descendantCount,
         localFileHandles: new Map(),
         allFilePaths: paths,
-        // Phase 1: Save GitHub owner/repo for file downloads
         githubOwnerRepo: { owner, repo, branch: defaultBranch },
         projectFileContents: new Map(),
         detectedFramework: null,
@@ -853,8 +901,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       await get().tryRestoreSavedSession(signature);
 
       // Phase 1: Download key files and detect framework
-      if (get().isAuthenticated) {
-        // Files to download for framework detection
+      if (get().isAuthenticated || get().githubPat) {
         const filesToDownload = [
           'package.json',
           ...paths.filter((p: string) =>
@@ -870,12 +917,13 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         console.log('Phase 1: Detecting framework...');
         await get().detectFramework();
       }
-    } catch (error) {
-      console.error(error);
-      alert("Error importing from GitHub. Ensure it's a public repo.");
+    } catch (error: any) {
+      console.error('[importGithubRepo] Error:', error);
+      alert(error.message || 'Error importing from GitHub. If private, please configure a GitHub PAT.');
       set({ status: AppStatus.ERROR });
     }
   },
+
   searchRelevantFiles: async () => {
     const { searchQuery, rootNode, allFilePaths } = get();
     if (!searchQuery.trim() || !rootNode) return;
@@ -899,6 +947,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       set({ status: AppStatus.ERROR });
     }
   },
+
   ensureFileContent: async (path) => {
     let content = get().fileMap.get(path);
     const { localFileHandles, githubUrl } = get();
@@ -928,16 +977,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             return content;
           }
 
-          const data = await fetchGitHubJson<{ content?: string }>(
-            `https://api.github.com/repos/${owner}/${repo}/contents/${path}`
-          );
-          if (data.content) {
-            content = atob(data.content);
-            await setCachedFileContent(cacheKey, content);
-            set((state) => ({
-              fileMap: new Map(state.fileMap).set(path, content!)
-            }));
-          }
+          const branch = get().githubOwnerRepo?.branch || 'main';
+          content = await fetchGitHubFileContent(owner, repo, branch, path);
+          await setCachedFileContent(cacheKey, content);
+          set((state) => ({
+            fileMap: new Map(state.fileMap).set(path, content!)
+          }));
         } catch (e) {
           console.error('Failed to fetch file content', e);
         }

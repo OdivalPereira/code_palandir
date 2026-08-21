@@ -34,46 +34,55 @@ const indexingJobDurationMs = Number(process.env.INDEXING_JOB_DURATION_MS ?? '10
 const aiPromptCostPer1k = Number(process.env.AI_COST_PROMPT_PER_1K ?? '0');
 const aiOutputCostPer1k = Number(process.env.AI_COST_OUTPUT_PER_1K ?? '0');
 
+export const getEffectiveAppBaseUrl = (req) => {
+  if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  if (req?.headers?.host) {
+    const proto = req.headers['x-forwarded-proto'] || 'http';
+    return `${proto}://${req.headers.host}`;
+  }
+  return appBaseUrl;
+};
+
+export const getEffectiveServerBaseUrl = (req) => {
+  if (process.env.SERVER_BASE_URL) return process.env.SERVER_BASE_URL;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  if (req?.headers?.host) {
+    const proto = req.headers['x-forwarded-proto'] || 'http';
+    return `${proto}://${req.headers.host}`;
+  }
+  return `http://localhost:${port}`;
+};
+
+export const getEffectiveCallbackUrl = (req) => {
+  if (process.env.GITHUB_OAUTH_CALLBACK_URL) return process.env.GITHUB_OAUTH_CALLBACK_URL;
+  const baseUrl = getEffectiveServerBaseUrl(req);
+  return `${baseUrl}/api/auth/callback`;
+};
+
 const validateEnv = () => {
-  const errors = [];
+  const warnings = [];
   const requireValue = (name, value) => {
     if (!value || String(value).trim().length === 0) {
-      errors.push(`${name} é obrigatório.`);
-    }
-  };
-  const requireUrl = (name, value) => {
-    requireValue(name, value);
-    if (!value) return;
-    try {
-      new URL(value);
-    } catch (error) {
-      errors.push(`${name} deve ser uma URL válida.`);
+      warnings.push(`${name} is not set.`);
     }
   };
 
-  requireUrl('APP_BASE_URL', process.env.APP_BASE_URL);
-  requireUrl('SERVER_BASE_URL', process.env.SERVER_BASE_URL);
-  requireValue('GITHUB_CLIENT_ID', process.env.GITHUB_CLIENT_ID);
-  requireValue('GITHUB_CLIENT_SECRET', process.env.GITHUB_CLIENT_SECRET);
-  requireUrl('GITHUB_OAUTH_CALLBACK_URL', process.env.GITHUB_OAUTH_CALLBACK_URL);
-
-  if (aiProvider === 'google') {
-    requireValue('AI_PROVIDER', process.env.AI_PROVIDER);
-    requireValue('GOOGLE_AI_API_KEY', process.env.GOOGLE_AI_API_KEY);
-    if (
-      process.env.GOOGLE_AI_MODEL_ID &&
-      process.env.GOOGLE_AI_MODEL_ID !== recommendedGoogleAiModelId
-    ) {
-      console.warn(
-        `GOOGLE_AI_MODEL_ID diferente do recomendado para produção (${recommendedGoogleAiModelId}).`,
-      );
-    }
+  if (!process.env.VERCEL) {
+    requireValue('APP_BASE_URL', process.env.APP_BASE_URL);
+    requireValue('SERVER_BASE_URL', process.env.SERVER_BASE_URL);
   }
 
-  if (errors.length > 0) {
-    const message = `Configuração de ambiente inválida:\n- ${errors.join('\n- ')}`;
-    console.error(message);
-    process.exit(1);
+  if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
+    warnings.push('GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET not set (OAuth login disabled; PAT auth available).');
+  }
+
+  if (aiProvider === 'google' && !process.env.GOOGLE_AI_API_KEY) {
+    warnings.push('GOOGLE_AI_API_KEY not set (Server-side Gemini analysis requires API key).');
+  }
+
+  if (warnings.length > 0) {
+    console.warn(`[Server Init] Environment notes:\n- ${warnings.join('\n- ')}`);
   }
 };
 
@@ -294,9 +303,10 @@ const validateAiChatPayload = (payload) => {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const indexingStorePath = path.join(__dirname, 'indexing-store.json');
-const sessionStorePath = path.join(__dirname, 'session-store.json');
-const aiAuditLogPath = path.join(__dirname, 'ai-audit-log.jsonl');
+const dataDir = process.env.VERCEL ? '/tmp' : __dirname;
+const indexingStorePath = path.join(dataDir, 'indexing-store.json');
+const sessionStorePath = path.join(dataDir, 'session-store.json');
+const aiAuditLogPath = path.join(dataDir, 'ai-audit-log.jsonl');
 
 const isFiniteNumber = (value) => Number.isFinite(value);
 
@@ -624,10 +634,11 @@ const redirectResponse = (res, location) => {
 };
 
 const withCors = (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', appBaseUrl);
+  const origin = req.headers.origin || getEffectiveAppBaseUrl(req);
+  res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -658,7 +669,7 @@ const getSession = (req, res) => {
 const requireAuthenticatedSession = (req, res, requestId) => {
   const session = getSession(req, res);
   if (!session.data.accessToken) {
-    jsonResponse(res, 401, withRequestId({ error: 'Authentication required.' }, requestId));
+    jsonResponse(res, 401, withRequestId({ error: 'Authentication required. Please connect with GitHub or configure GitHub PAT.' }, requestId));
     return null;
   }
   return session;
@@ -694,8 +705,9 @@ const clearSession = (req, res) => {
 
 const handleLogin = (req, res) => {
   if (!githubClientId) {
-    res.writeHead(500);
-    res.end('Missing GITHUB_CLIENT_ID.');
+    jsonResponse(res, 500, {
+      error: 'GITHUB_CLIENT_ID is not configured in server environment variables. You can also use Personal Access Token (PAT) directly in the UI.',
+    });
     return;
   }
 
@@ -703,9 +715,10 @@ const handleLogin = (req, res) => {
   const state = crypto.randomUUID();
   session.data.oauthState = state;
 
+  const callbackUrl = getEffectiveCallbackUrl(req);
   const params = new URLSearchParams({
     client_id: githubClientId,
-    redirect_uri: githubCallbackUrl,
+    redirect_uri: callbackUrl,
     state,
     scope: 'read:user repo',
   });
@@ -736,6 +749,7 @@ const handleCallback = async (req, res, url) => {
     return;
   }
 
+  const callbackUrl = getEffectiveCallbackUrl(req);
   const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
     headers: {
@@ -746,7 +760,7 @@ const handleCallback = async (req, res, url) => {
       client_id: githubClientId,
       client_secret: githubClientSecret,
       code,
-      redirect_uri: githubCallbackUrl,
+      redirect_uri: callbackUrl,
     }),
   });
 
@@ -767,7 +781,8 @@ const handleCallback = async (req, res, url) => {
   session.data.accessToken = payload.access_token ?? null;
   delete session.data.oauthState;
 
-  redirectResponse(res, `${appBaseUrl}/?auth=success`);
+  const targetAppUrl = getEffectiveAppBaseUrl(req);
+  redirectResponse(res, `${targetAppUrl}/?auth=success`);
 };
 
 const handleLogout = (req, res) => {
@@ -1679,12 +1694,12 @@ const handleOpenSession = (req, res, sessionId) => {
   jsonResponse(res, 200, { sessionId: entry.id, session: migrated });
 };
 
-const server = http.createServer(async (req, res) => {
+export const handleRequest = async (req, res) => {
   if (!withCors(req, res)) {
     return;
   }
 
-  const url = new URL(req.url ?? '/', serverBaseUrl);
+  const url = new URL(req.url ?? '/', getEffectiveServerBaseUrl(req));
 
   if (req.method === 'GET' && url.pathname === '/api/auth/login') {
     handleLogin(req, res);
@@ -2212,98 +2227,107 @@ Respond in JSON format ONLY.`;
 
   res.writeHead(404);
   res.end('Not found');
-});
+};
 
-const realtimeServer = new WebSocketServer({ server, path: '/realtime' });
-realtimeServer.on('connection', (socket) => {
-  const clientInfo = { sessionId: null, clientId: null };
+export const server = http.createServer(handleRequest);
 
-  const send = (payload) => {
-    if (socket.readyState !== socket.OPEN) return;
-    socket.send(JSON.stringify(payload));
-  };
+// Only initialize WebSockets and standalone listener when running directly (outside Vercel Serverless and test environments)
+if (!process.env.VERCEL && process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+  const realtimeServer = new WebSocketServer({ server, path: '/realtime' });
+  realtimeServer.on('connection', (socket) => {
+    const clientInfo = { sessionId: null, clientId: null };
 
-  socket.on('message', (data) => {
-    let message = null;
-    try {
-      const raw = typeof data === 'string' ? data : data.toString();
-      message = JSON.parse(raw);
-    } catch (error) {
-      console.error('Invalid realtime message', error);
-      return;
-    }
-    if (!message || typeof message !== 'object') return;
+    const send = (payload) => {
+      if (socket.readyState !== socket.OPEN) return;
+      socket.send(JSON.stringify(payload));
+    };
 
-    if (message.type === 'join') {
-      const { sessionId, clientId, profile } = message;
-      if (typeof sessionId !== 'string' || typeof clientId !== 'string') return;
-      clientInfo.sessionId = sessionId;
-      clientInfo.clientId = clientId;
-      const session = ensureRealtimeSession(sessionId);
-      session.sockets.add(socket);
-      const existing = session.presence.get(clientId);
-      const presence = {
-        clientId,
-        profile: profile ?? existing?.profile ?? { name: 'Guest', color: '#94a3b8' },
-        cursor: existing?.cursor ?? null,
-        selection: existing?.selection ?? { selectedNodeId: null },
-        sequence: existing?.sequence ?? 0,
-        updatedAt: Date.now(),
-      };
-      session.presence.set(clientId, presence);
-      send({ type: 'state_sync', sessionId, presence: serializePresence(session.presence) });
-      broadcastRealtime(sessionId, { type: 'presence_update', presence }, socket);
-      return;
-    }
-
-    if (message.type === 'presence_update') {
-      const { sessionId, clientId, presence, sequence } = message;
-      if (typeof sessionId !== 'string' || typeof clientId !== 'string') return;
-      const nextSequence = Number(sequence);
-      if (!Number.isFinite(nextSequence)) return;
-      const session = ensureRealtimeSession(sessionId);
-      const current = session.presence.get(clientId);
-      if (current && nextSequence <= current.sequence) {
+    socket.on('message', (data) => {
+      let message = null;
+      try {
+        const raw = typeof data === 'string' ? data : data.toString();
+        message = JSON.parse(raw);
+      } catch (error) {
+        console.error('Invalid realtime message', error);
         return;
       }
-      const nextPresence = {
-        clientId,
-        profile: current?.profile ?? { name: 'Guest', color: '#94a3b8' },
-        cursor: presence?.cursor ?? current?.cursor ?? null,
-        selection: presence?.selection ?? current?.selection ?? { selectedNodeId: null },
-        sequence: nextSequence,
-        updatedAt: Date.now(),
-      };
-      session.presence.set(clientId, nextPresence);
-      broadcastRealtime(sessionId, { type: 'presence_update', presence: nextPresence });
-    }
+      if (!message || typeof message !== 'object') return;
+
+      if (message.type === 'join') {
+        const { sessionId, clientId, profile } = message;
+        if (typeof sessionId !== 'string' || typeof clientId !== 'string') return;
+        clientInfo.sessionId = sessionId;
+        clientInfo.clientId = clientId;
+        const session = ensureRealtimeSession(sessionId);
+        session.sockets.add(socket);
+        const existing = session.presence.get(clientId);
+        const presence = {
+          clientId,
+          profile: profile ?? existing?.profile ?? { name: 'Guest', color: '#94a3b8' },
+          cursor: existing?.cursor ?? null,
+          selection: existing?.selection ?? { selectedNodeId: null },
+          sequence: existing?.sequence ?? 0,
+          updatedAt: Date.now(),
+        };
+        session.presence.set(clientId, presence);
+        send({ type: 'state_sync', sessionId, presence: serializePresence(session.presence) });
+        broadcastRealtime(sessionId, { type: 'presence_update', presence }, socket);
+        return;
+      }
+
+      if (message.type === 'presence_update') {
+        const { sessionId, clientId, presence, sequence } = message;
+        if (typeof sessionId !== 'string' || typeof clientId !== 'string') return;
+        const nextSequence = Number(sequence);
+        if (!Number.isFinite(nextSequence)) return;
+        const session = ensureRealtimeSession(sessionId);
+        const current = session.presence.get(clientId);
+        if (current && nextSequence <= current.sequence) {
+          return;
+        }
+        const nextPresence = {
+          clientId,
+          profile: current?.profile ?? { name: 'Guest', color: '#94a3b8' },
+          cursor: presence?.cursor ?? current?.cursor ?? null,
+          selection: presence?.selection ?? current?.selection ?? { selectedNodeId: null },
+          sequence: nextSequence,
+          updatedAt: Date.now(),
+        };
+        session.presence.set(clientId, nextPresence);
+        broadcastRealtime(sessionId, { type: 'presence_update', presence: nextPresence });
+      }
+    });
+
+    socket.on('close', () => {
+      const { sessionId, clientId } = clientInfo;
+      if (!sessionId || !clientId) return;
+      const session = realtimeSessions.get(sessionId);
+      if (!session) return;
+      session.sockets.delete(socket);
+      if (session.presence.has(clientId)) {
+        session.presence.delete(clientId);
+        broadcastRealtime(sessionId, { type: 'presence_remove', clientId });
+      }
+      if (session.sockets.size === 0) {
+        realtimeSessions.delete(sessionId);
+      }
+    });
   });
 
-  socket.on('close', () => {
-    const { sessionId, clientId } = clientInfo;
-    if (!sessionId || !clientId) return;
-    const session = realtimeSessions.get(sessionId);
-    if (!session) return;
-    session.sockets.delete(socket);
-    if (session.presence.has(clientId)) {
-      session.presence.delete(clientId);
-      broadcastRealtime(sessionId, { type: 'presence_remove', clientId });
-    }
-    if (session.sockets.size === 0) {
-      realtimeSessions.delete(sessionId);
-    }
+  server.listen(port, () => {
+    console.log(`Auth server listening on port ${port}`);
   });
-});
 
-server.listen(port, () => {
-  console.log(`Auth server listening on port ${port}`);
-});
-
-await readIndexingStore();
-await readSessionStore();
-setInterval(() => {
-  processIndexingQueue().catch((error) => {
-    console.error('Indexing worker error', error);
-    isIndexingWorkerRunning = false;
-  });
-}, indexingPollIntervalMs);
+  try {
+    await readIndexingStore();
+    await readSessionStore();
+    setInterval(() => {
+      processIndexingQueue().catch((error) => {
+        console.error('Indexing worker error', error);
+        isIndexingWorkerRunning = false;
+      });
+    }, indexingPollIntervalMs);
+  } catch (err) {
+    console.warn('Store init warning:', err);
+  }
+}

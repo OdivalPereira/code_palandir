@@ -1,0 +1,11 @@
+.git
+.github
+docs
+scripts
+coverage
+*.log
+*.test.ts
+*.test.tsx
+*.test.js
+__tests__
+IMPLEMENTATION_PLAN.md

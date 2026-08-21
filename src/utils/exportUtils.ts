@@ -58,7 +58,8 @@ export const generateMarkdownExport = (threads: Thread[], context?: ExportContex
 
     threads.forEach((thread, index) => {
         md += `## ${index + 1}. ${thread.title}\n\n`;
-        md += `- **Element:** \`${thread.baseElement.path}\` (${thread.baseElement.type})\n`;
+        const elementsStr = thread.baseElements?.map(el => `\`${el.path}\` (${el.type})`).join(', ') || 'N/A';
+        md += `- **Elements:** ${elementsStr}\n`;
         md += `- **Status:** ${thread.status}\n`;
         md += `- **Mode:** ${thread.currentMode}\n`;
         md += `- **Tokens:** ${thread.tokenCount}\n`;

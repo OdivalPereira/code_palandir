@@ -45,7 +45,8 @@ const FILE_EXTENSIONS = [
   '.json'
 ];
 
-const normalizePath = (path: string) => {
+export const normalizePath = (path: string) => {
+  if (!path) return '';
   const parts = path.split('/').filter(Boolean);
   const resolved: string[] = [];
   parts.forEach((part) => {
@@ -60,24 +61,32 @@ const normalizePath = (path: string) => {
 };
 
 const getDirname = (path: string) => {
+  if (!path) return '';
   const parts = path.split('/');
   parts.pop();
   return parts.join('/');
 };
 
-const resolveImportTarget = (
+export const resolveImportTarget = (
   sourcePath: string,
   specifier: string,
   filePaths: Set<string>
 ) => {
-  if (!specifier || specifier.startsWith('http')) return null;
+  if (!specifier || specifier.startsWith('http') || specifier.startsWith('data:')) return null;
   const baseDir = getDirname(sourcePath);
   let rawPath = specifier;
+
   if (specifier.startsWith('/')) {
-    rawPath = specifier.slice(1);
+    rawPath = normalizePath(specifier.slice(1));
   } else if (specifier.startsWith('.')) {
     rawPath = normalizePath(`${baseDir}/${specifier}`);
+  } else if (specifier.startsWith('@/') || specifier.startsWith('~/')) {
+    // Standard alias resolution
+    rawPath = normalizePath(`src/${specifier.slice(2)}`);
   } else {
+    // Might be relative to root or an external package
+    const candidateDirect = normalizePath(specifier);
+    if (filePaths.has(candidateDirect)) return candidateDirect;
     return null;
   }
 
@@ -95,10 +104,12 @@ const resolveImportTarget = (
 };
 
 const extractImportSpecifiers = (content: string) => {
+  if (!content) return [];
   const matches: string[] = [];
   IMPORT_PATTERNS.forEach((pattern) => {
     let match;
-    while ((match = pattern.exec(content)) !== null) {
+    const regex = new RegExp(pattern.source, pattern.flags);
+    while ((match = regex.exec(content)) !== null) {
       if (match[1]) matches.push(match[1]);
     }
   });
@@ -106,9 +117,11 @@ const extractImportSpecifiers = (content: string) => {
 };
 
 const extractCallIdentifiers = (content: string) => {
+  if (!content) return [];
   const identifiers: string[] = [];
+  const regex = new RegExp(CALL_PATTERN.source, CALL_PATTERN.flags);
   let match;
-  while ((match = CALL_PATTERN.exec(content)) !== null) {
+  while ((match = regex.exec(content)) !== null) {
     const name = match[1];
     if (!name || IGNORED_CALLS.has(name)) continue;
     const index = match.index;
@@ -150,8 +163,18 @@ export const buildSemanticLinksForFile = ({
   symbolIndex: SymbolIndex;
 }) => {
   const links: SemanticLink[] = [];
+  const linkSet = new Set<string>();
   const sourceIds = new Set<string>();
   sourceIds.add(sourcePath);
+
+  const addUniqueLink = (source: string, target: string, kind: 'import' | 'call') => {
+    if (!source || !target || source === target) return;
+    const key = `${source}-->${target}:${kind}`;
+    if (!linkSet.has(key)) {
+      linkSet.add(key);
+      links.push({ source, target, kind });
+    }
+  };
 
   const importSpecifiers = extractImportSpecifiers(content);
   const resolvedImports = new Set<string>();
@@ -160,7 +183,7 @@ export const buildSemanticLinksForFile = ({
     if (resolved) resolvedImports.add(resolved);
   });
   resolvedImports.forEach((target) => {
-    links.push({ source: sourcePath, target, kind: 'import' });
+    addUniqueLink(sourcePath, target, 'import');
   });
 
   const addCallLinks = (sourceId: string, snippet: string) => {
@@ -172,7 +195,7 @@ export const buildSemanticLinksForFile = ({
       });
     });
     targets.forEach((targetId) => {
-      links.push({ source: sourceId, target: targetId, kind: 'call' });
+      addUniqueLink(sourceId, targetId, 'call');
     });
   };
 
@@ -190,3 +213,4 @@ export const buildSemanticLinksForFile = ({
 
   return { links, sourceIds };
 };
+

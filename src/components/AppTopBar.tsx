@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Archive,
   BarChart3,
   BookOpen,
   ChevronDown,
@@ -7,6 +8,7 @@ import {
   FileText,
   FolderOpen,
   Github,
+  Key,
   Lightbulb,
   Loader2,
   LogOut,
@@ -14,7 +16,8 @@ import {
   Route,
   Save,
   Search,
-  Sparkles
+  Sparkles,
+  X
 } from 'lucide-react';
 import { useBasketStore } from '../stores/basketStore';
 import { generateMarkdownExport, downloadMarkdown } from '../utils/exportUtils';
@@ -33,6 +36,7 @@ import { AppStatus } from '../types';
 
 const AppTopBar: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const zipInputRef = useRef<HTMLInputElement>(null);
   const status = useGraphStore(selectStatus);
   const isAuthenticated = useGraphStore(selectIsAuthenticated);
   const authNotice = useGraphStore(selectAuthNotice);
@@ -41,6 +45,9 @@ const AppTopBar: React.FC = () => {
   const sidebarTab = useGraphStore(selectSidebarTab);
   const isPromptOpen = useGraphStore(selectIsPromptOpen);
   const githubUrl = useGraphStore(selectGithubUrl);
+  const githubPat = useGraphStore((state) => state.githubPat);
+  const setGithubPat = useGraphStore((state) => state.setGithubPat);
+  const clearGithubPat = useGraphStore((state) => state.clearGithubPat);
   const graphViewMode = useGraphStore((state) => state.graphViewMode);
   const setGraphViewMode = useGraphStore((state) => state.setGraphViewMode);
   const setSearchQuery = useGraphStore((state) => state.setSearchQuery);
@@ -48,6 +55,8 @@ const AppTopBar: React.FC = () => {
   const setPromptOpen = useGraphStore((state) => state.setPromptOpen);
   const setSidebarTab = useGraphStore((state) => state.setSidebarTab);
   const processFiles = useGraphStore((state) => state.processFiles);
+  const openLocalDirectory = useGraphStore((state) => state.openLocalDirectory);
+  const processZipFile = useGraphStore((state) => state.processZipFile);
   const importGithubRepo = useGraphStore((state) => state.importGithubRepo);
   const searchRelevantFiles = useGraphStore((state) => state.searchRelevantFiles);
   const handleSaveSession = useGraphStore((state) => state.handleSaveSession);
@@ -61,10 +70,20 @@ const AppTopBar: React.FC = () => {
   const detectedFramework = useGraphStore((state) => state.detectedFramework);
   const frameworkStatus = useGraphStore((state) => state.frameworkStatus);
   const [showRepoDropdown, setShowRepoDropdown] = useState(false);
+  const [showPatModal, setShowPatModal] = useState(false);
+  const [patInputValue, setPatInputValue] = useState('');
 
   useEffect(() => {
     refreshAuthSession();
   }, [refreshAuthSession]);
+
+  const handleOpenFolder = async () => {
+    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+      await openLocalDirectory();
+    } else {
+      fileInputRef.current?.click();
+    }
+  };
 
   const handleOpenSession = async () => {
     const requestedId = window.prompt('Enter session ID to open:', sessionId ?? '');
@@ -92,40 +111,93 @@ const AppTopBar: React.FC = () => {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-indigo-400 font-bold text-lg">
             <Sparkles size={20} />
-            <span>CodeMind AI</span>
+            <span>Code Palandir</span>
           </div>
 
-          <div className="flex items-center gap-2 ml-8">
-            <div className="relative group">
-              <button className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors">
-                <FolderOpen size={14} /> Local Dir
-              </button>
-              <input
-                type="file"
-                ref={fileInputRef}
-                // @ts-ignore
-                webkitdirectory="" directory="" multiple=""
-                className="absolute inset-0 opacity-0 cursor-pointer"
-                onChange={(event) => {
-                  if (event.target.files && event.target.files.length > 0) {
-                    processFiles(event.target.files);
-                  }
-                }}
-              />
-            </div>
+          <div className="flex items-center gap-2 ml-6">
+            {/* Local Folder Ingestion */}
+            <button
+              onClick={handleOpenFolder}
+              className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors text-slate-200"
+              title="Open local folder via File System Access API or folder upload"
+            >
+              <FolderOpen size={14} className="text-amber-400" /> Folder
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              // @ts-ignore
+              webkitdirectory="" directory="" multiple=""
+              className="hidden"
+              onChange={(event) => {
+                if (event.target.files && event.target.files.length > 0) {
+                  processFiles(event.target.files);
+                }
+              }}
+            />
+
+            {/* ZIP Ingestion */}
+            <button
+              onClick={() => zipInputRef.current?.click()}
+              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors text-slate-200"
+              title="Upload and extract .ZIP repository in browser offline"
+            >
+              <Archive size={14} className="text-cyan-400" /> .ZIP
+            </button>
+            <input
+              type="file"
+              ref={zipInputRef}
+              accept=".zip,application/zip"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  processZipFile(file);
+                }
+                event.target.value = '';
+              }}
+            />
+
             <span className="text-slate-600 text-xs">OR</span>
+
+            {/* GitHub Repo Ingestion */}
             <div className="flex items-center bg-slate-800 border border-slate-700 rounded overflow-hidden">
               <div className="px-2 text-slate-500"><Github size={14} /></div>
               <input
                 type="text"
                 placeholder="github.com/owner/repo"
-                className="bg-transparent border-none text-sm px-2 py-1.5 w-48 focus:outline-none text-slate-300"
+                className="bg-transparent border-none text-sm px-2 py-1.5 w-44 focus:outline-none text-slate-300"
                 value={githubUrl}
                 onChange={event => setGithubUrl(event.target.value)}
                 onKeyDown={event => event.key === 'Enter' && importGithubRepo()}
               />
-              <button onClick={importGithubRepo} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs font-medium">Load</button>
+              <button
+                onClick={importGithubRepo}
+                disabled={status === AppStatus.LOADING_FILES}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 text-xs font-medium text-white transition-colors"
+              >
+                {status === AppStatus.LOADING_FILES ? <Loader2 size={12} className="animate-spin" /> : 'Load'}
+              </button>
             </div>
+
+            {/* PAT Config Button */}
+            <button
+              onClick={() => {
+                setPatInputValue(githubPat || '');
+                setShowPatModal(true);
+              }}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium border transition-colors ${
+                githubPat
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+              }`}
+              title={githubPat ? 'GitHub Personal Access Token is active' : 'Configure GitHub PAT for private repositories'}
+            >
+              <Key size={13} className={githubPat ? 'text-emerald-400' : 'text-slate-400'} />
+              {githubPat ? 'PAT Active' : 'GitHub PAT'}
+            </button>
+
+            {/* My Repos Dropdown */}
             <div className="relative">
               <button
                 onClick={() => {
@@ -138,9 +210,9 @@ const AppTopBar: React.FC = () => {
                   }
                   setShowRepoDropdown((prev) => !prev);
                 }}
-                className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors"
+                className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
               >
-                {userReposStatus === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <FolderOpen size={14} />}
+                {userReposStatus === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <Github size={14} />}
                 My Repos
                 <ChevronDown size={12} />
               </button>
@@ -173,7 +245,7 @@ const AppTopBar: React.FC = () => {
           {frameworkStatus === 'detecting' && (
             <div className="flex items-center gap-2 text-xs text-slate-400">
               <Loader2 size={14} className="animate-spin" />
-              <span>Detectando framework...</span>
+              <span>Detecting framework...</span>
             </div>
           )}
           {detectedFramework && frameworkStatus === 'done' && (
@@ -185,12 +257,13 @@ const AppTopBar: React.FC = () => {
           )}
         </div>
 
+        {/* AI Query Bar */}
         <div className="flex-1 max-w-xl mx-4">
           <div className="relative">
             <input
               type="text"
               placeholder="Ask AI: 'Where is the user authentication logic?'"
-              className="w-full bg-slate-950 border border-slate-700 rounded-full pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+              className="w-full bg-slate-950 border border-slate-700 rounded-full pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-slate-200 placeholder-slate-500"
               value={searchQuery}
               onChange={event => setSearchQuery(event.target.value)}
               onKeyDown={event => event.key === 'Enter' && searchRelevantFiles()}
@@ -204,6 +277,7 @@ const AppTopBar: React.FC = () => {
           </div>
         </div>
 
+        {/* Sidebars and Navigation Controls */}
         <div className="flex items-center gap-1">
           <button
             onClick={() => toggleSidebar('prompt')}
@@ -259,6 +333,7 @@ const AppTopBar: React.FC = () => {
           </button>
         </div>
 
+        {/* View mode & session export buttons */}
         <div className="ml-2 flex items-center gap-2">
           <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-full p-1 text-xs">
             <button
@@ -277,7 +352,7 @@ const AppTopBar: React.FC = () => {
 
           <button
             onClick={handleSaveSession}
-            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors"
+            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors text-slate-200"
           >
             <Save size={14} /> Save Session
           </button>
@@ -288,14 +363,14 @@ const AppTopBar: React.FC = () => {
               const md = generateMarkdownExport(threads, { maxTokens, warningThreshold, dangerThreshold });
               downloadMarkdown(md, `codemind-session-${new Date().toISOString().slice(0, 10)}.md`);
             }}
-            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors"
+            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors text-slate-200"
           >
             <FileDown size={14} /> Export MD
           </button>
 
           <button
             onClick={handleOpenSession}
-            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors"
+            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors text-slate-200"
           >
             <FolderOpen size={14} /> Open Session
           </button>
@@ -308,7 +383,7 @@ const AppTopBar: React.FC = () => {
                 </span>
                 <button
                   onClick={logout}
-                  className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors"
+                  className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors text-slate-200"
                 >
                   <LogOut size={14} /> Sair
                 </button>
@@ -318,7 +393,7 @@ const AppTopBar: React.FC = () => {
                 onClick={() => {
                   window.location.href = '/api/auth/login';
                 }}
-                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors"
+                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded text-sm transition-colors text-slate-200"
               >
                 <Github size={14} /> Entrar com GitHub
               </button>
@@ -326,9 +401,82 @@ const AppTopBar: React.FC = () => {
           </div>
         </div>
       </div>
+
       {authNotice && (
         <div className="bg-amber-500/10 border-b border-amber-500/30 text-amber-200 text-xs px-6 py-2">
           {authNotice}
+        </div>
+      )}
+
+      {/* GitHub Personal Access Token (PAT) Modal */}
+      {showPatModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-indigo-400 font-semibold text-base">
+                <Key size={18} />
+                <span>GitHub Personal Access Token (PAT)</span>
+              </div>
+              <button
+                onClick={() => setShowPatModal(false)}
+                className="text-slate-400 hover:text-slate-200 p-1 rounded transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              To analyze <strong>private repositories</strong> and avoid API rate limiting, provide a GitHub Personal Access Token with <code className="bg-slate-800 px-1 py-0.5 rounded text-indigo-300">repo</code> scope. Your token is stored locally in memory / localStorage only and never leaves your browser.
+            </p>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-slate-400">Token (ghp_... or github_pat_...)</label>
+              <input
+                type="password"
+                placeholder="Paste your GitHub PAT here"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                value={patInputValue}
+                onChange={(e) => setPatInputValue(e.target.value)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              {githubPat ? (
+                <button
+                  onClick={() => {
+                    clearGithubPat();
+                    setPatInputValue('');
+                    setShowPatModal(false);
+                  }}
+                  className="text-xs text-rose-400 hover:text-rose-300 transition-colors"
+                >
+                  Clear Token
+                </button>
+              ) : <div />}
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowPatModal(false)}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 rounded border border-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (patInputValue.trim()) {
+                      setGithubPat(patInputValue.trim());
+                    } else {
+                      clearGithubPat();
+                    }
+                    setShowPatModal(false);
+                  }}
+                  className="px-4 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded transition-colors"
+                >
+                  Save Token
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </>
@@ -336,3 +484,4 @@ const AppTopBar: React.FC = () => {
 };
 
 export default AppTopBar;
+

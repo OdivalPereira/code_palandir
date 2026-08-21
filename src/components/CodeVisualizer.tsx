@@ -1,21 +1,36 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
+import { Maximize2, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import { AIActionMode, ClusterData, FlatNode, Link } from '../types';
 import { useGraphStore } from '../stores/graphStore';
 import { usePresenceStore } from '../stores/presenceStore';
-import { selectGraphLinks, selectGraphNodes, selectLoadingPaths, selectRootNode, selectSelectedNode, selectSelectedNodeIds, selectExpandedDirectories, selectFlowPathNodeIds, selectFlowPathLinkIds, selectRequestExpandNode, selectNodesById, selectGhostNodes, selectGhostLinks } from '../stores/graphSelectors';
+import {
+  selectGraphLinks,
+  selectGraphNodes,
+  selectLoadingPaths,
+  selectRootNode,
+  selectSelectedNode,
+  selectSelectedNodeIds,
+  selectExpandedDirectories,
+  selectFlowPathNodeIds,
+  selectFlowPathLinkIds,
+  selectRequestExpandNode,
+  selectNodesById,
+  selectGhostNodes,
+  selectGhostLinks
+} from '../stores/graphSelectors';
 import AIContextBalloon from './AIContextBalloon';
 import ContextualChat from './ContextualChat';
-
-const LAYOUT_DB_NAME = 'graphLayoutCache';
-const LAYOUT_STORE_NAME = 'positions';
-
-// ... (existing DB code)
+import { ErrorBoundary } from './ErrorBoundary';
 
 // Helper functions for layout caching
 const buildGraphHash = (nodes: FlatNode[], links: Link[]) => {
   const nodeIds = nodes.map(n => n.id).sort().join(',');
-  const linkIds = links.map(l => `${typeof l.source === 'string' ? l.source : (l.source as any).id}-${typeof l.target === 'string' ? l.target : (l.target as any).id}`).sort().join(',');
+  const linkIds = links.map(l => {
+    const s = typeof l.source === 'string' ? l.source : (l.source as any).id;
+    const t = typeof l.target === 'string' ? l.target : (l.target as any).id;
+    return `${s}-${t}`;
+  }).sort().join(',');
   return `${nodeIds}|${linkIds}`;
 };
 
@@ -33,12 +48,13 @@ const filterLayoutPositions = (positions: Record<string, { x: number; y: number 
   return hasValid ? filtered : null;
 };
 
-// Mock IndexedDB for now to resolve build errors
 const readLayoutCache = async (hash: string): Promise<Record<string, { x: number; y: number }> | null> => {
   try {
     const item = localStorage.getItem(`graph_layout_${hash.substring(0, 32)}`);
     return item ? JSON.parse(item) : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 };
 
 const writeLayoutCache = (hash: string, positions: Record<string, { x: number; y: number }>) => {
@@ -47,11 +63,13 @@ const writeLayoutCache = (hash: string, positions: Record<string, { x: number; y
   } catch { }
 };
 
-
-const CodeVisualizer: React.FC = () => {
+const CodeVisualizerContent: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
+  const svgGroupRef = useRef<SVGGElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const zoomBehaviorRef = useRef<d3.ZoomBehavior<Element, unknown> | null>(null);
+
   const rootNode = useGraphStore(selectRootNode);
   const loadingPaths = useGraphStore(selectLoadingPaths);
   const expandedDirectories = useGraphStore(selectExpandedDirectories);
@@ -74,17 +92,18 @@ const CodeVisualizer: React.FC = () => {
   const setSessionLayout = useGraphStore((state) => state.setSessionLayout);
   const localSelection = usePresenceStore((state) => state.localSelection);
   const setLocalCursor = usePresenceStore((state) => state.setLocalCursor);
+
   const triggerSelectNode = useCallback((nodeId: string | null) => {
     useGraphStore.getState().selectNode(nodeId);
   }, []);
 
-  // Memoize peers to prevent new array creation on every render if peers haven't changed
   const peers = usePresenceStore((state) => state.peers);
   const peerPresences = useMemo(() => Object.values(peers), [peers]);
   const connectionStatus = usePresenceStore((state) => state.connectionStatus);
   const localProfile = usePresenceStore((state) => state.profile);
   const [dimensions, setDimensions] = useState({ width: 1000, height: 800 });
-  // Removed: visibleNodeFilter - zoom should not filter nodes
+
+  // Camera transform state stored in Ref for 60 FPS viewport transformations without React re-renders
   const zoomTransformRef = useRef(d3.zoomIdentity);
   const stablePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const workerRef = useRef<Worker | null>(null);
@@ -92,13 +111,11 @@ const CodeVisualizer: React.FC = () => {
   const [layoutPositions, setLayoutPositions] = useState<Record<string, { x: number; y: number }>>({});
   const pendingLayoutRef = useRef<{ requestId: number; positions: Record<string, { x: number; y: number }> } | null>(null);
   const layoutFrameRef = useRef<number | null>(null);
+  const canvasRenderFrameRef = useRef<number | null>(null);
   const layoutCacheRef = useRef<Map<string, Record<string, { x: number; y: number }>>>(new Map());
   const layoutHashRef = useRef<string | null>(null);
   const lastSavedLayoutRef = useRef<{ hash: string; positions: Record<string, { x: number; y: number }> } | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
-  const renderCanvasRef = useRef<() => void>(() => { });
-  const dragStateRef = useRef<{ nodeId: string | null; isDragging: boolean }>({ nodeId: null, isDragging: false });
-  const clickTimeoutRef = useRef<number | null>(null);
   const cursorFrameRef = useRef<number | null>(null);
 
   // AI Context Balloon state
@@ -109,7 +126,6 @@ const CodeVisualizer: React.FC = () => {
   const [showChat, setShowChat] = useState(false);
   const [chatMode, setChatMode] = useState<AIActionMode>('explore');
 
-  // VITE_GRAPH_RENDERER=canvas|webgl switches to the canvas-backed renderer (webgl currently uses canvas fallback).
   const renderMode = (import.meta.env.VITE_GRAPH_RENDERER ?? 'svg').toLowerCase();
   const useCanvasRenderer = renderMode === 'canvas' || renderMode === 'webgl';
 
@@ -137,26 +153,16 @@ const CodeVisualizer: React.FC = () => {
     return Array.from(selectedNodeIds).map(id => nodesById[id]).filter(Boolean);
   }, [selectedNodeIds, nodesById]);
 
-  // Show balloon when nodes are selected
+  // Balloon positioning
   useEffect(() => {
-    // Only log if something changed to avoid spam
     if (selectedNodes.length > 0) {
-      // console.log('[AIBalloon] selectedNodes changed:', selectedNodes.length);
-    }
-
-    if (selectedNodes.length > 0) {
-      // Use the last selected node (or the single selectedNode from store) for positioning
-      // We prioritize the store's 'selectedNode' as it tracks the "active" selection focus usually
       const anchorNode = selectedNode || selectedNodes[0];
-
       if (anchorNode && anchorNode.type !== 'cluster') {
         const position = layoutPositionsRef.current[anchorNode.id] ?? stablePositionsRef.current.get(anchorNode.id);
-
         if (position && wrapperRef.current) {
           const transform = zoomTransformRef.current;
           const screenX = transform.applyX(position.x);
           const screenY = transform.applyY(position.y);
-          // Add offset to not cover the node
           setBalloonPosition({ x: screenX + 20, y: screenY - 20 });
           setShowBalloon(true);
         } else if (anchorNode.x !== undefined && anchorNode.y !== undefined) {
@@ -164,14 +170,12 @@ const CodeVisualizer: React.FC = () => {
           const screenX = transform.applyX(anchorNode.x);
           const screenY = transform.applyY(anchorNode.y);
           setBalloonPosition({ x: screenX + 20, y: screenY - 20 });
-
           setShowBalloon(true);
         } else if (wrapperRef.current) {
           setBalloonPosition({ x: dimensions.width / 2, y: dimensions.height / 2 });
           setShowBalloon(true);
         }
       } else {
-        // Cluster or invalid anchor
         setShowBalloon(false);
       }
     } else {
@@ -179,13 +183,11 @@ const CodeVisualizer: React.FC = () => {
     }
   }, [selectedNodes, selectedNode, dimensions.width, dimensions.height]);
 
-  // Handle AI action selection - opens contextual chat
   const handleAIAction = useCallback((mode: AIActionMode) => {
-    console.log('AI Action selected:', mode, 'for nodes:', selectedNodes.length);
     setChatMode(mode);
     setShowChat(true);
     setShowBalloon(false);
-  }, [selectedNodes]);
+  }, []);
 
   const handleCloseBalloon = useCallback(() => {
     setShowBalloon(false);
@@ -199,7 +201,6 @@ const CodeVisualizer: React.FC = () => {
   const isGhostNode = (node: FlatNode) => node.isGhost || node.type.startsWith('ghost_');
 
   const getNodeRadius = (node: FlatNode) => {
-    // Phase 3: UI Graph sizes
     switch (node.type) {
       case 'app': return 25;
       case 'page': return 20;
@@ -212,16 +213,15 @@ const CodeVisualizer: React.FC = () => {
       case 'button': return 10;
       case 'input': return 10;
     }
-
     if (node.type === 'cluster') return 18;
     if (node.type === 'directory') return 15;
     if (node.type === 'file') return 10;
-    // Ghost nodes
     if (node.type === 'ghost_table') return 14;
     if (node.type === 'ghost_endpoint') return 12;
     if (node.type === 'ghost_service') return 14;
     return 6;
   };
+
   const isFlowNode = useCallback((node: FlatNode) => flowPathNodeIds.has(node.id), [flowPathNodeIds]);
   const getLinkId = useCallback((link: Link) => {
     const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
@@ -232,23 +232,18 @@ const CodeVisualizer: React.FC = () => {
 
   const getNodeColor = (node: FlatNode) => {
     if (isFlowNode(node)) return "#f97316";
-    if (node.relevant) return "#facc15"; // Highlight
-
-    // Phase 3: UI Graph colors (stroke/main color)
+    if (node.relevant) return "#facc15";
     switch (node.type) {
-      case 'app': return "#8b5cf6";      // Violet
-      case 'page': return "#3b82f6";     // Blue
-      case 'layout': return "#6366f1";   // Indigo
-      case 'section': return "#94a3b8";  // Slate
-      case 'form': return "#f59e0b";     // Amber
-      case 'component': return "#10b981"; // Emerald
-      case 'modal': return "#ec4899";    // Pink
-      case 'list': return "#06b6d4";     // Cyan
-      case 'button': return "#f97316";   // Orange
-      case 'input': return "#64748b";    // Slate
-    }
-
-    switch (node.type) {
+      case 'app': return "#8b5cf6";
+      case 'page': return "#3b82f6";
+      case 'layout': return "#6366f1";
+      case 'section': return "#94a3b8";
+      case 'form': return "#f59e0b";
+      case 'component': return "#10b981";
+      case 'modal': return "#ec4899";
+      case 'list': return "#06b6d4";
+      case 'button': return "#f97316";
+      case 'input': return "#64748b";
       case 'cluster': return "#0f172a";
       case 'directory': return "#3b82f6";
       case 'file': return "#64748b";
@@ -261,18 +256,15 @@ const CodeVisualizer: React.FC = () => {
 
   const getNodeFill = (node: FlatNode) => {
     if (isFlowNode(node)) return "#f97316";
-    // Ghost nodes have semi-transparent fills
     if (isGhostNode(node)) {
       switch (node.type) {
-        case 'ghost_table': return "rgba(59, 130, 246, 0.3)"; // Blue
-        case 'ghost_endpoint': return "rgba(34, 197, 94, 0.3)"; // Green
-        case 'ghost_service': return "rgba(168, 85, 247, 0.3)"; // Purple
-        default: return "rgba(239, 68, 68, 0.3)"; // Red for missing
+        case 'ghost_table': return "rgba(59, 130, 246, 0.3)";
+        case 'ghost_endpoint': return "rgba(34, 197, 94, 0.3)";
+        case 'ghost_service': return "rgba(168, 85, 247, 0.3)";
+        default: return "rgba(239, 68, 68, 0.3)";
       }
     }
     if (node.relevant) return "#facc15";
-
-    // Phase 3: UI Graph fills
     switch (node.type) {
       case 'app': return "#8b5cf6";
       case 'page': return "#1e40af";
@@ -284,9 +276,6 @@ const CodeVisualizer: React.FC = () => {
       case 'list': return "#0e7490";
       case 'button': return "#9a3412";
       case 'input': return "#334155";
-    }
-
-    switch (node.type) {
       case 'cluster': return "#0f172a";
       case 'directory': return "#3b82f6";
       case 'file': return "#64748b";
@@ -299,64 +288,53 @@ const CodeVisualizer: React.FC = () => {
 
   const getNodeStroke = (node: FlatNode) => {
     if (isFlowNode(node)) return "#fdba74";
-    // Ghost nodes have dashed colored strokes
     if (isGhostNode(node)) {
       switch (node.type) {
-        case 'ghost_table': return "#3b82f6"; // Blue
-        case 'ghost_endpoint': return "#22c55e"; // Green
-        case 'ghost_service': return "#a855f7"; // Purple
-        default: return "#ef4444"; // Red
+        case 'ghost_table': return "#3b82f6";
+        case 'ghost_endpoint': return "#22c55e";
+        case 'ghost_service': return "#a855f7";
+        default: return "#ef4444";
       }
     }
     if (node.relevant) return "#ffffff";
     if (node.type === 'cluster') return "#38bdf8";
-
-    // UI Graph strokes are usually the main color
     if (['app', 'page', 'layout', 'section', 'form', 'component', 'modal', 'list', 'button', 'input'].includes(node.type)) {
       return getNodeColor(node);
     }
-
     return "transparent";
   };
+
   const getNodeStrokeWidth = (node: FlatNode) => {
     if (isFlowNode(node)) return 3;
     if (isGhostNode(node)) return 2;
-    // UI Graph: Thicker stroke for major components
     if (['app', 'page', 'layout'].includes(node.type)) return 3;
     if (['component', 'form'].includes(node.type)) return 2;
-
-    return (node.type === 'cluster' ? 2.5 : 2);
+    return node.type === 'cluster' ? 2.5 : 2;
   };
 
   const getNodeDash = (node: FlatNode) => {
-    if (isGhostNode(node)) return [4, 4]; // Dashed for ghost nodes
-    // Phase 3: Dashed for layouts/sections
+    if (isGhostNode(node)) return [4, 4];
     if (node.type === 'layout' || node.type === 'section') return [4, 2];
-
-    return (node.type === 'cluster' ? [4, 3] : []);
+    return node.type === 'cluster' ? [4, 3] : [];
   };
 
   const getLinkStroke = (link: Link) => {
     if (isFlowLink(link)) return '#f97316';
     switch (link.kind) {
-      case 'import':
-        return '#38bdf8';
-      case 'call':
-        return '#4ade80';
-      default:
-        return '#475569';
+      case 'import': return '#38bdf8';
+      case 'call': return '#4ade80';
+      default: return '#475569';
     }
   };
+
   const getLinkDash = (link: Link) => {
     switch (link.kind) {
-      case 'import':
-        return [4, 3];
-      case 'call':
-        return [2, 2];
-      default:
-        return [];
+      case 'import': return [4, 3];
+      case 'call': return [2, 2];
+      default: return [];
     }
   };
+
   const getLinkOpacity = (link: Link) => (isFlowLink(link) ? 0.9 : (link.kind ? 0.6 : 0.4));
   const isNodeLoading = useCallback((d: FlatNode) => {
     if (d.type === 'cluster') {
@@ -366,8 +344,7 @@ const CodeVisualizer: React.FC = () => {
     return loadingPaths.has(d.path);
   }, [loadingPaths]);
 
-  // Removed: DIRECTORY_ONLY_ZOOM_THRESHOLD - zoom should only scale, not filter nodes
-
+  // Window resize handler
   useEffect(() => {
     const handleResize = () => {
       if (wrapperRef.current) {
@@ -382,6 +359,7 @@ const CodeVisualizer: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Cursor tracking
   useEffect(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
@@ -417,6 +395,7 @@ const CodeVisualizer: React.FC = () => {
     };
   }, [setLocalCursor]);
 
+  // Reset positions on root change
   useEffect(() => {
     if (!rootNode) return;
     stablePositionsRef.current = new Map();
@@ -424,6 +403,7 @@ const CodeVisualizer: React.FC = () => {
     setHoveredNodeId(null);
   }, [rootNode]);
 
+  // Layout Web Worker initialization
   useEffect(() => {
     const worker = new Worker(new URL('../workers/graphLayout.worker.ts', import.meta.url), { type: 'module' });
     workerRef.current = worker;
@@ -453,20 +433,20 @@ const CodeVisualizer: React.FC = () => {
   }, []);
 
   const { filteredNodes, filteredLinks } = useMemo(() => {
-    // Show all nodes - no zoom-based filtering
-    let nextNodes = [...graphNodes, ...ghostNodes];
-
+    const nextNodes = [...graphNodes, ...ghostNodes];
     const filteredNodeIds = new Set(nextNodes.map(node => node.id));
-    let nextLinks = graphLinks.filter(link => filteredNodeIds.has(link.source as string) && filteredNodeIds.has(link.target as string));
-
-    // Add ghost links
+    let nextLinks = graphLinks.filter(link => {
+      const s = typeof link.source === 'string' ? link.source : (link.source as any).id;
+      const t = typeof link.target === 'string' ? link.target : (link.target as any).id;
+      return filteredNodeIds.has(s) && filteredNodeIds.has(t);
+    });
     nextLinks = [...nextLinks, ...ghostLinks];
-
     return { filteredNodes: nextNodes, filteredLinks: nextLinks };
   }, [graphLinks, graphNodes, ghostNodes, ghostLinks]);
 
   const graphHash = useMemo(() => buildGraphHash(filteredNodes, filteredLinks), [filteredLinks, filteredNodes]);
 
+  // Read layout cache
   useEffect(() => {
     if (!rootNode) return;
     layoutHashRef.current = graphHash;
@@ -481,9 +461,7 @@ const CodeVisualizer: React.FC = () => {
     const memoryCache = filterLayoutPositions(layoutCacheRef.current.get(graphHash) ?? null, filteredNodes);
     if (memoryCache) {
       applyPositions(memoryCache);
-      return () => {
-        isActive = false;
-      };
+      return () => { isActive = false; };
     }
 
     stablePositionsRef.current = new Map();
@@ -496,11 +474,10 @@ const CodeVisualizer: React.FC = () => {
       applyPositions(compatible);
     });
 
-    return () => {
-      isActive = false;
-    };
+    return () => { isActive = false; };
   }, [graphHash, rootNode, filteredNodes]);
 
+  // Session layout restoration
   useEffect(() => {
     if (!rootNode || !sessionLayout) return;
     if (sessionLayout.hash !== graphHash) return;
@@ -516,365 +493,44 @@ const CodeVisualizer: React.FC = () => {
     setSessionLayout(null);
   }, [filteredNodes, graphHash, rootNode, sessionLayout, setSessionLayout]);
 
+  // Write layout cache
   useEffect(() => {
     if (!graphHash || Object.keys(layoutPositions).length === 0) return;
-
-    // Check if this layout was already saved to the store to prevent loops
     if (lastSavedLayoutRef.current?.hash === graphHash &&
       lastSavedLayoutRef.current?.positions === layoutPositions) {
       return;
     }
-
     layoutCacheRef.current.set(graphHash, layoutPositions);
     writeLayoutCache(graphHash, layoutPositions);
-
     lastSavedLayoutRef.current = { hash: graphHash, positions: layoutPositions };
     setLayoutCache(graphHash, layoutPositions);
   }, [graphHash, layoutPositions, setLayoutCache]);
 
+  // Worker calculation trigger
   useEffect(() => {
     if (!rootNode || !workerRef.current) return;
-
     const requestId = layoutRequestIdRef.current + 1;
     layoutRequestIdRef.current = requestId;
     workerRef.current.postMessage({
       requestId,
       nodes: filteredNodes.map(node => ({ id: node.id, type: node.type })),
-      links: filteredLinks.map(link => ({ source: link.source as string, target: link.target as string })),
+      links: filteredLinks.map(link => ({
+        source: typeof link.source === 'string' ? link.source : (link.source as any).id,
+        target: typeof link.target === 'string' ? link.target : (link.target as any).id
+      })),
       width: dimensions.width,
       height: dimensions.height,
       positions: Object.fromEntries(stablePositionsRef.current)
     });
   }, [rootNode, filteredNodes, filteredLinks, dimensions]);
 
-  useEffect(() => {
-    if (!rootNode || !svgRef.current || useCanvasRenderer) return;
+  // Helper function to generate curved path between nodes
+  const linkPath = (source: { x: number; y: number }, target: { x: number; y: number }) => {
+    const midX = (source.x + target.x) / 2;
+    return `M ${source.x} ${source.y} C ${midX} ${source.y}, ${midX} ${target.y}, ${target.x} ${target.y}`;
+  };
 
-    const { width, height } = dimensions;
-
-    const svg = d3.select(svgRef.current);
-    svg.selectAll("*").remove();
-
-    const g = svg.append("g");
-
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.1, 4])
-      .on("zoom", (event) => {
-        zoomTransformRef.current = event.transform;
-        // Zoom only transforms - no node filtering
-        g.attr("transform", event.transform);
-      });
-
-    svg.call(zoom);
-    svg.call(zoom.transform, zoomTransformRef.current);
-
-    filteredNodes.forEach(node => {
-      const savedPosition = layoutPositionsRef.current[node.id] ?? stablePositionsRef.current.get(node.id);
-      node.x = savedPosition?.x ?? width / 2;
-      node.y = savedPosition?.y ?? height / 2;
-    });
-    const nodeById = new Map(filteredNodes.map(node => [node.id, node]));
-    const peerSelectionEntries = peerPresences
-      .map((presence) => {
-        const selectedId = presence.selection?.selectedNodeId ?? null;
-        if (!selectedId) return null;
-        const node = nodeById.get(selectedId);
-        if (!node) return null;
-        return { presence, node };
-      })
-      .filter((entry): entry is { presence: typeof peerPresences[number]; node: FlatNode } => Boolean(entry));
-
-    // Helper function to generate curved path between nodes
-    const linkPath = (source: { x: number; y: number }, target: { x: number; y: number }) => {
-      // Horizontal elbow connector (Bezier curve)
-      const midX = (source.x + target.x) / 2;
-      return `M ${source.x} ${source.y} C ${midX} ${source.y}, ${midX} ${target.y}, ${target.x} ${target.y}`;
-    };
-
-    // Links - using curved paths for mind map style
-    const link = g.append("g")
-      .attr("fill", "none")
-      .selectAll("path")
-      .data(filteredLinks)
-      .join("path")
-      .attr("stroke", (d: any) => {
-        const isConnectedOrHovered = hoveredNodeId && (typeof d.source === 'object' ? d.source.id === hoveredNodeId : d.source === hoveredNodeId || typeof d.target === 'object' ? d.target.id === hoveredNodeId : d.target === hoveredNodeId);
-        if (isConnectedOrHovered) return "#38bdf8"; // Sky color for highlighted links
-        return getLinkStroke(d);
-      })
-      .attr("stroke-opacity", (d: any) => {
-        const isConnectedOrHovered = hoveredNodeId && (typeof d.source === 'object' ? d.source.id === hoveredNodeId : d.source === hoveredNodeId || typeof d.target === 'object' ? d.target.id === hoveredNodeId : d.target === hoveredNodeId);
-        if (isConnectedOrHovered) return 1;
-        if (hoveredNodeId) return 0.1; // Dim others
-        return getLinkOpacity(d);
-      })
-      .attr("stroke-width", (d: any) => {
-        const isConnectedOrHovered = hoveredNodeId && (typeof d.source === 'object' ? d.source.id === hoveredNodeId : d.source === hoveredNodeId || typeof d.target === 'object' ? d.target.id === hoveredNodeId : d.target === hoveredNodeId);
-        if (isConnectedOrHovered) return 2.5;
-        return isAggregateNode(d.target as FlatNode) ? 2 : 1.5;
-      })
-      .attr("stroke-dasharray", (d: any) => getLinkDash(d).join(' '));
-
-
-    // Nodes
-    const node = g.append("g")
-      .selectAll("g")
-      .data(filteredNodes, (d: any) => d.id)
-      .join(
-        enter => enter.append("g")
-          .attr("opacity", 0)
-          .call(enter => enter.transition().duration(400).ease(d3.easeCubicOut).attr("opacity", 1))
-          .attr("transform", d => {
-            // If we have a stored position, start there
-            const pos = layoutPositionsRef.current[d.id] ?? stablePositionsRef.current.get(d.id);
-            return pos ? `translate(${pos.x},${pos.y})` : `translate(${width / 2},${height / 2})`;
-          }),
-        update => update,
-        exit => exit
-          .call(exit => exit.transition().duration(200).attr("opacity", 0).remove())
-      )
-      .attr("cursor", "pointer")
-      .on("click", (event, d) => {
-        event.stopPropagation();
-        if (d.type === 'cluster') {
-          triggerSelectNode(d.id);
-          const { parentPath } = d.data as ClusterData;
-          requestExpandNode?.(parentPath);
-          expandDirectory(parentPath);
-          return;
-        }
-
-        if (event.shiftKey) {
-          toggleMultiSelection(d.id);
-        } else {
-          // If we have a multi-selection and click a new node without shift, clear selection
-          if (selectedNodeIds.size > 0) {
-            clearMultiSelection();
-          }
-          triggerSelectNode(d.id);
-        }
-      })
-      .on("dblclick", (event, d) => {
-        if (d.type === 'directory') {
-          event.stopPropagation();
-          if (expandedDirectories.has(d.path)) {
-            toggleDirectory(d.path);
-          } else {
-            requestExpandNode?.(d.path);
-            toggleDirectory(d.path);
-          }
-        }
-      })
-      .call(d3.drag<SVGGElement, FlatNode>()
-        .on("start", dragstarted)
-        .on("drag", dragged)
-        .on("end", dragended) as any)
-      .on("mouseover", (event, d) => {
-        setHoveredNodeId(d.id);
-      })
-      .on("mouseout", () => {
-        setHoveredNodeId(null);
-      });
-
-
-    // Node Shapes
-    node.append("circle")
-      .attr("r", d => {
-        if (d.type === 'cluster') return 18;
-        if (d.type === 'directory') return 15;
-        if (d.type === 'file') return 10;
-        return 6;
-      })
-      .attr("fill", d => getNodeFill(d))
-      .attr("stroke", d => getNodeStroke(d))
-      .attr("stroke-width", d => getNodeStrokeWidth(d))
-      .attr("stroke-dasharray", d => getNodeDash(d).join(' '));
-
-    node
-      .style("cursor", "pointer")
-      .each(function (d) {
-        const g = d3.select(this);
-        g.selectAll("*").remove();
-
-        // Circle background
-        g.append("circle")
-          .attr("r", getNodeRadius(d))
-          .attr("fill", getNodeColor(d))
-          .attr("stroke", d.id === selectedNode?.id || selectedNodeIds.has(d.id) ? "#f8fafc" : (d.id === hoveredNodeId ? "#bae6fd" : "none"))
-          .attr("stroke-width", d.id === selectedNode?.id || selectedNodeIds.has(d.id) ? 3 : 2)
-          .attr("stroke-dasharray", getNodeDash(d).join(","))
-          .style("filter", d.id === selectedNode?.id || selectedNodeIds.has(d.id) ? "drop-shadow(0 0 4px rgba(56, 189, 248, 0.5))" : "none");
-
-        // Loading indicator
-        if (isNodeLoading(d)) {
-          g.append("circle")
-            .attr("r", (d.type === 'cluster' || d.type === 'directory') ? 22 : 16)
-            .attr("fill", "none")
-            .attr("stroke", "#38bdf8")
-            .attr("stroke-width", 2)
-            .attr("class", "loading-ring");
-
-          g.append("text")
-            .text("Carregando...")
-            .attr("x", 0)
-            .attr("y", d.type === 'directory' ? 40 : 34)
-            .attr("text-anchor", "middle")
-            .attr("fill", "#38bdf8")
-            .attr("font-size", "10px")
-            .style("pointer-events", "none");
-        }
-
-        // Label
-        g.append("text")
-          .attr("dy", d.type === 'directory' || d.type === 'cluster' ? 25 : 20)
-          .attr("text-anchor", "middle")
-          .attr("fill", "#cbd5e1")
-          .attr("font-size", d.type === 'directory' ? "12px" : "10px")
-          .style("pointer-events", "none")
-          .style("text-shadow", "0 1px 2px rgba(0,0,0,0.8)")
-          .text(d.name);
-
-        // Expand/Collapse Button for Directories
-        if (d.type === 'directory') {
-          const hasChildren = (d.data as any)?.children?.length > 0 || (d.data as any)?.hasChildren;
-          if (hasChildren) {
-            const isCollapsed = !!d.collapsed;
-            const btnGroup = g.append("g")
-              .attr("class", "expand-btn")
-              .attr("transform", `translate(${getNodeRadius(d) + 6}, 0)`)
-              .attr("cursor", "pointer");
-
-            // Button circle
-            btnGroup.append("circle")
-              .attr("r", 8)
-              .attr("fill", "#1e293b")
-              .attr("stroke", "#475569")
-              .attr("stroke-width", 1.5);
-
-            // +/- Icon
-            btnGroup.append("text")
-              .attr("dy", 3.5)
-              .attr("text-anchor", "middle")
-              .attr("fill", "#f8fafc")
-              .attr("font-size", "10px")
-              .attr("font-weight", "bold")
-              .style("pointer-events", "none")
-              .text(isCollapsed ? "+" : "-");
-
-            // Badge for collapsed count
-            if (isCollapsed && d.childCount) {
-              g.append("text")
-                .attr("dx", getNodeRadius(d) + 18)
-                .attr("dy", 4)
-                .attr("text-anchor", "start")
-                .attr("fill", "#94a3b8")
-                .attr("font-size", "10px")
-                .text(`(${d.childCount} items)`);
-            }
-
-            // Click handler for button
-            btnGroup.on("click", (e) => {
-              e.stopPropagation();
-              if (isCollapsed) {
-                // When expanding: first load children into tree, then expand directory
-                // The expandDirectory call will recalculate the graph with the new children
-                requestExpandNode?.(d.path);
-                expandDirectory(d.path);
-              } else {
-                // When collapsing: just toggle (remove from expanded set)
-                toggleDirectory(d.path);
-              }
-            });
-          }
-        }
-      });
-
-    node.on("dblclick", (event, d) => {
-      if (d.type === 'directory') {
-        event.stopPropagation();
-        if (expandedDirectories.has(d.path)) {
-          toggleDirectory(d.path);
-        } else {
-          requestExpandNode?.(d.path);
-          toggleDirectory(d.path);
-        }
-      }
-    });
-
-    const selectionGroup = g.append("g").attr("class", "presence-selections");
-    const selectionRing = selectionGroup
-      .selectAll("circle")
-      .data(peerSelectionEntries)
-      .join("circle")
-      .attr("fill", "none")
-      .attr("stroke", (d) => d.presence.profile.color)
-      .attr("stroke-width", 2)
-      .attr("stroke-dasharray", "4 2")
-      .attr("r", (d) => getNodeRadius(d.node) + 10);
-
-    const updateLayout = () => {
-      // Create a map for fast node lookup by ID
-      const nodeMap = new Map(filteredNodes.map(n => [n.id, n]));
-
-      // Update curved paths
-      link.attr("d", d => {
-        // Resolve source and target nodes. They might be string IDs or objects depending on D3 processing.
-        // Since we are not using forceSimulation which auto-converts, they are likely strings.
-        const sourceId = typeof d.source === 'object' ? (d.source as FlatNode).id : d.source as string;
-        const targetId = typeof d.target === 'object' ? (d.target as FlatNode).id : d.target as string;
-
-        const sourceNode = nodeMap.get(sourceId);
-        const targetNode = nodeMap.get(targetId);
-
-        if (!sourceNode || !targetNode) return ""; // Skip if nodes not found
-
-        return linkPath(
-          { x: sourceNode.x!, y: sourceNode.y! },
-          { x: targetNode.x!, y: targetNode.y! }
-        );
-      });
-
-      node
-        .attr("transform", d => `translate(${d.x},${d.y})`);
-      selectionRing
-        .attr("cx", (d) => d.node.x!)
-        .attr("cy", (d) => d.node.y!);
-    };
-
-    function dragstarted(_event: any, d: FlatNode) {
-      d.fx = d.x;
-      d.fy = d.y;
-    }
-
-    function dragged(event: any, d: FlatNode) {
-      d.fx = event.x;
-      d.fy = event.y;
-      d.x = event.x;
-      d.y = event.y;
-      updateLayout();
-    }
-
-    function dragended(event: any, d: FlatNode) {
-      stablePositionsRef.current.set(d.id, { x: event.x, y: event.y });
-      d.fx = null;
-      d.fy = null;
-      setLayoutPositions(prev => ({ ...prev, [d.id]: { x: event.x, y: event.y } }));
-    }
-
-    // Attach drag behavior
-    node.call(d3.drag<any, FlatNode>()
-      .filter((event) => !event.target.closest('.expand-btn'))
-      .on("start", dragstarted)
-      .on("drag", dragged)
-      .on("end", dragended));
-
-    updateLayout();
-
-    return () => {
-      g.remove();
-    };
-  }, [rootNode, dimensions, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading, requestExpandNode, expandDirectory, toggleDirectory, triggerSelectNode, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode, peerPresences]);
-
+  // Node position helper
   const updateNodePositions = useCallback(() => {
     const { width, height } = dimensions;
     const positions = new Map<string, { x: number; y: number }>();
@@ -888,24 +544,7 @@ const CodeVisualizer: React.FC = () => {
     return positions;
   }, [dimensions, filteredNodes]);
 
-  const resolveNodeAtPosition = useCallback((x: number, y: number) => {
-    const transform = zoomTransformRef.current;
-    const [graphX, graphY] = transform.invert([x, y]);
-    for (let i = filteredNodes.length - 1; i >= 0; i -= 1) {
-      const node = filteredNodes[i];
-      const radius = getNodeRadius(node) + 4;
-      const savedPosition = layoutPositionsRef.current[node.id] ?? stablePositionsRef.current.get(node.id);
-      const nodeX = savedPosition?.x ?? node.x ?? dimensions.width / 2;
-      const nodeY = savedPosition?.y ?? node.y ?? dimensions.height / 2;
-      const dx = graphX - nodeX;
-      const dy = graphY - nodeY;
-      if (dx * dx + dy * dy <= radius * radius) {
-        return node;
-      }
-    }
-    return null;
-  }, [dimensions.height, dimensions.width, filteredNodes]);
-
+  // Canvas 2D Renderer Loop (60 FPS, GPU-composited transform, zero React state re-renders)
   const renderCanvas = useCallback(() => {
     if (!canvasRef.current) return;
     const canvas = canvasRef.current;
@@ -929,180 +568,275 @@ const CodeVisualizer: React.FC = () => {
     const positions = updateNodePositions();
     const nodeById = new Map(filteredNodes.map(node => [node.id, node]));
 
-    const aggregateLinks: Link[] = [];
-    const normalLinks: Link[] = [];
+    // Render Links
     filteredLinks.forEach(link => {
-      const targetNode = nodeById.get(link.target as string);
-      if (targetNode && isAggregateNode(targetNode)) {
-        aggregateLinks.push(link);
-      } else {
-        normalLinks.push(link);
-      }
+      const sId = typeof link.source === 'string' ? link.source : (link.source as any).id;
+      const tId = typeof link.target === 'string' ? link.target : (link.target as any).id;
+      const sourcePos = positions.get(sId);
+      const targetPos = positions.get(tId);
+      if (!sourcePos || !targetPos) return;
+
+      ctx.beginPath();
+      const midX = (sourcePos.x + targetPos.x) / 2;
+      ctx.moveTo(sourcePos.x, sourcePos.y);
+      ctx.bezierCurveTo(midX, sourcePos.y, midX, targetPos.y, targetPos.x, targetPos.y);
+
+      ctx.strokeStyle = getLinkStroke(link);
+      ctx.globalAlpha = getLinkOpacity(link);
+      ctx.lineWidth = isAggregateNode(nodeById.get(tId) as FlatNode) ? 2 : 1.5;
+      const dash = getLinkDash(link);
+      ctx.setLineDash(dash);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.setLineDash([]);
     });
 
-    type LinkBatch = {
-      links: Link[];
-      stroke: string;
-      dash: number[];
-      opacity: number;
-      width: number;
-    };
-
-    const renderLinkBatches = (links: Link[], strokeWidth: number) => {
-      const batches = new Map<string, LinkBatch>();
-      links.forEach((link) => {
-        const stroke = getLinkStroke(link);
-        const dash = getLinkDash(link);
-        const opacity = getLinkOpacity(link);
-        const key = `${stroke}|${dash.join(',')}|${opacity}|${strokeWidth}`;
-        const batch = batches.get(key) ?? { links: [], stroke, dash, opacity, width: strokeWidth };
-        batch.links.push(link);
-        batches.set(key, batch);
-      });
-      batches.forEach((batch) => {
-        if (batch.links.length === 0) return;
-        ctx.beginPath();
-        batch.links.forEach(link => {
-          const sourcePos = positions.get(link.source as string);
-          const targetPos = positions.get(link.target as string);
-          if (!sourcePos || !targetPos) return;
-          ctx.moveTo(sourcePos.x, sourcePos.y);
-          ctx.lineTo(targetPos.x, targetPos.y);
-        });
-        ctx.strokeStyle = batch.stroke;
-        ctx.globalAlpha = batch.opacity;
-        ctx.lineWidth = batch.width;
-        ctx.setLineDash(batch.dash);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-        ctx.setLineDash([]);
-      });
-    };
-
-    renderLinkBatches(normalLinks, 1);
-    renderLinkBatches(aggregateLinks, 2);
-
-    type NodeBatch = {
-      nodes: FlatNode[];
-      fill: string;
-      stroke: string;
-      strokeWidth: number;
-      dash: number[];
-      radius: number;
-    };
-
-    const batches = new Map<string, NodeBatch>();
+    // Render Nodes
     filteredNodes.forEach(node => {
+      const pos = positions.get(node.id);
+      if (!pos) return;
       const radius = getNodeRadius(node);
-      const fill = getNodeFill(node);
-      const stroke = getNodeStroke(node);
-      const strokeWidth = getNodeStrokeWidth(node);
-      const dash = getNodeDash(node);
-      const key = `${fill}|${stroke}|${strokeWidth}|${dash.join(',')}|${radius}`;
-      const batch = batches.get(key) ?? { nodes: [], fill, stroke, strokeWidth, dash, radius };
-      batch.nodes.push(node);
-      batches.set(key, batch);
-    });
+      const isSelected = selectedNode?.id === node.id || selectedNodeIds.has(node.id);
+      const isHovered = hoveredNodeId === node.id;
 
-    batches.forEach(batch => {
       ctx.beginPath();
-      batch.nodes.forEach(node => {
-        const position = positions.get(node.id);
-        if (!position) return;
-        ctx.moveTo(position.x + batch.radius, position.y);
-        ctx.arc(position.x, position.y, batch.radius, 0, Math.PI * 2);
-      });
-      ctx.fillStyle = batch.fill;
+      ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = getNodeFill(node);
       ctx.fill();
-      if (batch.stroke !== "transparent") {
-        ctx.strokeStyle = batch.stroke;
-        ctx.lineWidth = batch.strokeWidth;
-        ctx.setLineDash(batch.dash);
-        ctx.stroke();
-      }
-    });
 
-    peerPresences.forEach((presence) => {
-      const selectedId = presence.selection?.selectedNodeId ?? null;
-      if (!selectedId) return;
-      const node = nodeById.get(selectedId);
-      const position = positions.get(selectedId);
-      if (!node || !position) return;
-      ctx.beginPath();
-      ctx.arc(position.x, position.y, getNodeRadius(node) + 10, 0, Math.PI * 2);
-      ctx.strokeStyle = presence.profile.color;
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 2]);
+      ctx.strokeStyle = isSelected ? "#f8fafc" : (isHovered ? "#bae6fd" : getNodeStroke(node));
+      ctx.lineWidth = isSelected ? 3 : getNodeStrokeWidth(node);
+      ctx.setLineDash(getNodeDash(node));
       ctx.stroke();
       ctx.setLineDash([]);
-    });
 
-    filteredNodes.forEach(node => {
-      if (!isNodeLoading(node)) return;
-      const position = positions.get(node.id);
-      if (!position) return;
-      const radius = (node.type === 'cluster' || node.type === 'directory') ? 22 : 16;
-      ctx.beginPath();
-      ctx.arc(position.x, position.y, radius, 0, Math.PI * 2);
-      ctx.strokeStyle = "#38bdf8";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([]);
-      ctx.stroke();
-
-      ctx.fillStyle = "#38bdf8";
-      ctx.font = "10px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.fillText("Carregando...", position.x, position.y + (node.type === 'directory' ? 40 : 34));
-    });
-
-    if (hoveredNodeId) {
-      const hoveredNode = nodeById.get(hoveredNodeId);
-      const position = hoveredNode ? positions.get(hoveredNode.id) : null;
-      if (hoveredNode && position) {
-        ctx.beginPath();
-        ctx.arc(position.x, position.y, getNodeRadius(hoveredNode) + 6, 0, Math.PI * 2);
-        ctx.strokeStyle = "#f8fafc";
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 3]);
-        ctx.stroke();
-      }
-    }
-
-    ctx.fillStyle = "#cbd5e1";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.shadowColor = "rgba(0,0,0,0.8)";
-    ctx.shadowBlur = 2;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 1;
-    filteredNodes.forEach(node => {
-      const position = positions.get(node.id);
-      if (!position) return;
+      // Label
+      ctx.fillStyle = "#cbd5e1";
       ctx.font = node.type === 'directory' ? "12px sans-serif" : "10px sans-serif";
-      const labelOffset = node.type === 'directory' ? 25 : 20;
-      ctx.fillText(node.name, position.x, position.y + labelOffset);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const labelOffset = node.type === 'directory' || node.type === 'cluster' ? 25 : 20;
+      ctx.fillText(node.name, pos.x, pos.y + labelOffset);
     });
 
     ctx.restore();
-  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, isNodeLoading, updateNodePositions, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode, peerPresences]);
+  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, isAggregateNode, selectedNode, selectedNodeIds, updateNodePositions]);
 
-  useEffect(() => {
-    renderCanvasRef.current = renderCanvas;
+  const scheduleCanvasRender = useCallback(() => {
+    if (canvasRenderFrameRef.current !== null) return;
+    canvasRenderFrameRef.current = window.requestAnimationFrame(() => {
+      canvasRenderFrameRef.current = null;
+      renderCanvas();
+    });
   }, [renderCanvas]);
 
+  // SVG Renderer & Zoom Pipeline (60 FPS on GPU compositing layer)
+  useEffect(() => {
+    if (!rootNode || !svgRef.current || useCanvasRenderer) return;
+    const { width, height } = dimensions;
+
+    const svg = d3.select(svgRef.current);
+    svg.selectAll("*").remove();
+
+    const g = svg.append("g");
+    svgGroupRef.current = g.node();
+
+    const zoom = d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.05, 8])
+      .on("zoom", (event) => {
+        zoomTransformRef.current = event.transform;
+        g.attr("transform", event.transform);
+      });
+
+    zoomBehaviorRef.current = zoom as any;
+    svg.call(zoom);
+    svg.call(zoom.transform, zoomTransformRef.current);
+
+    filteredNodes.forEach(node => {
+      const savedPosition = layoutPositionsRef.current[node.id] ?? stablePositionsRef.current.get(node.id);
+      node.x = savedPosition?.x ?? width / 2;
+      node.y = savedPosition?.y ?? height / 2;
+    });
+
+    const link = g.append("g")
+      .attr("fill", "none")
+      .selectAll("path")
+      .data(filteredLinks)
+      .join("path")
+      .attr("stroke", (d: any) => getLinkStroke(d))
+      .attr("stroke-opacity", (d: any) => getLinkOpacity(d))
+      .attr("stroke-width", (d: any) => isAggregateNode(d.target as FlatNode) ? 2 : 1.5)
+      .attr("stroke-dasharray", (d: any) => getLinkDash(d).join(' '));
+
+    const node = g.append("g")
+      .selectAll("g")
+      .data(filteredNodes, (d: any) => d.id)
+      .join("g")
+      .attr("cursor", "pointer")
+      .attr("transform", d => {
+        const pos = layoutPositionsRef.current[d.id] ?? stablePositionsRef.current.get(d.id);
+        return pos ? `translate(${pos.x},${pos.y})` : `translate(${width / 2},${height / 2})`;
+      })
+      .on("click", (event, d) => {
+        event.stopPropagation();
+        if (d.type === 'cluster') {
+          triggerSelectNode(d.id);
+          const { parentPath } = d.data as ClusterData;
+          requestExpandNode?.(parentPath);
+          expandDirectory(parentPath);
+          return;
+        }
+        if (event.shiftKey) {
+          toggleMultiSelection(d.id);
+        } else {
+          if (selectedNodeIds.size > 0) clearMultiSelection();
+          triggerSelectNode(d.id);
+        }
+      })
+      .on("dblclick", (event, d) => {
+        if (d.type === 'directory') {
+          event.stopPropagation();
+          if (expandedDirectories.has(d.path)) {
+            toggleDirectory(d.path);
+          } else {
+            requestExpandNode?.(d.path);
+            toggleDirectory(d.path);
+          }
+        }
+      })
+      .on("mouseover", (_event, d) => setHoveredNodeId(d.id))
+      .on("mouseout", () => setHoveredNodeId(null));
+
+    node.each(function (d) {
+      const gNode = d3.select(this);
+      gNode.selectAll("*").remove();
+
+      // Node circle
+      gNode.append("circle")
+        .attr("r", getNodeRadius(d))
+        .attr("fill", getNodeFill(d))
+        .attr("stroke", d.id === selectedNode?.id || selectedNodeIds.has(d.id) ? "#f8fafc" : (d.id === hoveredNodeId ? "#bae6fd" : getNodeStroke(d)))
+        .attr("stroke-width", d.id === selectedNode?.id || selectedNodeIds.has(d.id) ? 3 : getNodeStrokeWidth(d))
+        .attr("stroke-dasharray", getNodeDash(d).join(","))
+        .style("filter", d.id === selectedNode?.id || selectedNodeIds.has(d.id) ? "drop-shadow(0 0 6px rgba(56, 189, 248, 0.6))" : "none");
+
+      // Loading ring
+      if (isNodeLoading(d)) {
+        gNode.append("circle")
+          .attr("r", (d.type === 'cluster' || d.type === 'directory') ? 22 : 16)
+          .attr("fill", "none")
+          .attr("stroke", "#38bdf8")
+          .attr("stroke-width", 2)
+          .attr("class", "loading-ring");
+      }
+
+      // Label
+      gNode.append("text")
+        .attr("dy", d.type === 'directory' || d.type === 'cluster' ? 25 : 20)
+        .attr("text-anchor", "middle")
+        .attr("fill", "#cbd5e1")
+        .attr("font-size", d.type === 'directory' ? "12px" : "10px")
+        .style("pointer-events", "none")
+        .style("text-shadow", "0 1px 2px rgba(0,0,0,0.8)")
+        .text(d.name);
+
+      // Expand/Collapse Button for Directories
+      if (d.type === 'directory') {
+        const hasChildren = (d.data as any)?.children?.length > 0 || (d.data as any)?.hasChildren;
+        if (hasChildren) {
+          const isCollapsed = !!d.collapsed;
+          const btnGroup = gNode.append("g")
+            .attr("class", "expand-btn")
+            .attr("transform", `translate(${getNodeRadius(d) + 6}, 0)`)
+            .attr("cursor", "pointer");
+
+          btnGroup.append("circle")
+            .attr("r", 8)
+            .attr("fill", "#1e293b")
+            .attr("stroke", "#475569")
+            .attr("stroke-width", 1.5);
+
+          btnGroup.append("text")
+            .attr("dy", 3.5)
+            .attr("text-anchor", "middle")
+            .attr("fill", "#f8fafc")
+            .attr("font-size", "10px")
+            .attr("font-weight", "bold")
+            .style("pointer-events", "none")
+            .text(isCollapsed ? "+" : "-");
+
+          btnGroup.on("click", (e) => {
+            e.stopPropagation();
+            if (isCollapsed) {
+              requestExpandNode?.(d.path);
+              expandDirectory(d.path);
+            } else {
+              toggleDirectory(d.path);
+            }
+          });
+        }
+      }
+    });
+
+    const updateLayout = () => {
+      const nMap = new Map(filteredNodes.map(n => [n.id, n]));
+      link.attr("d", (d: any) => {
+        const sId = typeof d.source === 'object' ? d.source.id : d.source;
+        const tId = typeof d.target === 'object' ? d.target.id : d.target;
+        const sNode = nMap.get(sId);
+        const tNode = nMap.get(tId);
+        if (!sNode || !tNode) return "";
+        return linkPath({ x: sNode.x!, y: sNode.y! }, { x: tNode.x!, y: tNode.y! });
+      });
+      node.attr("transform", d => `translate(${d.x},${d.y})`);
+    };
+
+    function dragstarted(_event: any, d: FlatNode) {
+      d.fx = d.x;
+      d.fy = d.y;
+    }
+
+    function dragged(event: any, d: FlatNode) {
+      d.fx = event.x;
+      d.fy = event.y;
+      d.x = event.x;
+      d.y = event.y;
+      updateLayout();
+    }
+
+    function dragended(event: any, d: FlatNode) {
+      stablePositionsRef.current.set(d.id, { x: event.x, y: event.y });
+      d.fx = null;
+      d.fy = null;
+      setLayoutPositions(prev => ({ ...prev, [d.id]: { x: event.x, y: event.y } }));
+    }
+
+    node.call(d3.drag<any, FlatNode>()
+      .filter((event) => !event.target.closest('.expand-btn'))
+      .on("start", dragstarted)
+      .on("drag", dragged)
+      .on("end", dragended));
+
+    updateLayout();
+
+    return () => {
+      g.remove();
+    };
+  }, [rootNode, dimensions, expandedDirectories, loadingPaths, filteredNodes, filteredLinks, layoutPositions, useCanvasRenderer, isNodeLoading, requestExpandNode, expandDirectory, toggleDirectory, triggerSelectNode, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode, peerPresences, selectedNode, selectedNodeIds, hoveredNodeId]);
+
+  // Canvas zoom initialization
   useEffect(() => {
     if (!useCanvasRenderer || !canvasRef.current) return;
     const canvas = canvasRef.current;
 
     const zoom = d3.zoom<HTMLCanvasElement, unknown>()
-      .scaleExtent([0.1, 4])
+      .scaleExtent([0.05, 8])
       .on("zoom", (event) => {
         zoomTransformRef.current = event.transform;
-        // Zoom only transforms - no node filtering
-        renderCanvasRef.current();
+        scheduleCanvasRender();
       });
 
+    zoomBehaviorRef.current = zoom as any;
     const selection = d3.select(canvas);
     selection.call(zoom);
     selection.call(zoom.transform, zoomTransformRef.current);
@@ -1110,132 +844,122 @@ const CodeVisualizer: React.FC = () => {
     return () => {
       selection.on(".zoom", null);
     };
-  }, [useCanvasRenderer]);
+  }, [useCanvasRenderer, scheduleCanvasRender]);
 
-  useEffect(() => {
-    if (!useCanvasRenderer || !canvasRef.current) return;
-    const canvas = canvasRef.current;
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const node = resolveNodeAtPosition(event.clientX - rect.left, event.clientY - rect.top);
-      const nextId = node?.id ?? null;
-      if (nextId !== hoveredNodeId) {
-        setHoveredNodeId(nextId);
-        canvas.style.cursor = node ? "pointer" : "default";
-        renderCanvasRef.current();
-      }
-      if (dragStateRef.current.isDragging && dragStateRef.current.nodeId) {
-        const transform = zoomTransformRef.current;
-        const [graphX, graphY] = transform.invert([event.clientX - rect.left, event.clientY - rect.top]);
-        stablePositionsRef.current.set(dragStateRef.current.nodeId, { x: graphX, y: graphY });
-        renderCanvasRef.current();
-      }
-    };
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const node = resolveNodeAtPosition(event.clientX - rect.left, event.clientY - rect.top);
-      if (node) {
-        dragStateRef.current = { nodeId: node.id, isDragging: true };
-      }
-    };
-
-    const handlePointerUp = () => {
-      if (dragStateRef.current.isDragging && dragStateRef.current.nodeId) {
-        const nodeId = dragStateRef.current.nodeId;
-        const position = stablePositionsRef.current.get(nodeId);
-        if (position) {
-          setLayoutPositions(prev => ({ ...prev, [nodeId]: position }));
-        }
-      }
-      dragStateRef.current = { nodeId: null, isDragging: false };
-    };
-
-    const handleClick = (event: MouseEvent) => {
-      if (dragStateRef.current.isDragging) return;
-      const rect = canvas.getBoundingClientRect();
-      const node = resolveNodeAtPosition(event.clientX - rect.left, event.clientY - rect.top);
-      if (!node) return;
-      if (clickTimeoutRef.current) {
-        window.clearTimeout(clickTimeoutRef.current);
-        clickTimeoutRef.current = null;
-      }
-      clickTimeoutRef.current = window.setTimeout(() => {
-        if (node.type === 'cluster') {
-          const { parentPath } = node.data as ClusterData;
-          requestExpandNode?.(parentPath);
-          expandDirectory(parentPath);
-          return;
-        }
-        triggerSelectNode(node.id);
-      }, 150);
-    };
-
-    const handleDoubleClick = (event: MouseEvent) => {
-      if (clickTimeoutRef.current) {
-        window.clearTimeout(clickTimeoutRef.current);
-        clickTimeoutRef.current = null;
-      }
-      const rect = canvas.getBoundingClientRect();
-      const node = resolveNodeAtPosition(event.clientX - rect.left, event.clientY - rect.top);
-      if (node?.type === 'directory') {
-        if (expandedDirectories.has(node.path)) {
-          toggleDirectory(node.path);
-        } else {
-          requestExpandNode?.(node.path);
-          toggleDirectory(node.path);
-        }
-      }
-    };
-
-    canvas.addEventListener("pointermove", handlePointerMove);
-    canvas.addEventListener("pointerdown", handlePointerDown);
-    canvas.addEventListener("pointerup", handlePointerUp);
-    canvas.addEventListener("pointerleave", handlePointerUp);
-    canvas.addEventListener("click", handleClick);
-    canvas.addEventListener("dblclick", handleDoubleClick);
-
-    return () => {
-      canvas.removeEventListener("pointermove", handlePointerMove);
-      canvas.removeEventListener("pointerdown", handlePointerDown);
-      canvas.removeEventListener("pointerup", handlePointerUp);
-      canvas.removeEventListener("pointerleave", handlePointerUp);
-      canvas.removeEventListener("click", handleClick);
-      canvas.removeEventListener("dblclick", handleDoubleClick);
-    };
-  }, [expandedDirectories, hoveredNodeId, requestExpandNode, resolveNodeAtPosition, triggerSelectNode, toggleDirectory, useCanvasRenderer, expandDirectory]);
-
+  // Canvas render update
   useEffect(() => {
     if (!useCanvasRenderer) return;
-    renderCanvasRef.current();
-  }, [dimensions, filteredLinks, filteredNodes, hoveredNodeId, layoutPositions, loadingPaths, useCanvasRenderer, flowPathNodeIds, flowPathLinkIds, isFlowLink, isFlowNode, peerPresences]);
+    scheduleCanvasRender();
+  }, [useCanvasRenderer, scheduleCanvasRender, dimensions, filteredLinks, filteredNodes, hoveredNodeId, layoutPositions]);
 
-  useEffect(() => {
-    return () => {
-      if (clickTimeoutRef.current) {
-        window.clearTimeout(clickTimeoutRef.current);
-      }
-    };
-  }, []);
+  // Recenter / Reset Viewport Handler
+  const handleRecenter = useCallback(() => {
+    const positions = Object.values(layoutPositions);
+    if (positions.length === 0) return;
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    positions.forEach(pos => {
+      if (pos.x < minX) minX = pos.x;
+      if (pos.x > maxX) maxX = pos.x;
+      if (pos.y < minY) minY = pos.y;
+      if (pos.y > maxY) maxY = pos.y;
+    });
+
+    const padding = 100;
+    const dx = Math.max(50, maxX - minX + padding * 2);
+    const dy = Math.max(50, maxY - minY + padding * 2);
+    const { width, height } = dimensions;
+
+    const scale = Math.min(2, Math.max(0.2, 0.85 / Math.max(dx / width, dy / height)));
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    const nextTransform = d3.zoomIdentity
+      .translate(width / 2, height / 2)
+      .scale(scale)
+      .translate(-centerX, -centerY);
+
+    const targetEl = useCanvasRenderer ? canvasRef.current : svgRef.current;
+    if (targetEl && zoomBehaviorRef.current) {
+      d3.select(targetEl)
+        .transition()
+        .duration(600)
+        .ease(d3.easeCubicOut)
+        .call(zoomBehaviorRef.current.transform as any, nextTransform);
+    }
+  }, [dimensions, layoutPositions, useCanvasRenderer]);
+
+  const handleZoomIn = useCallback(() => {
+    const targetEl = useCanvasRenderer ? canvasRef.current : svgRef.current;
+    if (targetEl && zoomBehaviorRef.current) {
+      d3.select(targetEl).transition().duration(250).call(zoomBehaviorRef.current.scaleBy as any, 1.3);
+    }
+  }, [useCanvasRenderer]);
+
+  const handleZoomOut = useCallback(() => {
+    const targetEl = useCanvasRenderer ? canvasRef.current : svgRef.current;
+    if (targetEl && zoomBehaviorRef.current) {
+      d3.select(targetEl).transition().duration(250).call(zoomBehaviorRef.current.scaleBy as any, 0.7);
+    }
+  }, [useCanvasRenderer]);
+
+  const handleResetZoom = useCallback(() => {
+    const targetEl = useCanvasRenderer ? canvasRef.current : svgRef.current;
+    if (targetEl && zoomBehaviorRef.current) {
+      d3.select(targetEl).transition().duration(300).call(zoomBehaviorRef.current.transform as any, d3.zoomIdentity);
+    }
+  }, [useCanvasRenderer]);
 
   if (!rootNode) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-slate-500 bg-slate-900/50 rounded-lg border-2 border-dashed border-slate-700 p-8">
         <p className="text-lg font-medium mb-2">No Project Loaded</p>
-        <p className="text-sm">Import a GitHub repository or open a local directory to visualize the mind map.</p>
+        <p className="text-sm">Import a GitHub repository, open a local directory, or upload a .ZIP to visualize the graph.</p>
       </div>
     );
   }
 
   return (
-    <div ref={wrapperRef} className="w-full h-full relative bg-slate-950 overflow-hidden">
+    <div ref={wrapperRef} className="w-full h-full relative bg-slate-950 overflow-hidden select-none">
       {useCanvasRenderer ? (
-        <canvas ref={canvasRef} className="w-full h-full" role="img" aria-label="Graph canvas renderer" />
+        <canvas ref={canvasRef} className="w-full h-full block" role="img" aria-label="Graph canvas renderer" />
       ) : (
-        <svg ref={svgRef} width={dimensions.width} height={dimensions.height} className="w-full h-full" />
+        <svg ref={svgRef} width={dimensions.width} height={dimensions.height} className="w-full h-full block" />
       )}
 
+      {/* Viewport & Navigation Controls */}
+      <div className="absolute bottom-6 right-6 flex items-center bg-slate-900/90 backdrop-blur border border-slate-700/80 rounded-xl shadow-2xl p-1.5 gap-1 z-30">
+        <button
+          onClick={handleZoomIn}
+          title="Zoom In (+)"
+          className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+        >
+          <ZoomIn size={16} />
+        </button>
+        <button
+          onClick={handleZoomOut}
+          title="Zoom Out (-)"
+          className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+        >
+          <ZoomOut size={16} />
+        </button>
+        <button
+          onClick={handleRecenter}
+          title="Fit & Recenter Graph"
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-indigo-300 hover:text-white hover:bg-indigo-600/30 bg-indigo-500/10 border border-indigo-500/30 rounded-lg transition-colors"
+        >
+          <Maximize2 size={14} /> Recenter
+        </button>
+        <button
+          onClick={handleResetZoom}
+          title="Reset Viewport 1:1"
+          className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+        >
+          <RotateCcw size={15} />
+        </button>
+      </div>
+
+      {/* Peer Cursors */}
       {cursorEntries.map((presence) => (
         <div
           key={presence.clientId}
@@ -1256,7 +980,8 @@ const CodeVisualizer: React.FC = () => {
         </div>
       ))}
 
-      <div className="absolute top-4 right-4 bg-slate-900/90 backdrop-blur border border-slate-700 rounded-lg shadow-lg p-3 w-56">
+      {/* Presence Card */}
+      <div className="absolute top-4 right-4 bg-slate-900/90 backdrop-blur border border-slate-700 rounded-lg shadow-lg p-3 w-56 z-20">
         <div className="flex items-center justify-between text-xs text-slate-300">
           <span className="font-semibold text-slate-100">Presença</span>
           <span className={`px-2 py-0.5 rounded-full text-[10px] ${connectionStatus === 'connected'
@@ -1288,7 +1013,8 @@ const CodeVisualizer: React.FC = () => {
         </div>
       </div>
 
-      <div className="absolute bottom-4 left-4 bg-slate-900/80 backdrop-blur p-3 rounded-lg border border-slate-700 text-xs text-slate-300 shadow-lg">
+      {/* Legend */}
+      <div className="absolute bottom-4 left-4 bg-slate-900/80 backdrop-blur p-3 rounded-lg border border-slate-700 text-xs text-slate-300 shadow-lg z-20 max-w-sm">
         <div className="font-semibold mb-2 text-slate-200">Legend</div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1">
           <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Directory</div>
@@ -1329,7 +1055,6 @@ const CodeVisualizer: React.FC = () => {
         <div className="absolute right-0 top-0 h-full w-[380px] z-40 shadow-2xl animate-in slide-in-from-right duration-300 ease-out">
           <ContextualChat
             selectedNodes={selectedNodes}
-
             initialMode={chatMode}
             onClose={handleCloseChat}
           />
@@ -1339,4 +1064,13 @@ const CodeVisualizer: React.FC = () => {
   );
 };
 
+const CodeVisualizer: React.FC = () => {
+  return (
+    <ErrorBoundary name="CodeVisualizerEngine">
+      <CodeVisualizerContent />
+    </ErrorBoundary>
+  );
+};
+
 export default CodeVisualizer;
+

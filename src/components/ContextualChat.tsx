@@ -30,7 +30,6 @@ import {
 import {
     AIActionMode,
     AI_ACTION_LABELS,
-    AI_ACTION_METADATA,
     ChatMessage,
     FlatNode,
     Thread,

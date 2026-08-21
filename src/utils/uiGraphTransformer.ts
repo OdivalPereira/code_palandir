@@ -2,36 +2,66 @@ import { FlatNode, Link, UINode, MissingDependency } from '../types';
 
 /**
  * Transforms a hierarchical UINode tree into flat nodes and links for D3 visualization.
+ * Sanitizes graph outputs:
+ * - Deduplicates edges
+ * - Prevents infinite recursion on cyclic structures
+ * - Prunes dangling links
+ * - Provides fallback hierarchical metadata
  * 
  * @param rootNode The root of the UI Graph
+ * @param missingDependencies List of missing backend dependencies
  * @returns Object containing flat nodes and links
  */
 export const convertUIGraphToFlatNodes = (
-    rootNode: UINode,
+    rootNode: UINode | null | undefined,
     missingDependencies: MissingDependency[] = []
 ): { nodes: FlatNode[], links: Link[] } => {
+    if (!rootNode) {
+        return { nodes: [], links: [] };
+    }
+
     const nodes: FlatNode[] = [];
     const links: Link[] = [];
     const processedIds = new Set<string>();
+    const linkSet = new Set<string>();
     const nodeByPath = new Map<string, string>(); // Path -> NodeID
 
-    const traverse = (node: UINode, parentId: string | null) => {
-        // Generate a unique ID if needed, though UINode should have one
-        const nodeId = node.id || `ui-${Math.random().toString(36).substr(2, 9)}`;
+    const addUniqueLink = (source: string, target: string, kind: 'structural' | 'dependency' | 'import' | 'call' = 'structural', edgeStyle?: 'dashed') => {
+        if (!source || !target || source === target) return;
+        const key = `${source}-->${target}:${kind}`;
+        if (!linkSet.has(key)) {
+            linkSet.add(key);
+            links.push({
+                source,
+                target,
+                kind,
+                edgeStyle
+            });
+        }
+    };
 
-        // Prevent duplicates
-        if (processedIds.has(nodeId)) return;
+    const traverse = (node: UINode, parentId: string | null, depth: number = 1) => {
+        if (!node) return;
+        // Generate a stable unique ID if needed
+        const nodeId = node.id || `ui-${node.name || 'node'}-${node.sourceFile || ''}-${depth}`;
+
+        // Prevent infinite recursion on cyclic children
+        if (processedIds.has(nodeId)) {
+            if (parentId) {
+                addUniqueLink(parentId, nodeId, 'structural');
+            }
+            return;
+        }
         processedIds.add(nodeId);
 
-        // Create FlatNode
+        // Create FlatNode with fallback positions and hierarchical metadata
         const flatNode: FlatNode = {
             id: nodeId,
-            name: node.label || node.name,
-            type: node.type as any, // app, page, component, button, etc. (Cast to allow new types)
+            name: node.label || node.name || 'Component',
+            type: (node.type || 'component') as any,
             path: node.sourceFile || '',
-            group: 1,
-            uiNode: node, // Keep reference to original node for details
-            // D3 properties init
+            group: depth,
+            uiNode: node,
             x: 0,
             y: 0
         };
@@ -43,37 +73,36 @@ export const convertUIGraphToFlatNodes = (
 
         // Create Link from parent
         if (parentId) {
-            links.push({
-                source: parentId,
-                target: nodeId,
-                kind: 'structural' // Hierarchical link
-            });
+            addUniqueLink(parentId, nodeId, 'structural');
         }
 
-        // Traverse children
-        if (node.children && node.children.length > 0) {
-            node.children.forEach(child => traverse(child, nodeId));
+        // Traverse children safely
+        if (Array.isArray(node.children) && node.children.length > 0) {
+            node.children.forEach(child => traverse(child, nodeId, depth + 1));
         }
     };
 
-    traverse(rootNode, null);
+    traverse(rootNode, null, 1);
 
-    // Phase 5: Generate Ghost Nodes for Missing Dependencies
-    if (missingDependencies.length > 0) {
-        missingDependencies.forEach(dep => {
-            const ghostId = `ghost-${dep.id || Math.random().toString(36).substr(2, 9)}`;
+    // Generate Ghost Nodes for Missing Dependencies
+    if (Array.isArray(missingDependencies) && missingDependencies.length > 0) {
+        missingDependencies.forEach((dep, index) => {
+            if (!dep) return;
+            const ghostId = `ghost-${dep.id || dep.name || index}`;
 
-            // Determine ghost type based on dependency type
-            let ghostType = 'ghost_service'; // default
+            if (processedIds.has(ghostId)) return;
+            processedIds.add(ghostId);
+
+            let ghostType = 'ghost_service';
             if (dep.type === 'table') ghostType = 'ghost_table';
             if (dep.type === 'endpoint') ghostType = 'ghost_endpoint';
 
             const ghostNode: FlatNode = {
                 id: ghostId,
-                name: dep.name,
-                type: ghostType,
+                name: dep.name || 'Backend Resource',
+                type: ghostType as any,
                 path: '',
-                group: 2,
+                group: 99,
                 isGhost: true,
                 ghostData: dep,
                 dependencyStatus: 'missing',
@@ -84,21 +113,25 @@ export const convertUIGraphToFlatNodes = (
             nodes.push(ghostNode);
 
             // Link to ALL sources that require this dependency
-            if (dep.requiredBy && dep.requiredBy.length > 0) {
+            if (Array.isArray(dep.requiredBy) && dep.requiredBy.length > 0) {
                 dep.requiredBy.forEach(sourcePath => {
                     const sourceNodeId = nodeByPath.get(sourcePath);
                     if (sourceNodeId) {
-                        links.push({
-                            source: sourceNodeId,
-                            target: ghostId,
-                            kind: 'dependency',
-                            edgeStyle: 'dashed'
-                        });
+                        addUniqueLink(sourceNodeId, ghostId, 'dependency', 'dashed');
                     }
                 });
             }
         });
     }
 
-    return { nodes, links };
+    // Prune dangling links
+    const validNodeIds = new Set(nodes.map(n => n.id));
+    const prunedLinks = links.filter(link => {
+        const s = typeof link.source === 'string' ? link.source : (link.source as any)?.id;
+        const t = typeof link.target === 'string' ? link.target : (link.target as any)?.id;
+        return validNodeIds.has(s) && validNodeIds.has(t);
+    });
+
+    return { nodes, links: prunedLinks };
 };
+

@@ -1,4 +1,4 @@
-import React, { act } from 'react';
+import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -17,7 +17,7 @@ vi.mock('../../api/client', async (importOriginal) => {
 
 describe('PromptBuilder', () => {
   beforeAll(() => {
-    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
   it('renders generated content, techniques, and sections after mock response', async () => {

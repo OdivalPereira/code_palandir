@@ -82,7 +82,7 @@ const ThreadLibrary: React.FC<ThreadLibraryProps> = ({ onClose, className = '' }
             const matchesSearch =
                 thread.title.toLowerCase().includes(searchLower) ||
                 thread.userNote?.toLowerCase().includes(searchLower) ||
-                thread.baseElement.name.toLowerCase().includes(searchLower) ||
+                thread.baseElements?.some(el => el.name.toLowerCase().includes(searchLower)) ||
                 thread.tags?.some(tag => tag.toLowerCase().includes(searchLower));
 
             if (!matchesSearch) return false;

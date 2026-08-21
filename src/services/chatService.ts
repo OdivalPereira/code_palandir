@@ -187,7 +187,7 @@ export async function sendChatMessage(options: SendMessageOptions): Promise<Chat
     // Normalizar sugestões
     const suggestions: ThreadSuggestion[] = (Array.isArray(data?.suggestions) ? data.suggestions : [])
         .filter((sug: unknown): sug is ThreadSuggestion => isThreadSuggestion(sug))
-        .map((sug, index) => ({
+        .map((sug: ThreadSuggestion, index: number) => ({
             ...sug,
             id: sug.id || `sug-${Date.now()}-${index}`,
             type: sug.type || 'snippet',
