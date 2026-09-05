@@ -29,19 +29,58 @@ const ALLOWED_EXTENSIONS = new Set([
   'json',
 ]);
 
-function shouldIgnorePath(path: string): boolean {
+const SENSITIVE_FILE_PATTERNS = [
+  /^\.env(?:\..+)?$/i,
+  /\.(?:pem|key|pkcs12|pfx|p12|kdbx|crt|cer|jks)$/i,
+  /(?:id_rsa|id_dsa|id_ecdsa|id_ed25519)(?:\.pub)?$/i,
+  /(?:secret|credential|service-account|firebase-adminsdk|private-key).*\.json$/i,
+  /\.htpasswd$/i,
+  /\.npmrc$/i,
+  /\.dockercfg$/i,
+  /\.netrc$/i,
+  /\.git-credentials$/i,
+  /credentials(?:\.json|\.ini|\.txt)?$/i,
+];
+
+export function isSensitivePath(filePath: string): boolean {
+  if (!filePath) return false;
+  const normalized = filePath.replace(/\\/g, '/');
+  const filename = normalized.split('/').pop() || normalized;
+  return SENSITIVE_FILE_PATTERNS.some((pat) => pat.test(filename));
+}
+
+export function sanitizeFilePath(rawPath: string): string {
+  if (!rawPath) return '';
+  const normalized = rawPath.replace(/\\/g, '/').replace(/^\/+/, '');
+  const segments = normalized.split('/').filter(Boolean);
+  const safeSegments: string[] = [];
+  for (const seg of segments) {
+    if (seg === '.' || seg === '..') {
+      continue;
+    }
+    const cleaned = seg.replace(/[\x00-\x1f\x7f]/g, '');
+    if (cleaned) {
+      safeSegments.push(cleaned);
+    }
+  }
+  return safeSegments.join('/');
+}
+
+export function shouldIgnorePath(path: string): boolean {
+  if (!path) return true;
+  if (isSensitivePath(path)) return true;
   const parts = path.split('/');
   for (const part of parts) {
-    if (IGNORED_DIRS.has(part) || part.startsWith('._')) return true;
+    if (IGNORED_DIRS.has(part) || part.startsWith('._') || part === '..') return true;
   }
   const filename = parts[parts.length - 1];
-  if (filename.startsWith('._') || filename === '.DS_Store') return true;
+  if (filename.startsWith('._') || filename === '.DS_Store' || isSensitivePath(filename)) return true;
   const ext = filename.split('.').pop()?.toLowerCase();
   if (!ext || !ALLOWED_EXTENSIONS.has(ext)) return true;
   return false;
 }
 
-function detectLanguage(path: string): ProjectFile['language'] {
+export function detectLanguage(path: string): ProjectFile['language'] {
   const ext = path.split('.').pop()?.toLowerCase();
   switch (ext) {
     case 'tsx':
@@ -148,10 +187,20 @@ export async function extractZipArchive(zipBuffer: ArrayBuffer): Promise<Project
     throw new Error('O arquivo ZIP está vazio.');
   }
 
+  const isZipSlipEntry = (p: string) => {
+    const norm = p.replace(/\\/g, '/');
+    return norm.includes('..') || norm.startsWith('/') || /^[a-zA-Z]:/.test(norm);
+  };
+
   // Determine if there is a genuine common root wrapper folder (e.g. from GitHub zipball: "owner-repo-hash/...")
   let commonPrefix = '';
   const relevantEntries = allEntries.filter(
-    (e) => !e.startsWith('__MACOSX/') && !e.startsWith('__MACOSX') && !e.includes('/._') && !e.startsWith('._')
+    (e) =>
+      !isZipSlipEntry(e) &&
+      !e.startsWith('__MACOSX/') &&
+      !e.startsWith('__MACOSX') &&
+      !e.includes('/._') &&
+      !e.startsWith('._')
   );
   if (relevantEntries.length > 0) {
     const sampleEntry = relevantEntries.find((e) => !zip.files[e]?.dir && e.includes('/'));
@@ -168,9 +217,15 @@ export async function extractZipArchive(zipBuffer: ArrayBuffer): Promise<Project
 
   for (const [rawPath, zipEntry] of Object.entries(zip.files)) {
     if (zipEntry.dir) continue;
+    // Reject Zip Slip directory traversal completely
+    if (isZipSlipEntry(rawPath)) continue;
+
+    // Sanitize path
+    const safeRawPath = sanitizeFilePath(rawPath);
+    if (!safeRawPath) continue;
 
     // Remove root folder prefix if present
-    let relativePath = rawPath;
+    let relativePath = safeRawPath;
     if (commonPrefix && relativePath.startsWith(commonPrefix)) {
       relativePath = relativePath.slice(commonPrefix.length);
     }

@@ -4,20 +4,13 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://avatars.githubusercontent.com https://github.githubassets.com; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://codeload.github.com https://generativelanguage.googleapis.com ws: wss:; object-src 'none'; base-uri 'self'; form-action 'self';"
+    />
     <title>Code Palandir</title>
-    <script>
-      // Global browser polyfills for Node-targeted libraries (Babel/Dagre/JSZip)
-      window.global = window;
-      window.process = window.process || {
-        env: {},
-        nextTick: function (cb) {
-          setTimeout(cb, 0);
-        },
-        emitWarning: function () {},
-      };
-      var process = window.process;
-      var global = window;
-    </script>
   </head>
   <body>
     <div id="root"></div>

