@@ -47,11 +47,13 @@ export function parseSourceWithBabel(
     };
   }
 
-  // Determine if this file might be a page (e.g. in pages/, views/, routes/, or has "Page" in name)
+  // Determine if this file might be a page (e.g. Next.js app/page, pages/, views/, or filename ending with Page/View)
+  const filename = filePath.split('/').pop() || '';
   const isLikelyPage =
-    /pages\/|views\/|routes\/|app\//i.test(filePath) ||
-    /page\.(tsx|jsx|js|ts)$/i.test(filePath) ||
-    /Page/i.test(filePath.split('/').pop() || '');
+    /(?:^|\/)app\/(?:.+[\\/])?page\.(?:tsx|jsx|js|ts)$/i.test(filePath) ||
+    (/(?:^|\/)pages\/.+\.(?:tsx|jsx|js|ts)$/i.test(filePath) && !/(?:_app|_document|_error|[\/\\]api[\/\\])/i.test(filePath)) ||
+    /(?:^|\/)views\/.+\.(?:tsx|jsx|vue|svelte|js|ts)$/i.test(filePath) ||
+    /(?:Page|View)\.(?:tsx|jsx|vue|svelte|js|ts)$/i.test(filename);
 
   // Track discovered components in this file
   traverse(ast, {

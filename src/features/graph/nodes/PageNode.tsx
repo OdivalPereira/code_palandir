@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { FileCode, CheckSquare, Square, Layers, CheckCheck } from 'lucide-react';
+import { FileCode, CheckSquare, Square, Layers, CheckCheck, ChevronDown, ChevronRight, Zap, Cloud, Database, Workflow } from 'lucide-react';
 import { useSelectionStore } from '@/stores/selectionStore';
+import { useGraphStore } from '@/stores/graphStore';
 import type { PageNodeData } from '@/types/graph';
 import type { SelectedElement } from '@/types/prompt';
 
@@ -81,9 +82,25 @@ export const PageNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
     toggleGroup(groupElements);
   };
 
+  const toggleNodeExpanded = useGraphStore((s) => s.toggleNodeExpanded);
+  const isExpanded = Boolean(nodeData.isExpanded);
+  const totalChildren = nodeData.totalChildrenCount ?? 0;
+  const hasChildren = Boolean(nodeData.hasChildren || totalChildren > 0);
+
+  const handleToggleExpand = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleNodeExpanded(nodeData.id);
+  };
+
   const isSearchMatch = Boolean(nodeData.isSearchMatch);
   const isDimmed = Boolean(nodeData.isDimmed);
   const isTB = nodeData.layoutDirection === 'TB';
+
+  const childCount = nodeData.childrenCount ?? 0;
+  const actionsCount = nodeData.actionsCount ?? 0;
+  const apisCount = nodeData.apisCount ?? 0;
+  const storesCount = nodeData.storesCount ?? 0;
+  const hooksCount = nodeData.hooksCount ?? 0;
 
   return (
     <div
@@ -98,7 +115,7 @@ export const PageNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
           ? 'border-emerald-500/80 bg-slate-900/95 ring-1 ring-emerald-500/40'
           : 'border-emerald-900/60 bg-slate-900/90 hover:border-emerald-700/80'
       }`}
-      style={{ minWidth: '220px' }}
+      style={{ minWidth: '240px' }}
     >
       <Handle
         type="target"
@@ -128,8 +145,37 @@ export const PageNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
           </div>
         </div>
 
-        {/* Action Controls */}
+        {/* Action Controls & Expand/Collapse Toggle */}
         <div className="flex items-center gap-1">
+          {/* Visual Expand / Collapse Button */}
+          {hasChildren && (
+            <button
+              onClick={handleToggleExpand}
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                isExpanded
+                  ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/40'
+                  : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60'
+              }`}
+              title={
+                isExpanded
+                  ? 'Recolher elementos filhos desta tela'
+                  : `Expandir ${totalChildren} elementos filhos desta tela`
+              }
+            >
+              {isExpanded ? (
+                <>
+                  <ChevronDown className="h-3 w-3 text-emerald-400" />
+                  <span className="text-[9px]">Recolher</span>
+                </>
+              ) : (
+                <>
+                  <ChevronRight className="h-3 w-3 text-emerald-400" />
+                  <span className="text-[9px]">+{totalChildren}</span>
+                </>
+              )}
+            </button>
+          )}
+
           {/* Quick Select All Group (Page + Actions + APIs) */}
           {groupElements.length > 1 && (
             <button
@@ -168,16 +214,89 @@ export const PageNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
         </div>
       </div>
 
+      {/* Category Badges (Clickable expand badges) */}
+      {hasChildren && (
+        <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+          {childCount > 0 && (
+            <button
+              onClick={handleToggleExpand}
+              className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${
+                isExpanded
+                  ? 'bg-purple-950/60 border border-purple-500/40 text-purple-300'
+                  : 'bg-purple-500/15 border border-purple-500/30 text-purple-300 hover:bg-purple-500/25'
+              }`}
+              title={isExpanded ? 'Componentes exibidos no grafo' : `Clique para expandir ${childCount} componentes`}
+            >
+              <Layers className="h-2.5 w-2.5" />
+              <span>{isExpanded ? '' : '+'}{childCount} comp.</span>
+            </button>
+          )}
+          {actionsCount > 0 && (
+            <button
+              onClick={handleToggleExpand}
+              className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${
+                isExpanded
+                  ? 'bg-amber-950/60 border border-amber-500/40 text-amber-300'
+                  : 'bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25'
+              }`}
+              title={isExpanded ? 'Ações exibidas no grafo' : `Clique para expandir ${actionsCount} ações`}
+            >
+              <Zap className="h-2.5 w-2.5" />
+              <span>{isExpanded ? '' : '+'}{actionsCount} ações</span>
+            </button>
+          )}
+          {apisCount > 0 && (
+            <button
+              onClick={handleToggleExpand}
+              className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${
+                isExpanded
+                  ? 'bg-rose-950/60 border border-rose-500/40 text-rose-300'
+                  : 'bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25'
+              }`}
+              title={isExpanded ? 'APIs exibidas no grafo' : `Clique para expandir ${apisCount} APIs`}
+            >
+              <Cloud className="h-2.5 w-2.5" />
+              <span>{isExpanded ? '' : '+'}{apisCount} APIs</span>
+            </button>
+          )}
+          {storesCount > 0 && (
+            <button
+              onClick={handleToggleExpand}
+              className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${
+                isExpanded
+                  ? 'bg-cyan-950/60 border border-cyan-500/40 text-cyan-300'
+                  : 'bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25'
+              }`}
+              title={isExpanded ? 'Stores exibidas no grafo' : `Clique para expandir ${storesCount} stores`}
+            >
+              <Database className="h-2.5 w-2.5" />
+              <span>{isExpanded ? '' : '+'}{storesCount} stores</span>
+            </button>
+          )}
+          {hooksCount > 0 && (
+            <button
+              onClick={handleToggleExpand}
+              className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${
+                isExpanded
+                  ? 'bg-teal-950/60 border border-teal-500/40 text-teal-300'
+                  : 'bg-teal-500/15 border border-teal-500/30 text-teal-300 hover:bg-teal-500/25'
+              }`}
+              title={isExpanded ? 'Hooks exibidos no grafo' : `Clique para expandir ${hooksCount} hooks`}
+            >
+              <Workflow className="h-2.5 w-2.5" />
+              <span>{isExpanded ? '' : '+'}{hooksCount} hooks</span>
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="mt-2.5 flex items-center justify-between border-t border-slate-800/80 pt-2 text-[10px] text-slate-400">
-        <span className="flex items-center gap-1 font-mono truncate max-w-[140px]" title={nodeData.filePath}>
+        <span className="flex items-center gap-1 font-mono truncate max-w-[150px]" title={nodeData.filePath}>
           {nodeData.filePath?.split('/').pop()}
         </span>
-        {nodeData.childrenCount > 0 && (
-          <span className="flex items-center gap-1 text-emerald-400/90 font-medium">
-            <Layers className="h-3 w-3" />
-            {nodeData.childrenCount} componentes
-          </span>
-        )}
+        <span className="text-[9px] font-mono text-slate-500">
+          {isExpanded ? 'expandido' : 'recolhido'}
+        </span>
       </div>
 
       <Handle

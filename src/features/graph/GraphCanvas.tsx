@@ -4,6 +4,7 @@ import {
   Background,
   Controls,
   MiniMap,
+  Panel,
   BackgroundVariant,
   ReactFlowProvider,
   useReactFlow,
@@ -24,11 +25,23 @@ import { StoreNode } from './nodes/StoreNode';
 import { ApiNode } from './nodes/ApiNode';
 import { CustomEdge } from './edges/CustomEdge';
 
-import { FolderOpen, Sparkles, Layers, ArrowRight } from 'lucide-react';
+import { FolderOpen, Sparkles, Layers, ArrowRight, FoldHorizontal, UnfoldHorizontal } from 'lucide-react';
 import { Button } from '@/ui/Button';
 
 const GraphCanvasInner: React.FC = () => {
-  const { nodes, edges, onNodesChange, onEdgesChange, selectNode, filters } = useGraphStore();
+  const {
+    nodes,
+    edges,
+    onNodesChange,
+    onEdgesChange,
+    selectNode,
+    filters,
+    collapseAll,
+    expandAll,
+    setExpansionLevel,
+    expansionLevel,
+    expandedNodeIds,
+  } = useGraphStore();
   const { setSidebarTab, setImportModalOpen } = useUIStore();
   const meta = useProjectStore((state) => state.meta);
   const isAnalyzing = useProjectStore((state) => state.isAnalyzing);
@@ -170,6 +183,80 @@ const GraphCanvasInner: React.FC = () => {
         defaultEdgeOptions={{ type: 'customEdge' }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#334155" />
+
+        {/* Floating Canvas Expansion & Depth Toolbar */}
+        <Panel position="top-left" className="!m-3">
+          <div className="flex items-center gap-1.5 rounded-xl border border-slate-800/90 bg-slate-950/85 p-1.5 shadow-2xl backdrop-blur-md text-xs">
+            {/* Depth Level Selector */}
+            <div className="flex items-center gap-0.5 bg-slate-900/90 p-0.5 rounded-lg border border-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setExpansionLevel(1)}
+                className={`px-2 py-1 rounded text-[11px] font-medium transition-colors flex items-center gap-1 ${
+                  expansionLevel === 1
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Nível 1: Telas e Rotas (Recolher Tudo)"
+              >
+                <FoldHorizontal className="h-3 w-3" />
+                <span>Telas</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setExpansionLevel(2)}
+                className={`px-2 py-1 rounded text-[11px] font-medium transition-colors flex items-center gap-1 ${
+                  expansionLevel === 2
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Nível 2: Mostrar Telas e Componentes diretos"
+              >
+                <Layers className="h-3 w-3" />
+                <span>Componentes</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setExpansionLevel(3)}
+                className={`px-2 py-1 rounded text-[11px] font-medium transition-colors flex items-center gap-1 ${
+                  expansionLevel === 3
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Nível 3: Expandir Tudo (Componentes, Ações, APIs, Stores)"
+              >
+                <UnfoldHorizontal className="h-3 w-3" />
+                <span>Tudo</span>
+              </button>
+            </div>
+
+            {/* Quick Toggle All */}
+            <button
+              type="button"
+              onClick={expandedNodeIds.size > 0 ? collapseAll : expandAll}
+              className="px-2 py-1 rounded-lg border border-slate-800 bg-slate-900/90 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-1 text-[11px] font-medium"
+              title={expandedNodeIds.size > 0 ? 'Recolher todos os nós' : 'Expandir todos os nós'}
+            >
+              {expandedNodeIds.size > 0 ? (
+                <>
+                  <FoldHorizontal className="h-3 w-3 text-indigo-400" />
+                  <span>Recolher</span>
+                </>
+              ) : (
+                <>
+                  <UnfoldHorizontal className="h-3 w-3 text-indigo-400" />
+                  <span>Expandir</span>
+                </>
+              )}
+            </button>
+
+            {/* Visible Node Count Badge */}
+            <span className="text-[10px] font-mono text-slate-400 px-1.5 py-0.5 rounded bg-slate-900/50 border border-slate-800/40">
+              {nodes.length} nós
+            </span>
+          </div>
+        </Panel>
+
         <Controls className="!bg-slate-900 !border-slate-800 !text-slate-200 !shadow-lg" />
         <MiniMap
           nodeColor={(n: any) => {

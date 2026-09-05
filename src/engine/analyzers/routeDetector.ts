@@ -76,18 +76,34 @@ export function detectRoutes(files: ProjectFile[], components: UIComponent[]): U
 
   // 2. React Router JSX syntax: <Route path="/users" element={<UsersPage />} />
   for (const file of files) {
-    const content = file.content;
+    // Skip mock/demo files, test files, and analyzer engines when detecting project routes
+    if (
+      file.path.includes('/analyzers/') ||
+      file.path.includes('demoProject') ||
+      file.path.includes('__tests__') ||
+      file.path.includes('.test.') ||
+      file.path.includes('.spec.')
+    ) {
+      continue;
+    }
+
+    // Strip comments to prevent matching example code or docs in comments
+    const content = file.content.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '');
+
     if (content.includes('<Route') || content.includes('createBrowserRouter') || content.includes('createRoutesFromElements')) {
       const routeMatches = content.matchAll(/<Route[^>]*path=["']([^"']+)["'][^>]*(?:element=\{<([A-Za-z0-9_]+)|component=\{([A-Za-z0-9_]+))/g);
       for (const m of routeMatches) {
         const routePath = m[1];
         const compName = m[2] || m[3] || 'PageComponent';
-        routes.push({
-          id: `route-${routePath}`,
-          path: routePath,
-          pageComponentName: compName,
-          filePath: file.path,
-        });
+        // Only accept if component exists in the analyzed codebase or is a common router pattern
+        if (componentMap.has(compName) || components.some((c) => c.name === compName)) {
+          routes.push({
+            id: `route-${routePath}`,
+            path: routePath,
+            pageComponentName: compName,
+            filePath: file.path,
+          });
+        }
       }
 
       // createBrowserRouter([{ path: '/login', element: <LoginPage /> }])
@@ -95,12 +111,14 @@ export function detectRoutes(files: ProjectFile[], components: UIComponent[]): U
       for (const m of objectMatches) {
         const routePath = m[1];
         const compName = m[2] || m[3] || 'PageComponent';
-        routes.push({
-          id: `route-${routePath}`,
-          path: routePath,
-          pageComponentName: compName,
-          filePath: file.path,
-        });
+        if (componentMap.has(compName) || components.some((c) => c.name === compName)) {
+          routes.push({
+            id: `route-${routePath}`,
+            path: routePath,
+            pageComponentName: compName,
+            filePath: file.path,
+          });
+        }
       }
     }
 
@@ -110,12 +128,14 @@ export function detectRoutes(files: ProjectFile[], components: UIComponent[]): U
       for (const m of vueMatches) {
         const routePath = m[1];
         const compName = m[2];
-        routes.push({
-          id: `route-${routePath}`,
-          path: routePath,
-          pageComponentName: compName,
-          filePath: file.path,
-        });
+        if (componentMap.has(compName) || components.some((c) => c.name === compName)) {
+          routes.push({
+            id: `route-${routePath}`,
+            path: routePath,
+            pageComponentName: compName,
+            filePath: file.path,
+          });
+        }
       }
     }
   }

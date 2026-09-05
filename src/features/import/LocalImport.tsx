@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Folder, Upload, Play, AlertCircle } from 'lucide-react';
+import { Folder, Upload, Play, AlertCircle, Layers } from 'lucide-react';
 import { Button } from '@/ui/Button';
 import { readDirectoryWithPicker, extractZipArchive } from '@/services/fileSystem';
+import { loadCurrentProjectFiles } from '@/services/localProjectLoader';
 import { useProjectStore } from '@/stores/projectStore';
 import { useUIStore } from '@/stores/uiStore';
 import { createDemoProjectFiles } from '@/services/demoProject';
@@ -100,6 +101,34 @@ export const LocalImport: React.FC = () => {
     setImportModalOpen(false);
   };
 
+  const handleLoadCodePalandir = async () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      const files = await loadCurrentProjectFiles();
+      if (files.length === 0) {
+        throw new Error('Nenhum arquivo do Code Palandir pôde ser carregado.');
+      }
+      setProject(
+        {
+          name: 'Code Palandir (Local)',
+          framework: 'react',
+          sourceType: 'local-folder',
+          sourceName: 'code_palandir',
+          fileCount: files.length,
+          totalSize: files.reduce((acc, f) => acc + f.size, 0),
+          createdAt: Date.now(),
+        },
+        files
+      );
+      setImportModalOpen(false);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Erro ao carregar arquivos locais do Code Palandir.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {errorMessage && (
@@ -118,6 +147,28 @@ export const LocalImport: React.FC = () => {
           </button>
         </div>
       )}
+
+      {/* Option 0: Load Code Palandir Itself */}
+      <div className="rounded-xl border border-indigo-500/40 bg-gradient-to-r from-indigo-950/40 via-purple-950/30 to-slate-900/50 p-4 space-y-2 shadow-sm">
+        <div className="flex items-center gap-2">
+          <Layers className="h-4 w-4 text-indigo-400" />
+          <h4 className="text-xs font-semibold text-white">Analisar o Próprio Code Palandir</h4>
+          <span className="ml-auto text-[9px] font-mono px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+            Desta Máquina
+          </span>
+        </div>
+        <p className="text-xs text-slate-300 leading-relaxed">
+          Carregue e analise a arquitetura deste projeto (telas, componentes, Zustand stores e hooks) com visualização hierárquica recolhida por padrão.
+        </p>
+        <Button
+          onClick={handleLoadCodePalandir}
+          disabled={isLoading}
+          className="w-full justify-center gap-2 h-9 bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/25"
+        >
+          <Layers className="h-4 w-4" />
+          <span>{isLoading ? 'Carregando arquivos...' : 'Importar Code Palandir Desta Máquina'}</span>
+        </Button>
+      </div>
 
       {/* Option 1: Open Local Folder */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-2">

@@ -8,6 +8,8 @@ import {
   PanelRightClose,
   PanelRightOpen,
   X,
+  FoldHorizontal,
+  UnfoldHorizontal,
 } from 'lucide-react';
 import { useProjectStore } from '@/stores/projectStore';
 import { useGraphStore } from '@/stores/graphStore';
@@ -20,7 +22,18 @@ import { Input } from '@/ui/Input';
 export const TopBar: React.FC = () => {
   const meta = useProjectStore((state) => state.meta);
   const analysis = useProjectStore((state) => state.analysis);
-  const { nodes, filters, setFilters, toggleLayoutDirection, layoutDirection } = useGraphStore();
+  const {
+    nodes,
+    filters,
+    setFilters,
+    toggleLayoutDirection,
+    layoutDirection,
+    collapseAll,
+    expandAll,
+    setExpansionLevel,
+    expansionLevel,
+    expandedNodeIds,
+  } = useGraphStore();
   const selectedElements = useSelectionStore((state) => state.selectedElements);
   const { sidebarOpen, toggleSidebar, setSidebarTab, setImportModalOpen } = useUIStore();
   const searchInputRef = React.useRef<HTMLInputElement>(null);
@@ -151,6 +164,67 @@ export const TopBar: React.FC = () => {
               Stores
             </button>
           </div>
+
+          {/* Depth / Expand-Collapse Level Controls */}
+          <div className="hidden lg:flex items-center gap-1 bg-slate-900/80 p-0.5 rounded-lg border border-slate-800 text-[11px]">
+            <button
+              onClick={() => setExpansionLevel(1)}
+              className={`px-2 py-1 rounded font-medium transition-colors flex items-center gap-1 ${
+                expansionLevel === 1
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Nível 1: Telas e Rotas (Recolher Tudo)"
+            >
+              <FoldHorizontal className="h-3 w-3" />
+              <span>Telas</span>
+            </button>
+            <button
+              onClick={() => setExpansionLevel(2)}
+              className={`px-2 py-1 rounded font-medium transition-colors flex items-center gap-1 ${
+                expansionLevel === 2
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Nível 2: Mostrar Telas e Componentes diretos"
+            >
+              <Layers className="h-3 w-3" />
+              <span>Componentes</span>
+            </button>
+            <button
+              onClick={() => setExpansionLevel(3)}
+              className={`px-2 py-1 rounded font-medium transition-colors flex items-center gap-1 ${
+                expansionLevel === 3
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Nível 3: Expandir Tudo (Componentes, Ações, APIs, Stores)"
+            >
+              <UnfoldHorizontal className="h-3 w-3" />
+              <span>Tudo</span>
+            </button>
+          </div>
+
+          {/* Quick Toggle Expand/Collapse Button for compact screens */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={expandedNodeIds.size > 0 ? collapseAll : expandAll}
+            className="lg:hidden h-8 px-2 text-xs text-slate-300 border-slate-800 bg-slate-900/80 hover:bg-slate-800 hover:text-white gap-1"
+            title={expandedNodeIds.size > 0 ? 'Recolher Tudo' : 'Expandir Tudo'}
+          >
+            {expandedNodeIds.size > 0 ? (
+              <>
+                <FoldHorizontal className="h-3.5 w-3.5 text-indigo-400" />
+                <span className="hidden sm:inline text-[10px]">Recolher</span>
+              </>
+            ) : (
+              <>
+                <UnfoldHorizontal className="h-3.5 w-3.5 text-indigo-400" />
+                <span className="hidden sm:inline text-[10px]">Expandir</span>
+              </>
+            )}
+          </Button>
 
           {/* Layout Direction Toggle */}
           <Button

@@ -35,7 +35,12 @@ export function detectFramework(files: ProjectFile[]): SupportedFramework {
     if (p.endsWith('.component.ts') || p.includes('angular.json')) hasAngular = true;
     if (p.endsWith('.svelte')) hasSvelte = true;
     if (p.endsWith('.tsx') || p.endsWith('.jsx')) hasReact = true;
-    if (p.startsWith('pages/') || p.startsWith('app/') || p.includes('/pages/') || p.includes('/app/')) {
+    if (
+      p.includes('next.config.') ||
+      (/(?:^|\/)pages\/.+\.(?:tsx|jsx|js|ts)$/i.test(p) && (p.includes('_app') || p.includes('_document'))) ||
+      /(?:^|\/)app\/(?:.+[\\/])?page\.(?:tsx|jsx|js|ts)$/i.test(p) ||
+      /(?:^|\/)app\/(?:.+[\\/])?layout\.(?:tsx|jsx|js|ts)$/i.test(p)
+    ) {
       if (hasReact) hasNext = true;
     }
   }

@@ -13,8 +13,9 @@ export class VueAnalyzer implements FrameworkAnalyzer {
     const componentName = filename.charAt(0).toUpperCase() + filename.slice(1);
 
     const isPage =
-      /pages\/|views\/|routes\//i.test(file.path) ||
-      /Page/i.test(filename);
+      /(?:^|\/)pages\//i.test(file.path) ||
+      /(?:^|\/)views\//i.test(file.path) ||
+      /(?:Page|View)$/i.test(filename);
 
     // 1. Extract <template> and <script>
     const templateMatch = content.match(/<template>([\s\S]*?)<\/template>/i);

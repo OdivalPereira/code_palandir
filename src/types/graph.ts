@@ -18,6 +18,14 @@ export interface BaseNodeData extends Record<string, unknown> {
   codeSnippet?: string;
   isSelectedForPrompt?: boolean;
   expanded?: boolean;
+  isExpanded?: boolean;
+  hasChildren?: boolean;
+  childrenCount?: number;
+  actionsCount?: number;
+  apisCount?: number;
+  storesCount?: number;
+  hooksCount?: number;
+  totalChildrenCount?: number;
   isSearchMatch?: boolean;
   isDimmed?: boolean;
   layoutDirection?: 'TB' | 'LR';

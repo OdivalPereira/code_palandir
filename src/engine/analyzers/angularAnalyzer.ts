@@ -15,8 +15,10 @@ export class AngularAnalyzer implements FrameworkAnalyzer {
 
     const componentName = classMatch[1];
     const isPage =
-      /pages\/|views\/|routes\//i.test(file.path) ||
-      /Page/i.test(componentName);
+      /(?:^|\/)pages\//i.test(file.path) ||
+      /(?:^|\/)views\//i.test(file.path) ||
+      /(?:Page|View)Component$/i.test(componentName) ||
+      /(?:Page|View)$/i.test(componentName);
 
     // Actions: public methods in class
     const actions: ComponentAction[] = [];
