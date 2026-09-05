@@ -9,7 +9,7 @@ export interface SelectedElement {
   details?: Record<string, unknown>;
 }
 
-export type PromptTemplateCategory = 'feature' | 'refactor' | 'fix' | 'test' | 'explain';
+export type PromptTemplateCategory = 'feature' | 'refactor' | 'fix' | 'test' | 'explain' | 'audit';
 
 export interface PromptTemplate {
   id: string;

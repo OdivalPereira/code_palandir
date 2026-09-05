@@ -63,10 +63,35 @@ export class AngularAnalyzer implements FrameworkAnalyzer {
       });
     }
 
-    const wireframe: UIWireframeElement[] = [
-      { id: 'btn-1', type: 'button', label: 'Angular Action' },
-      { id: 'inp-1', type: 'input', placeholder: 'Form control' },
-    ];
+    // Extract wireframe elements from template if present
+    const wireframe: UIWireframeElement[] = [];
+    const templateMatch = content.match(/template:\s*`([\s\S]*?)`/);
+    const templateStr = templateMatch ? templateMatch[1] : content;
+
+    if (/<button/i.test(templateStr)) {
+      wireframe.push({ id: 'btn-1', type: 'button', label: 'Botão Angular' });
+    }
+    if (/<input|<textarea|<mat-form-field/i.test(templateStr)) {
+      wireframe.push({ id: 'inp-1', type: 'input', placeholder: 'Form control' });
+    }
+    if (/<form/i.test(templateStr)) {
+      wireframe.push({ id: 'frm-1', type: 'form', label: 'Formulário Angular' });
+    }
+    if (/<table|<mat-table/i.test(templateStr)) {
+      wireframe.push({ id: 'tbl-1', type: 'table', label: 'Tabela de Dados' });
+    }
+    if (/<mat-card|<card|class=["'][^"']*card/i.test(templateStr)) {
+      wireframe.push({ id: 'card-1', type: 'card', label: 'Card Angular' });
+    }
+    if (/<mat-chip|<badge|class=["'][^"']*badge/i.test(templateStr)) {
+      wireframe.push({ id: 'bdg-1', type: 'badge', label: 'Badge / Chip' });
+    }
+    if (/<mat-tab/i.test(templateStr)) {
+      wireframe.push({ id: 'tab-1', type: 'tabs', label: 'Abas / Tabs' });
+    }
+    if (wireframe.length === 0) {
+      wireframe.push({ id: 'btn-1', type: 'button', label: 'Ação do Componente' });
+    }
 
     const component: UIComponent = {
       id: `${file.path}#${componentName}`,

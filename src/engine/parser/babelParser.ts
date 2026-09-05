@@ -74,15 +74,28 @@ export function parseSourceWithBabel(
       if (!/^[A-Z]/.test(name)) return;
 
       const init = path.node.init;
-      if (
-        init &&
-        (init.type === 'ArrowFunctionExpression' ||
-          init.type === 'FunctionExpression' ||
-          (init.type === 'CallExpression' &&
-            init.callee.type === 'Identifier' &&
-            (init.callee.name === 'memo' || init.callee.name === 'forwardRef')))
-      ) {
-        processComponentNode(path, name);
+      if (init) {
+        let isComp =
+          init.type === 'ArrowFunctionExpression' ||
+          init.type === 'FunctionExpression';
+
+        if (init.type === 'CallExpression') {
+          const callee = init.callee;
+          if (
+            (callee.type === 'Identifier' && (callee.name === 'memo' || callee.name === 'forwardRef')) ||
+            (callee.type === 'MemberExpression' &&
+              callee.object.type === 'Identifier' &&
+              callee.object.name === 'React' &&
+              callee.property.type === 'Identifier' &&
+              (callee.property.name === 'memo' || callee.property.name === 'forwardRef'))
+          ) {
+            isComp = true;
+          }
+        }
+
+        if (isComp) {
+          processComponentNode(path, name);
+        }
       }
     },
   });
@@ -212,22 +225,46 @@ export function parseSourceWithBabel(
         const opening = jsxPath.node.openingElement;
         const nameNode = opening.name;
 
+        let tagName = '';
         if (nameNode.type === 'JSXIdentifier') {
-          const tagName = nameNode.name;
+          tagName = nameNode.name;
+        } else if (nameNode.type === 'JSXMemberExpression') {
+          const objectName = nameNode.object.type === 'JSXIdentifier' ? nameNode.object.name : '';
+          const propName = nameNode.property.name;
+          tagName = objectName ? `${objectName}.${propName}` : propName;
+        }
 
-          // If uppercase -> Child Component (e.g. <Sidebar />, <Button />, <UserCard />)
-          if (/^[A-Z]/.test(tagName) && tagName !== componentName) {
-            childrenNamesSet.add(tagName);
+        if (tagName) {
+          // If uppercase -> Child Component (e.g. <Sidebar />, <Button />, <UserCard />, <Dialog.Content />)
+          const baseName = tagName.split('.')[0];
+          if (/^[A-Z]/.test(baseName) && baseName !== componentName) {
+            childrenNamesSet.add(baseName);
           }
 
+          const elementText = getElementText(jsxPath.node);
+          const className = getAttrString(opening, 'className') || '';
+          const titleAttr = getAttrString(opening, 'title');
+
           // Wireframe element detection
-          if (tagName === 'button' || tagName === 'Button') {
-            let label = 'Button';
+          if (tagName === 'button' || tagName === 'Button' || tagName.endsWith('.Button')) {
+            let label = elementText || titleAttr || getAttrString(opening, 'aria-label') || 'Botão';
             let actionName = '';
             for (const attr of opening.attributes) {
-              if (attr.type === 'JSXAttribute' && attr.name.name === 'onClick') {
-                if (attr.value?.type === 'JSXExpressionContainer' && attr.value.expression.type === 'Identifier') {
-                  actionName = attr.value.expression.name;
+              if (attr.type === 'JSXAttribute' && attr.name?.name === 'onClick') {
+                if (attr.value?.type === 'JSXExpressionContainer') {
+                  const expr = attr.value.expression;
+                  if (expr.type === 'Identifier') {
+                    actionName = expr.name;
+                  } else if (expr.type === 'ArrowFunctionExpression' || expr.type === 'FunctionExpression') {
+                    const body = expr.body;
+                    if (body && body.type === 'CallExpression') {
+                      if (body.callee.type === 'Identifier') {
+                        actionName = body.callee.name;
+                      } else if (body.callee.type === 'MemberExpression' && body.callee.property.type === 'Identifier') {
+                        actionName = body.callee.property.name;
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -237,13 +274,8 @@ export function parseSourceWithBabel(
               label,
               actionName,
             });
-          } else if (tagName === 'input' || tagName === 'Input') {
-            let placeholder = 'Input text...';
-            for (const attr of opening.attributes) {
-              if (attr.type === 'JSXAttribute' && attr.name.name === 'placeholder' && attr.value?.type === 'StringLiteral') {
-                placeholder = attr.value.value;
-              }
-            }
+          } else if (tagName === 'input' || tagName === 'Input' || tagName === 'textarea' || tagName === 'Textarea' || tagName === 'select' || tagName === 'Select') {
+            const placeholder = getAttrString(opening, 'placeholder') || (tagName.toLowerCase().includes('select') ? 'Selecionar opção...' : 'Campo de entrada...');
             wireframe.push({
               id: `wf-input-${wireframe.length}`,
               type: 'input',
@@ -253,49 +285,94 @@ export function parseSourceWithBabel(
             wireframe.push({
               id: `wf-form-${wireframe.length}`,
               type: 'form',
-              label: 'Form',
+              label: titleAttr || 'Formulário',
             });
-          } else if (/^h[1-6]$/.test(tagName)) {
+          } else if (/^h[1-6]$/i.test(tagName) || tagName === 'Heading') {
             wireframe.push({
               id: `wf-head-${wireframe.length}`,
               type: 'heading',
-              label: tagName.toUpperCase(),
+              label: elementText || titleAttr || tagName.toUpperCase(),
             });
           } else if (tagName === 'table' || tagName === 'Table') {
             wireframe.push({
               id: `wf-tbl-${wireframe.length}`,
               type: 'table',
-              label: 'Data Table',
+              label: 'Tabela de Dados',
+            });
+          } else if (/^(Card|CardHeader|CardContent)$/i.test(tagName) || /Card$/i.test(tagName) || (tagName === 'div' && className.toLowerCase().includes('card'))) {
+            wireframe.push({
+              id: `wf-card-${wireframe.length}`,
+              type: 'card',
+              label: titleAttr || elementText || 'Card de Conteúdo',
+            });
+          } else if (/^(Badge|Chip|Tag)$/i.test(tagName) || /Badge$/i.test(tagName) || (tagName === 'span' && className.toLowerCase().includes('badge'))) {
+            wireframe.push({
+              id: `wf-badge-${wireframe.length}`,
+              type: 'badge',
+              label: elementText || titleAttr || 'Badge',
+            });
+          } else if (/^(Modal|Dialog|Sheet|Drawer|Popup|AlertDialog)$/i.test(tagName)) {
+            wireframe.push({
+              id: `wf-modal-${wireframe.length}`,
+              type: 'modal',
+              label: titleAttr || 'Modal / Diálogo',
+            });
+          } else if (tagName === 'ul' || tagName === 'ol' || /^(List|ListView|ListGroup)$/i.test(tagName)) {
+            wireframe.push({
+              id: `wf-list-${wireframe.length}`,
+              type: 'list',
+              label: titleAttr || 'Lista de Itens',
+            });
+          } else if (/^(Tabs|TabList|TabNav|Nav|Navbar|Navigation)$/i.test(tagName) || tagName === 'nav') {
+            wireframe.push({
+              id: `wf-tabs-${wireframe.length}`,
+              type: 'tabs',
+              label: titleAttr || 'Abas de Navegação',
+            });
+          } else if (tagName === 'img' || /^(Image|Avatar)$/i.test(tagName)) {
+            wireframe.push({
+              id: `wf-img-${wireframe.length}`,
+              type: 'image',
+              label: getAttrString(opening, 'alt') || 'Imagem',
             });
           }
         }
       },
 
-      // Action Handlers: e.g. const handleSubmit = async () => { ... }
+      // Action Handlers: e.g. const handleSubmit = async () => { ... } or function handleSubmit() { ... }
       Function(funcPath: any) {
+        let actionName = '';
         if (funcPath.parentPath?.isVariableDeclarator()) {
           const id = funcPath.parentPath.node.id;
           if (id.type === 'Identifier' && (/^handle[A-Z]/.test(id.name) || /^on[A-Z]/.test(id.name))) {
-            const actionName = id.name;
-            const actionStart = funcPath.node.loc?.start.line;
-            const actionEnd = funcPath.node.loc?.end.line;
-            const actionSnippet = content.split('\n').slice(Math.max(0, (actionStart || 1) - 1), actionEnd || (actionStart || 1) + 15).join('\n');
-
-            const actionObj: ComponentAction = {
-              id: `${filePath}#${componentName}#${actionName}`,
-              name: actionName,
-              trigger: actionName.startsWith('on') ? actionName : `on${actionName.replace(/^handle/, '')}`,
-              componentName,
-              filePath,
-              codeSnippet: actionSnippet,
-              apiCalls: [],
-              stateUpdates: [],
-              lineStart: actionStart,
-              lineEnd: actionEnd,
-            };
-            actions.push(actionObj);
-            allActions.push(actionObj);
+            actionName = id.name;
           }
+        } else if (funcPath.isFunctionDeclaration()) {
+          const id = funcPath.node.id;
+          if (id && id.type === 'Identifier' && (/^handle[A-Z]/.test(id.name) || /^on[A-Z]/.test(id.name))) {
+            actionName = id.name;
+          }
+        }
+
+        if (actionName && actionName !== componentName) {
+          const actionStart = funcPath.node.loc?.start.line;
+          const actionEnd = funcPath.node.loc?.end.line;
+          const actionSnippet = content.split('\n').slice(Math.max(0, (actionStart || 1) - 1), actionEnd || (actionStart || 1) + 15).join('\n');
+
+          const actionObj: ComponentAction = {
+            id: `${filePath}#${componentName}#${actionName}`,
+            name: actionName,
+            trigger: actionName.startsWith('on') ? actionName : `on${actionName.replace(/^handle/, '')}`,
+            componentName,
+            filePath,
+            codeSnippet: actionSnippet,
+            apiCalls: [],
+            stateUpdates: [],
+            lineStart: actionStart,
+            lineEnd: actionEnd,
+          };
+          actions.push(actionObj);
+          allActions.push(actionObj);
         }
       },
     });
@@ -330,20 +407,75 @@ export function parseSourceWithBabel(
   };
 }
 
+// Helper functions for JSX parsing
+function getAttrString(opening: any, name: string): string | undefined {
+  if (!opening?.attributes) return undefined;
+  for (const attr of opening.attributes) {
+    if (attr.type === 'JSXAttribute' && attr.name?.name === name) {
+      if (attr.value?.type === 'StringLiteral') return attr.value.value;
+      if (attr.value?.type === 'JSXExpressionContainer') {
+        if (attr.value.expression?.type === 'StringLiteral') return attr.value.expression.value;
+      }
+    }
+  }
+  return undefined;
+}
+
+function getElementText(node: any, depth = 0): string {
+  if (!node?.children || depth > 2) return '';
+  for (const child of node.children) {
+    if (child.type === 'JSXText') {
+      const t = child.value.trim();
+      if (t) return t.slice(0, 40);
+    }
+    if (child.type === 'JSXExpressionContainer') {
+      if (child.expression?.type === 'StringLiteral') {
+        return child.expression.value.slice(0, 40);
+      }
+    }
+    if (child.type === 'JSXElement') {
+      const nested = getElementText(child, depth + 1);
+      if (nested) return nested;
+    }
+  }
+  return '';
+}
+
 // Regex helpers for fast heuristics & fallback
 function extractWireframeWithRegex(content: string): UIWireframeElement[] {
   const elements: UIWireframeElement[] = [];
   if (/<button|<Button/i.test(content)) {
-    elements.push({ id: 'btn-1', type: 'button', label: 'Action Button' });
+    elements.push({ id: 'btn-1', type: 'button', label: 'Botão de Ação' });
   }
-  if (/<input|<Input|<textarea/i.test(content)) {
-    elements.push({ id: 'inp-1', type: 'input', placeholder: 'Enter value...' });
+  if (/<input|<Input|<textarea|<select/i.test(content)) {
+    elements.push({ id: 'inp-1', type: 'input', placeholder: 'Campo de entrada...' });
   }
   if (/<form/i.test(content)) {
-    elements.push({ id: 'frm-1', type: 'form', label: 'Form Section' });
+    elements.push({ id: 'frm-1', type: 'form', label: 'Formulário' });
   }
   if (/<table|<Table/i.test(content)) {
-    elements.push({ id: 'tbl-1', type: 'table', label: 'Data Table' });
+    elements.push({ id: 'tbl-1', type: 'table', label: 'Tabela de Dados' });
+  }
+  if (/<(?:h[1-6]|Heading)/i.test(content)) {
+    elements.push({ id: 'head-1', type: 'heading', label: 'Título' });
+  }
+  if (/<(?:Card|card)/i.test(content)) {
+    elements.push({ id: 'card-1', type: 'card', label: 'Card' });
+  }
+  if (/<(?:Badge|Chip|Tag|badge)/i.test(content)) {
+    elements.push({ id: 'bdg-1', type: 'badge', label: 'Badge' });
+  }
+  if (/<(?:Modal|Dialog|Sheet|Drawer)/i.test(content)) {
+    elements.push({ id: 'mdl-1', type: 'modal', label: 'Modal / Diálogo' });
+  }
+  if (/<(?:ul|ol|List)/i.test(content)) {
+    elements.push({ id: 'lst-1', type: 'list', label: 'Lista' });
+  }
+  if (/<(?:Tabs|nav|Navbar|Navigation)/i.test(content)) {
+    elements.push({ id: 'tab-1', type: 'tabs', label: 'Abas / Navegação' });
+  }
+  if (/<(?:img|Image|Avatar)/i.test(content)) {
+    elements.push({ id: 'img-1', type: 'image', label: 'Imagem' });
   }
   return elements;
 }

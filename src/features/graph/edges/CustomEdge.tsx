@@ -37,6 +37,7 @@ export const CustomEdge: React.FC<EdgeProps<any>> = ({
   };
 
   const strokeColor = getRelationColor(relation);
+  const isDimmed = Boolean(edgeData?.isDimmed);
 
   return (
     <>
@@ -45,23 +46,30 @@ export const CustomEdge: React.FC<EdgeProps<any>> = ({
         markerEnd={markerEnd}
         style={{
           stroke: strokeColor,
-          strokeWidth: 2,
-          strokeOpacity: 0.6,
-          strokeDasharray: relation === 'triggers' || relation === 'calls_api' ? '5,5' : undefined,
+          strokeWidth: isDimmed ? 1.5 : 2,
+          strokeOpacity: isDimmed ? 0.15 : 0.8,
+          strokeDasharray: relation === 'triggers' || relation === 'calls_api' ? '4,4' : undefined,
+          transition: 'stroke 0.2s, stroke-width 0.2s, stroke-opacity 0.2s',
         }}
       />
       {edgeData?.label && (
         <foreignObject
-          width={70}
-          height={20}
-          x={labelX - 35}
-          y={labelY - 10}
+          width={90}
+          height={24}
+          x={labelX - 45}
+          y={labelY - 12}
           className="pointer-events-none"
         >
           <div className="flex h-full w-full items-center justify-center">
             <span
-              className="rounded bg-slate-950/90 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wider text-slate-400 border border-slate-800 shadow-sm"
-              style={{ color: strokeColor }}
+              className={`rounded-full bg-slate-950/95 px-2 py-0.5 text-[9px] font-semibold tracking-wider uppercase border shadow-md backdrop-blur-sm transition-opacity duration-200 ${
+                isDimmed ? 'opacity-25' : 'opacity-100'
+              }`}
+              style={{
+                color: strokeColor,
+                borderColor: `${strokeColor}40`,
+                boxShadow: isDimmed ? 'none' : `0 2px 8px ${strokeColor}15`,
+              }}
             >
               {edgeData.label}
             </span>

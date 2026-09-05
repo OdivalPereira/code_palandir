@@ -148,7 +148,8 @@ export function MetricsCard({ title, value }: { title: string; value: string }) 
   };
 
   return (
-    <div className="metric-box">
+    <div className="metric-box card" title={title}>
+      <span className="badge">Atualizado</span>
       <h3>{title}</h3>
       <p className="value">{value}</p>
       <button onClick={handleRefresh}>Atualizar Dados</button>
@@ -197,9 +198,11 @@ export function ReportsPage() {
 
   return (
     <div className="reports-tab">
+      <nav className="tabs">
+        <button onClick={handleFilterDate}>Filtrar Período</button>
+        <button onClick={handleExportCsv}>Exportar Relatório CSV</button>
+      </nav>
       <h2>Aba de Relatórios Financeiros</h2>
-      <button onClick={handleFilterDate}>Filtrar Período</button>
-      <button onClick={handleExportCsv}>Exportar Relatório CSV</button>
     </div>
   );
 }
@@ -222,7 +225,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="settings-tab">
+    <div className="settings-tab card">
       <h2>Configurações da Conta</h2>
       <input placeholder="Nome de exibição" />
       <button onClick={handleSavePreferences}>Salvar Preferências</button>

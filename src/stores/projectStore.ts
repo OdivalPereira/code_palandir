@@ -37,7 +37,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       // Analyze project components, routes, and interactions
       const analysis = analyzeProject(files);
-      set({ analysis, isAnalyzing: false });
+      set((state) => ({
+        analysis,
+        isAnalyzing: false,
+        meta: state.meta ? { ...state.meta, framework: analysis.framework } : null,
+      }));
 
       // Trigger graph building
       useGraphStore.getState().buildGraph(analysis);

@@ -51,7 +51,11 @@ export const GitHubImport: React.FC = () => {
 
       setImportModalOpen(false);
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Falha ao baixar repositório do GitHub.');
+      const msg = err?.message || 'Falha ao baixar repositório do GitHub.';
+      setErrorMessage(msg);
+      if (/token|privado|limite|401|403/i.test(msg)) {
+        setShowTokenField(true);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -60,9 +64,19 @@ export const GitHubImport: React.FC = () => {
   return (
     <form onSubmit={handleImport} className="space-y-4">
       {errorMessage && (
-        <div className="flex items-start gap-2 rounded-xl bg-rose-950/40 border border-rose-800 p-3 text-xs text-rose-300">
-          <AlertCircle className="h-4 w-4 text-rose-400 mt-0.5 flex-shrink-0" />
-          <span>{errorMessage}</span>
+        <div className="flex items-start justify-between gap-2 rounded-xl bg-rose-950/40 border border-rose-800/80 p-3 text-xs text-rose-300 shadow-sm">
+          <div className="flex items-start gap-2 min-w-0">
+            <AlertCircle className="h-4 w-4 text-rose-400 mt-0.5 flex-shrink-0" />
+            <span className="leading-relaxed">{errorMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            className="text-rose-400 hover:text-rose-200 p-0.5"
+            title="Fechar aviso"
+          >
+            ✕
+          </button>
         </div>
       )}
 

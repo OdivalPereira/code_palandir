@@ -16,19 +16,41 @@ export const HookNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
       label: nodeData.label,
       nodeType: 'hook',
       filePath: nodeData.filePath,
+      codeSnippet: nodeData.codeSnippet,
     });
   };
 
+  const isSearchMatch = Boolean(nodeData.isSearchMatch);
+  const isDimmed = Boolean(nodeData.isDimmed);
+  const isTB = nodeData.layoutDirection === 'TB';
+
   return (
     <div
-      className={`group relative flex items-center gap-2 rounded-lg border px-2.5 py-1.5 shadow-sm backdrop-blur-md transition-all ${
-        selected
-          ? 'border-indigo-400 bg-indigo-950/70 ring-2 ring-indigo-500/40'
+      className={`group relative flex items-center gap-2 rounded-lg border px-2.5 py-1.5 shadow-sm backdrop-blur-md transition-all duration-200 ${
+        isDimmed ? 'opacity-30 grayscale-[50%] hover:opacity-100 hover:grayscale-0' : 'opacity-100'
+      } ${
+        isSearchMatch
+          ? 'border-amber-400 bg-amber-950/60 ring-2 ring-amber-400 shadow-xl shadow-amber-500/25 scale-[1.02] z-30'
+          : selected
+          ? 'border-indigo-400 bg-indigo-950/70 ring-2 ring-indigo-500/50 shadow-indigo-500/20'
+          : checked
+          ? 'border-indigo-500/80 bg-slate-900/95 ring-1 ring-indigo-500/40'
           : 'border-indigo-900/50 bg-slate-900/90 hover:border-indigo-700/80'
       }`}
       style={{ minWidth: '150px' }}
     >
-      <Handle type="target" position={Position.Left} className="!bg-indigo-400" />
+      <Handle
+        type="target"
+        position={isTB ? Position.Top : Position.Left}
+        className="!w-2.5 !h-2.5 !rounded-full !bg-indigo-400 !border-2 !border-slate-900 shadow hover:!scale-125 !transition-transform"
+      />
+
+      {/* Search Match Badge */}
+      {isSearchMatch && (
+        <span className="absolute -top-2 -right-1.5 px-1 py-0.2 rounded-full bg-amber-400 text-slate-950 font-bold text-[7px] uppercase tracking-wider shadow animate-pulse pointer-events-none">
+          Busca
+        </span>
+      )}
 
       <button
         onClick={handleCheckboxClick}
@@ -54,7 +76,11 @@ export const HookNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
         </div>
       </div>
 
-      <Handle type="source" position={Position.Right} className="!bg-indigo-400" />
+      <Handle
+        type="source"
+        position={isTB ? Position.Bottom : Position.Right}
+        className="!w-2.5 !h-2.5 !rounded-full !bg-indigo-400 !border-2 !border-slate-900 shadow hover:!scale-125 !transition-transform"
+      />
     </div>
   );
 };

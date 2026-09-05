@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, Sparkles, MessageSquare, Flame, BookOpen } from 'lucide-react';
+import { Copy, Check, Sparkles, MessageSquare, Flame, BookOpen, FlaskConical, ShieldCheck } from 'lucide-react';
 import { usePromptStore } from '@/stores/promptStore';
 import { useSelectionStore } from '@/stores/selectionStore';
 import { PROMPT_TEMPLATES } from './PromptTemplates';
@@ -37,7 +37,9 @@ export const PromptBuilder: React.FC = () => {
       case 'feature': return <Sparkles className="h-3.5 w-3.5 text-indigo-400" />;
       case 'refactor': return <Flame className="h-3.5 w-3.5 text-amber-400" />;
       case 'fix': return <MessageSquare className="h-3.5 w-3.5 text-rose-400" />;
+      case 'test': return <FlaskConical className="h-3.5 w-3.5 text-emerald-400" />;
       case 'explain': return <BookOpen className="h-3.5 w-3.5 text-cyan-400" />;
+      case 'audit': return <ShieldCheck className="h-3.5 w-3.5 text-purple-400" />;
       default: return <Sparkles className="h-3.5 w-3.5 text-indigo-400" />;
     }
   };

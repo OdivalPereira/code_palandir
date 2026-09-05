@@ -18,6 +18,9 @@ export interface BaseNodeData extends Record<string, unknown> {
   codeSnippet?: string;
   isSelectedForPrompt?: boolean;
   expanded?: boolean;
+  isSearchMatch?: boolean;
+  isDimmed?: boolean;
+  layoutDirection?: 'TB' | 'LR';
 }
 
 export interface RouteNodeData extends BaseNodeData {
@@ -82,6 +85,7 @@ export type FlowUIEdgeRelation =
 export interface FlowUIEdgeData extends Record<string, unknown> {
   relation: FlowUIEdgeRelation;
   label?: string;
+  isDimmed?: boolean;
 }
 
 export type FlowUIEdge = Edge<FlowUIEdgeData>;

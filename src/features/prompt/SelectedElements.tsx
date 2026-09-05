@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Layers, Box, Zap, Globe, FileCode, Database, Cloud } from 'lucide-react';
+import { X, Layers, Box, Zap, Globe, FileCode, Database, Cloud, Code2 } from 'lucide-react';
 import { useSelectionStore } from '@/stores/selectionStore';
 import { Button } from '@/ui/Button';
 import type { UINodeType } from '@/types/graph';
@@ -25,6 +25,7 @@ export const SelectedElements: React.FC = () => {
       case 'page': return <FileCode className="h-3 w-3 text-emerald-400" />;
       case 'component': return <Box className="h-3 w-3 text-purple-400" />;
       case 'action': return <Zap className="h-3 w-3 text-amber-400" />;
+      case 'hook': return <Code2 className="h-3 w-3 text-indigo-400" />;
       case 'store': return <Database className="h-3 w-3 text-cyan-400" />;
       case 'api': return <Cloud className="h-3 w-3 text-rose-400" />;
       default: return <Layers className="h-3 w-3 text-indigo-400" />;

@@ -94,16 +94,37 @@ export class VueAnalyzer implements FrameworkAnalyzer {
     // 6. Extract wireframe elements
     const wireframe: UIWireframeElement[] = [];
     if (/<button/i.test(templateContent)) {
-      wireframe.push({ id: 'btn-1', type: 'button', label: 'Vue Button' });
+      wireframe.push({ id: 'btn-1', type: 'button', label: 'Botão Vue' });
     }
-    if (/<input|<textarea/i.test(templateContent)) {
-      wireframe.push({ id: 'inp-1', type: 'input', placeholder: 'Input field' });
+    if (/<input|<textarea|<select/i.test(templateContent)) {
+      wireframe.push({ id: 'inp-1', type: 'input', placeholder: 'Campo de entrada' });
     }
     if (/<form/i.test(templateContent)) {
-      wireframe.push({ id: 'frm-1', type: 'form', label: 'Form Container' });
+      wireframe.push({ id: 'frm-1', type: 'form', label: 'Formulário' });
     }
     if (/<table/i.test(templateContent)) {
-      wireframe.push({ id: 'tbl-1', type: 'table', label: 'Data Table' });
+      wireframe.push({ id: 'tbl-1', type: 'table', label: 'Tabela de Dados' });
+    }
+    if (/<(?:h[1-6]|v-card-title)/i.test(templateContent)) {
+      wireframe.push({ id: 'head-1', type: 'heading', label: 'Título da Seção' });
+    }
+    if (/<(?:v-card|el-card|Card|card)/i.test(templateContent)) {
+      wireframe.push({ id: 'card-1', type: 'card', label: 'Card de Conteúdo' });
+    }
+    if (/<(?:v-badge|el-badge|Badge|badge|v-chip|el-tag)/i.test(templateContent)) {
+      wireframe.push({ id: 'bdg-1', type: 'badge', label: 'Badge / Tag' });
+    }
+    if (/<(?:v-dialog|el-dialog|Modal|Dialog)/i.test(templateContent)) {
+      wireframe.push({ id: 'mdl-1', type: 'modal', label: 'Modal / Diálogo' });
+    }
+    if (/<(?:ul|ol|v-list|el-menu)/i.test(templateContent)) {
+      wireframe.push({ id: 'lst-1', type: 'list', label: 'Lista de Itens' });
+    }
+    if (/<(?:v-tabs|el-tabs|Tabs|nav)/i.test(templateContent)) {
+      wireframe.push({ id: 'tab-1', type: 'tabs', label: 'Abas de Navegação' });
+    }
+    if (/<(?:img|v-img|el-image)/i.test(templateContent)) {
+      wireframe.push({ id: 'img-1', type: 'image', label: 'Imagem' });
     }
 
     const component: UIComponent = {

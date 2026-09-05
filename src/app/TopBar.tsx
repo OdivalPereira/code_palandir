@@ -7,6 +7,7 @@ import {
   Sparkles,
   PanelRightClose,
   PanelRightOpen,
+  X,
 } from 'lucide-react';
 import { useProjectStore } from '@/stores/projectStore';
 import { useGraphStore } from '@/stores/graphStore';
@@ -19,9 +20,28 @@ import { Input } from '@/ui/Input';
 export const TopBar: React.FC = () => {
   const meta = useProjectStore((state) => state.meta);
   const analysis = useProjectStore((state) => state.analysis);
-  const { filters, setFilters, toggleLayoutDirection, layoutDirection } = useGraphStore();
+  const { nodes, filters, setFilters, toggleLayoutDirection, layoutDirection } = useGraphStore();
   const selectedElements = useSelectionStore((state) => state.selectedElements);
   const { sidebarOpen, toggleSidebar, setSidebarTab, setImportModalOpen } = useUIStore();
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Keyboard shortcut: Cmd+K or Ctrl+K to focus search, Escape to clear
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      } else if (e.key === 'Escape' && document.activeElement === searchInputRef.current) {
+        setFilters({ searchQuery: '' });
+        searchInputRef.current?.blur();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setFilters]);
+
+  const matchCount = nodes.filter((n) => n.data.isSearchMatch).length;
 
   return (
     <header className="flex h-14 w-full items-center justify-between border-b border-slate-800/80 bg-slate-950/90 px-4 backdrop-blur-md z-20">
@@ -59,12 +79,40 @@ export const TopBar: React.FC = () => {
           <div className="relative w-full max-w-xs">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-500" />
             <Input
+              ref={searchInputRef}
               type="text"
-              placeholder="Buscar nós (rotas, botões, ações)..."
+              placeholder="Buscar nós (rotas, botões, ações)... (⌘K)"
               value={filters.searchQuery}
               onChange={(e) => setFilters({ searchQuery: e.target.value })}
-              className="h-8 pl-8 text-xs bg-slate-900/60 border-slate-800"
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setFilters({ searchQuery: '' });
+                  searchInputRef.current?.blur();
+                }
+              }}
+              className="h-8 pl-8 pr-16 text-xs bg-slate-900/60 border-slate-800 focus:border-indigo-500/70"
             />
+            {filters.searchQuery && (
+              <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                    matchCount > 0
+                      ? 'bg-amber-500/20 text-amber-300'
+                      : 'bg-rose-500/20 text-rose-300'
+                  }`}
+                  title={matchCount > 0 ? `${matchCount} nós encontrados` : 'Nenhum nó correspondente'}
+                >
+                  {matchCount}
+                </span>
+                <button
+                  onClick={() => setFilters({ searchQuery: '' })}
+                  className="p-0.5 text-slate-400 hover:text-slate-200"
+                  title="Limpar busca (ESC)"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Quick Filters */}
@@ -109,10 +157,11 @@ export const TopBar: React.FC = () => {
             variant="outline"
             size="sm"
             onClick={toggleLayoutDirection}
-            className="h-8 px-2 text-xs text-slate-400 hover:text-slate-200"
-            title={`Alternar Orientação do Grafo (Atual: ${layoutDirection})`}
+            className="h-8 px-2 text-xs text-slate-300 border-slate-800 bg-slate-900/80 hover:bg-slate-800 hover:text-white gap-1"
+            title={`Alternar Orientação do Grafo (Atual: ${layoutDirection === 'LR' ? 'Horizontal (Esquerda -> Direita)' : 'Vertical (Cima -> Baixo)'})`}
           >
-            <ArrowDownUp className="h-3.5 w-3.5" />
+            <ArrowDownUp className="h-3.5 w-3.5 text-indigo-400" />
+            <span className="text-[10px] font-mono font-bold uppercase">{layoutDirection}</span>
           </Button>
         </div>
       )}

@@ -23,13 +23,6 @@ export function buildGraphFromAnalysis(
   // Helper to add nodes without duplication
   function addNode(node: FlowUINode) {
     if (!addedNodeIds.has(node.id)) {
-      if (searchQuery) {
-        const matches =
-          node.data.label.toLowerCase().includes(searchQuery) ||
-          node.data.nodeType.toLowerCase().includes(searchQuery) ||
-          (node.data.filePath && node.data.filePath.toLowerCase().includes(searchQuery));
-        if (!matches) return;
-      }
       addedNodeIds.add(node.id);
       nodes.push(node);
     }
@@ -66,6 +59,8 @@ export function buildGraphFromAnalysis(
           nodeType: 'route',
           route,
           filePath: route.filePath,
+          layoutDirection: direction,
+          codeSnippet: `// Rota da Aplicação Frontend\nPath: "${route.path}"\nRenderiza Componente: <${route.pageComponentName} />`,
         },
       });
     }
@@ -87,6 +82,7 @@ export function buildGraphFromAnalysis(
           childrenCount: page.childrenNames.length,
           filePath: page.filePath,
           codeSnippet: page.codeSnippet,
+          layoutDirection: direction,
         },
       });
 
@@ -119,6 +115,7 @@ export function buildGraphFromAnalysis(
           hooksCount: comp.hooks.length,
           filePath: comp.filePath,
           codeSnippet: comp.codeSnippet,
+          layoutDirection: direction,
         },
       });
     }
@@ -161,6 +158,7 @@ export function buildGraphFromAnalysis(
             action,
             filePath: action.filePath,
             codeSnippet: action.codeSnippet,
+            layoutDirection: direction,
           },
         });
         addEdge(parentNodeId, actionNodeId, 'triggers', 'handles');
@@ -180,6 +178,8 @@ export function buildGraphFromAnalysis(
             label: hook.name,
             nodeType: 'hook',
             hook,
+            layoutDirection: direction,
+            codeSnippet: `// Hook ${hook.isCustom ? 'Customizado' : 'React/Vue'}\nconst result = ${hook.name}();`,
           },
         });
         addEdge(parentNodeId, hookNodeId, 'uses_hook', 'uses');
@@ -199,6 +199,8 @@ export function buildGraphFromAnalysis(
             label: store.storeName,
             nodeType: 'store',
             store,
+            layoutDirection: direction,
+            codeSnippet: `// Estado Global (${store.type || 'Zustand/Pinia'})\nconst ${store.storeName} = use${store.storeName}();`,
           },
         });
         addEdge(parentNodeId, storeNodeId, 'accesses_store', 'state');
@@ -219,6 +221,8 @@ export function buildGraphFromAnalysis(
             nodeType: 'api',
             apiCall: api,
             filePath: api.filePath,
+            layoutDirection: direction,
+            codeSnippet: `// Chamada de API em <${api.callerComponent || 'Component'} />\n// Método: ${api.method} | Cliente: ${api.client || 'fetch'}\n${api.client || 'fetch'}('${api.endpoint}', { method: '${api.method}' });`,
           },
         });
         addEdge(parentNodeId, apiNodeId, 'calls_api', 'calls');
@@ -257,6 +261,43 @@ export function buildGraphFromAnalysis(
           x: nodeWithPos.x - dims.width / 2,
           y: nodeWithPos.y - dims.height / 2,
         };
+      }
+    }
+  }
+
+  // 6. Apply search match and dimming flags
+  const hasSearch = Boolean(searchQuery);
+  const matchingNodeIds = new Set<string>();
+
+  for (const node of nodes) {
+    if (hasSearch) {
+      const isMatch =
+        node.data.label.toLowerCase().includes(searchQuery) ||
+        node.data.nodeType.toLowerCase().includes(searchQuery) ||
+        Boolean(node.data.filePath && node.data.filePath.toLowerCase().includes(searchQuery));
+      node.data.isSearchMatch = isMatch;
+      node.data.isDimmed = !isMatch;
+      if (isMatch) {
+        matchingNodeIds.add(node.id);
+      }
+    } else {
+      node.data.isSearchMatch = false;
+      node.data.isDimmed = false;
+    }
+  }
+
+  // Dim edges if search is active and edge does not connect to any matching node
+  for (const edge of edges) {
+    if (hasSearch && matchingNodeIds.size > 0) {
+      const isConnectedToMatch = matchingNodeIds.has(edge.source) || matchingNodeIds.has(edge.target);
+      edge.data = {
+        ...edge.data,
+        relation: edge.data?.relation || 'renders',
+        isDimmed: !isConnectedToMatch,
+      };
+    } else {
+      if (edge.data) {
+        edge.data.isDimmed = false;
       }
     }
   }

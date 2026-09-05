@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   FileCode,
   Globe,
@@ -12,6 +12,7 @@ import {
   Trash2,
   ExternalLink,
   Code2,
+  CheckCheck,
 } from 'lucide-react';
 import { useGraphStore } from '@/stores/graphStore';
 import { useSelectionStore } from '@/stores/selectionStore';
@@ -80,6 +81,61 @@ export const DetailSidebar: React.FC = () => {
   // Extract component info if component or page
   const component = 'component' in data ? (data.component as any) : 'page' in data ? (data.page as any) : null;
 
+  // Collect all elements belonging to this page/component
+  const groupElements = useMemo<import('@/types/prompt').SelectedElement[]>(() => {
+    const elements: import('@/types/prompt').SelectedElement[] = [
+      {
+        id: data.id,
+        label: data.label,
+        nodeType,
+        filePath: data.filePath,
+        codeSnippet: data.codeSnippet,
+      },
+    ];
+
+    if (component?.actions) {
+      for (const act of component.actions) {
+        elements.push({
+          id: `node-action-${act.id}`,
+          label: `${act.trigger}: ${act.name}`,
+          nodeType: 'action',
+          filePath: act.filePath,
+          codeSnippet: act.codeSnippet,
+        });
+      }
+    }
+
+    if (component?.apiCalls) {
+      for (const api of component.apiCalls) {
+        elements.push({
+          id: `node-api-${api.id}`,
+          label: `${api.method} ${api.endpoint}`,
+          nodeType: 'api',
+          filePath: api.filePath,
+          codeSnippet: `// API ${api.method} ${api.endpoint}\n${api.client || 'fetch'}('${api.endpoint}', { method: '${api.method}' });`,
+        });
+      }
+    }
+
+    if (component?.stores) {
+      for (const store of component.stores) {
+        elements.push({
+          id: `node-store-${store.id}`,
+          label: store.storeName,
+          nodeType: 'store',
+          codeSnippet: `// Store ${store.storeName}\nconst ${store.storeName} = use${store.storeName}();`,
+        });
+      }
+    }
+
+    return elements;
+  }, [data, nodeType, component]);
+
+  const groupIds = useMemo(() => groupElements.map((e) => e.id), [groupElements]);
+  const allGroupSelected = useSelectionStore((s) => s.isGroupSelected(groupIds));
+  const isPartiallySelected = useSelectionStore((s) => s.isGroupPartiallySelected(groupIds));
+  const toggleGroup = useSelectionStore((s) => s.toggleGroup);
+
   return (
     <div className="flex flex-col h-full overflow-y-auto p-4 space-y-4">
       {/* Header */}
@@ -102,8 +158,8 @@ export const DetailSidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Action Button: Add/Remove from Prompt Basket */}
-      <div className="pt-1">
+      {/* Action Buttons: Single & Group Selection */}
+      <div className="space-y-2 pt-1">
         <Button
           onClick={handleToggleSelection}
           variant={isElementSelected ? 'outline' : 'default'}
@@ -118,16 +174,44 @@ export const DetailSidebar: React.FC = () => {
           ) : (
             <>
               <Plus className="h-4 w-4" />
-              <span>Adicionar ao Prompt</span>
+              <span>Adicionar este elemento ao Prompt</span>
             </>
           )}
         </Button>
+
+        {groupElements.length > 1 && (
+          <Button
+            variant="outline"
+            onClick={() => toggleGroup(groupElements)}
+            className={`w-full justify-center gap-2 h-9 text-xs transition-all border ${
+              allGroupSelected
+                ? 'border-emerald-500/50 text-emerald-300 bg-emerald-950/30 hover:bg-emerald-900/40'
+                : isPartiallySelected
+                ? 'border-amber-500/50 text-amber-300 bg-amber-950/30 hover:bg-amber-900/40'
+                : 'border-slate-800 text-slate-300 hover:bg-slate-900 hover:text-white'
+            }`}
+          >
+            <CheckCheck className={`h-3.5 w-3.5 ${allGroupSelected ? 'text-emerald-400' : isPartiallySelected ? 'text-amber-400' : 'text-indigo-400'}`} />
+            <span>
+              {allGroupSelected
+                ? `Desmarcar todos (${groupElements.length} elementos)`
+                : isPartiallySelected
+                ? `Marcar restante (${groupElements.length} itens: ações, APIs, stores)`
+                : `Marcar todos (${groupElements.length} itens: ações, APIs, stores)`}
+            </span>
+          </Button>
+        )}
       </div>
 
       {/* Wireframe Preview (if component or page) */}
       {component && component.wireframe && (
         <div>
-          <ComponentWireframe elements={component.wireframe} componentName={component.name} />
+          <ComponentWireframe
+            elements={component.wireframe}
+            componentName={component.name}
+            filePath={data.filePath}
+            actions={component.actions}
+          />
         </div>
       )}
 
@@ -153,10 +237,14 @@ export const DetailSidebar: React.FC = () => {
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-7 px-2 text-[11px] text-indigo-400 hover:text-indigo-300"
+                  className={`h-7 px-2 text-[11px] font-medium transition-colors ${
+                    isSelected(`node-action-${act.id}`)
+                      ? 'text-emerald-300 hover:text-rose-400'
+                      : 'text-indigo-400 hover:text-indigo-300'
+                  }`}
                   onClick={() => {
                     toggleElement({
-                      id: act.id,
+                      id: `node-action-${act.id}`,
                       label: `${act.trigger}: ${act.name}`,
                       nodeType: 'action',
                       filePath: act.filePath,
@@ -164,7 +252,7 @@ export const DetailSidebar: React.FC = () => {
                     });
                   }}
                 >
-                  {isSelected(act.id) ? 'Remover' : '+ Prompt'}
+                  {isSelected(`node-action-${act.id}`) ? 'Remover' : '+ Prompt'}
                 </Button>
               </div>
             ))}

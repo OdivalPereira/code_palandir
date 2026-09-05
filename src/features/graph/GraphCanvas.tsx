@@ -1,10 +1,12 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
   BackgroundVariant,
+  ReactFlowProvider,
+  useReactFlow,
   type NodeMouseHandler,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -25,11 +27,12 @@ import { CustomEdge } from './edges/CustomEdge';
 import { FolderOpen, Sparkles, Layers, ArrowRight } from 'lucide-react';
 import { Button } from '@/ui/Button';
 
-export const GraphCanvas: React.FC = () => {
-  const { nodes, edges, onNodesChange, onEdgesChange, selectNode } = useGraphStore();
+const GraphCanvasInner: React.FC = () => {
+  const { nodes, edges, onNodesChange, onEdgesChange, selectNode, filters } = useGraphStore();
   const { setSidebarTab, setImportModalOpen } = useUIStore();
   const meta = useProjectStore((state) => state.meta);
   const isAnalyzing = useProjectStore((state) => state.isAnalyzing);
+  const { fitView } = useReactFlow();
 
   const nodeTypes = useMemo(
     () => ({
@@ -62,6 +65,29 @@ export const GraphCanvas: React.FC = () => {
   const onPaneClick = useCallback(() => {
     selectNode(null);
   }, [selectNode]);
+
+  const lastFocusedQueryRef = React.useRef<string>('');
+
+  // Smoothly focus on search results when query changes
+  useEffect(() => {
+    const query = filters.searchQuery.trim();
+    if (!query) {
+      lastFocusedQueryRef.current = '';
+      return;
+    }
+    if (lastFocusedQueryRef.current === query) {
+      return; // Do not jerk/refocus viewport while user is dragging nodes
+    }
+    const matchingNodes = nodes.filter((n) => n.data.isSearchMatch);
+    if (matchingNodes.length > 0) {
+      lastFocusedQueryRef.current = query;
+      fitView({
+        nodes: matchingNodes,
+        duration: 500,
+        padding: 0.35,
+      });
+    }
+  }, [filters.searchQuery, nodes, fitView]);
 
   // If analyzing
   if (isAnalyzing) {
@@ -162,5 +188,13 @@ export const GraphCanvas: React.FC = () => {
         />
       </ReactFlow>
     </div>
+  );
+};
+
+export const GraphCanvas: React.FC = () => {
+  return (
+    <ReactFlowProvider>
+      <GraphCanvasInner />
+    </ReactFlowProvider>
   );
 };

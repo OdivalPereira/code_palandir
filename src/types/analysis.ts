@@ -1,6 +1,6 @@
 export interface UIWireframeElement {
   id: string;
-  type: 'button' | 'input' | 'form' | 'card' | 'table' | 'heading' | 'text' | 'image' | 'modal' | 'list' | 'badge';
+  type: 'button' | 'input' | 'form' | 'card' | 'table' | 'heading' | 'text' | 'image' | 'modal' | 'list' | 'badge' | 'tabs';
   label?: string;
   placeholder?: string;
   actionName?: string;
