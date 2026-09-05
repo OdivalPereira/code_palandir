@@ -4,7 +4,20 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CodeMind AI</title>
+    <title>Code Palandir</title>
+    <script>
+      // Global browser polyfills for Node-targeted libraries (Babel/Dagre/JSZip)
+      window.global = window;
+      window.process = window.process || {
+        env: {},
+        nextTick: function (cb) {
+          setTimeout(cb, 0);
+        },
+        emitWarning: function () {},
+      };
+      var process = window.process;
+      var global = window;
+    </script>
   </head>
   <body>
     <div id="root"></div>
