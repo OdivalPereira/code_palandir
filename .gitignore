@@ -6,3 +6,6 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Sociedade do Código
+sociedade/.registro.lock

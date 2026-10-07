@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(git push *)",
+      "Bash(git merge *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh release *)",
+      "Read(./.env)",
+      "Read(./.env.*)"
+    ]
+  }
+}
