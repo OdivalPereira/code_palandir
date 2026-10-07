@@ -2,18 +2,22 @@
 
 ## Como rodar o projeto
 
-1. Instale as dependências:
+### Opção 1: Iniciar tudo com um comando (Recomendado)
+Inicia o backend e o frontend juntos, com **resolução automática de conflito de portas** caso haja outros projetos usando as portas padrão na sua máquina:
+```bash
+npm start
+# ou: npm run dev:all
+```
+- Frontend: `http://localhost:5174` (ou próxima livre)
+- Backend: `http://localhost:8787` (ou próxima livre)
+
+### Opção 2: Iniciar em terminais separados
+1. No terminal 1, inicie o servidor:
    ```bash
-   npm install
-   ```
-2. Inicie o servidor:
-   ```bash
-   # Porta padrão do backend: 8787
    npm run server
    ```
-3. Em outro terminal, rode o front-end:
+2. No terminal 2, rode o front-end:
    ```bash
-   # Porta padrão do Vite: 5174
    npm run dev
    ```
 

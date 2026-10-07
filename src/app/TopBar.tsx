@@ -10,6 +10,7 @@ import {
   X,
   FoldHorizontal,
   UnfoldHorizontal,
+  ShieldCheck,
 } from 'lucide-react';
 import { useProjectStore } from '@/stores/projectStore';
 import { useGraphStore } from '@/stores/graphStore';
@@ -251,6 +252,20 @@ export const TopBar: React.FC = () => {
           <FolderOpen className="h-3.5 w-3.5 text-indigo-400" />
           <span className="hidden sm:inline">Conectar Projeto</span>
         </Button>
+
+        {/* Auditoria & Saúde Quick Action */}
+        {meta && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setSidebarTab('forensics')}
+            className="h-8 gap-1.5 text-xs font-semibold border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200"
+            title="Abrir Painel de Auditoria Forense e Saúde Arquitetural"
+          >
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Auditoria</span>
+          </Button>
+        )}
 
         {/* Prompt Basket Quick Action */}
         <Button

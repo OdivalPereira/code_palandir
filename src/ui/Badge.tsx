@@ -23,8 +23,8 @@ export const Badge: React.FC<BadgeProps> = ({
 
   const variants = {
     default: 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30',
-    secondary: 'bg-slate-800 text-slate-300 border border-slate-700',
-    outline: 'text-slate-300 border border-slate-700',
+    secondary: 'bg-slate-800 text-slate-200 border border-slate-700',
+    outline: 'text-slate-200 border border-slate-700',
     blue: 'bg-blue-500/15 text-blue-300 border border-blue-500/30',
     emerald: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30',
     purple: 'bg-purple-500/15 text-purple-300 border border-purple-500/30',

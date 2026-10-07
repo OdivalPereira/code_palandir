@@ -108,3 +108,18 @@ export interface GraphFilterState {
   showStores: boolean;
   showApis: boolean;
 }
+
+export interface SerializedGraphBundle {
+  version: '1.0.0';
+  exportedAt: string;
+  meta?: {
+    projectName?: string;
+    framework?: string;
+  };
+  filters: GraphFilterState;
+  layoutDirection: 'TB' | 'LR';
+  expansionLevel: 1 | 2 | 3;
+  nodes: FlowUINode[];
+  edges: FlowUIEdge[];
+}
+

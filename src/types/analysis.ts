@@ -71,6 +71,36 @@ export interface UIRoute {
   parentRouteId?: string;
 }
 
+export interface ComponentCouplingMetrics {
+  componentName: string;
+  filePath: string;
+  isPage: boolean;
+  afferentCoupling: number;      // Ca: quantos outros componentes dependem/renderizam este
+  efferentCoupling: number;      // Ce: quantos subcomponentes, stores, APIs e hooks este componente consome
+  instability: number;           // I = Ce / (Ca + Ce), de 0 (máxima estabilidade) a 1 (máxima instabilidade)
+  isGodComponent: boolean;       // Componente hipertrofiado com excesso de responsabilidades
+  hasLayerViolation: boolean;    // Componente de UI que efetua chamadas diretas de API sem camada de serviço/store
+  complexityScore: number;       // Score ponderado de complexidade arquitetural
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  reasons: string[];             // Diagnósticos textuais específicos
+}
+
+export interface ArchitecturalHealthReport {
+  totalComponents: number;
+  averageInstability: number;
+  godComponentsCount: number;
+  layerViolationsCount: number;
+  overallHealthScore: number;     // De 0 (risco crítico) a 100 (arquitetura exemplar)
+  componentsMetrics: ComponentCouplingMetrics[];
+  highestRiskComponents: ComponentCouplingMetrics[];
+  summary: {
+    criticalCount: number;
+    highCount: number;
+    mediumCount: number;
+    lowCount: number;
+  };
+}
+
 export interface ProjectAnalysis {
   framework: import('./project').SupportedFramework;
   routes: UIRoute[];
@@ -81,4 +111,5 @@ export interface ProjectAnalysis {
   stores: ComponentStoreAccess[];
   apiCalls: ApiCall[];
   analysisDurationMs: number;
+  architecturalHealth?: ArchitecturalHealthReport;
 }

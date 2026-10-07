@@ -1,5 +1,6 @@
 import type { ProjectFile } from '@/types/project';
 import type { UIRoute, UIComponent } from '@/types/analysis';
+import { detectNextAppRoutes } from './nextAppRouterDetector';
 
 export function detectRoutes(files: ProjectFile[], components: UIComponent[]): UIRoute[] {
   const routes: UIRoute[] = [];
@@ -8,46 +9,13 @@ export function detectRoutes(files: ProjectFile[], components: UIComponent[]): U
     componentMap.set(c.name, c);
   }
 
-  // 1. Next.js file-based routing
+  // 1. Next.js App Router (Suporte completo a route groups, dynamic params, catch-all)
+  const { routes: appRouterRoutes } = detectNextAppRoutes(files, components);
+  routes.push(...appRouterRoutes);
+
+  // 1.1 Next.js Pages Router
   for (const file of files) {
     const p = file.path;
-
-    // App Router: e.g. src/app/login/page.tsx or app/dashboard/page.tsx
-    if (/(?:src\/)?app\/(.+)\/page\.(?:tsx|jsx|js|ts)$/i.test(p)) {
-      const match = p.match(/(?:src\/)?app\/(.+)\/page\.(?:tsx|jsx|js|ts)$/i);
-      if (match) {
-        let routePath = '/' + match[1].replace(/\[([^\]]+)\]/g, ':$1');
-        // Clean route path
-        routePath = routePath.replace(/\/page$/i, '');
-        if (!routePath) routePath = '/';
-
-        const pageComp = components.find(c => c.filePath === file.path) || {
-          name: inferComponentNameFromFile(p),
-        };
-
-        routes.push({
-          id: `route-${routePath}`,
-          path: routePath,
-          pageComponentName: pageComp.name,
-          filePath: file.path,
-        });
-        continue;
-      }
-    }
-
-    // App Router root: app/page.tsx
-    if (/(?:src\/)?app\/page\.(?:tsx|jsx|js|ts)$/i.test(p)) {
-      const pageComp = components.find(c => c.filePath === file.path) || {
-        name: inferComponentNameFromFile(p),
-      };
-      routes.push({
-        id: 'route-root',
-        path: '/',
-        pageComponentName: pageComp.name,
-        filePath: file.path,
-      });
-      continue;
-    }
 
     // Pages Router: e.g. pages/about.tsx, pages/users/[id].tsx
     if (/(?:src\/)?pages\/(.+)\.(?:tsx|jsx|js|ts)$/i.test(p) && !p.includes('_app') && !p.includes('_document') && !p.includes('/api/')) {

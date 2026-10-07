@@ -51,20 +51,139 @@ export function isSensitivePath(filePath: string): boolean {
 
 export function sanitizeFilePath(rawPath: string): string {
   if (!rawPath) return '';
-  const normalized = rawPath.replace(/\\/g, '/').replace(/^\/+/, '');
-  const segments = normalized.split('/').filter(Boolean);
+
+  // 1. Unicode normalization (NFKC normalizes compatibility characters like fullwidth dots ．, slashes ／, reverse slashes ＼, two-dot leaders ‥)
+  let normalized: string;
+  try {
+    normalized = rawPath.normalize('NFKC');
+  } catch {
+    normalized = rawPath;
+  }
+
+  // 2. Strip null bytes, control characters, zero-width spaces, and BiDi override controls
+  const cleanControls = normalized.replace(/[\x00-\x1f\x7f-\x9f\u200B-\u200D\uFEFF\u202A-\u202E\u2066-\u2069]/g, '');
+
+  // 3. Unify slashes and strip Windows drive letters (e.g. C:) and leading root slashes
+  const unified = cleanControls
+    .replace(/\\/g, '/')
+    .replace(/[\u2215\u2044]/g, '/')
+    .replace(/^[a-zA-Z]:(?:\/|$)/, '')
+    .replace(/^\/+/, '');
+
+  // 4. Split by slash and validate individual segments against directory traversal
+  const rawSegments = unified.split('/').filter(Boolean);
   const safeSegments: string[] = [];
-  for (const seg of segments) {
-    if (seg === '.' || seg === '..') {
+
+  for (const seg of rawSegments) {
+    const trimmed = seg.trim();
+    // Neutralize traversal and current-dir segments
+    if (!trimmed || trimmed === '.' || trimmed === '..') {
       continue;
     }
-    const cleaned = seg.replace(/[\x00-\x1f\x7f]/g, '');
-    if (cleaned) {
-      safeSegments.push(cleaned);
+    // Check if segment is encoded traversal (e.g. %2e%2e)
+    try {
+      const decodedSeg = decodeURIComponent(trimmed).trim();
+      if (decodedSeg === '.' || decodedSeg === '..' || decodedSeg === '') {
+        continue;
+      }
+    } catch {
+      // Not URL encoded, continue
     }
+    safeSegments.push(trimmed);
   }
+
   return safeSegments.join('/');
 }
+
+export function isZipSlipPath(rawPath: string): boolean {
+  if (!rawPath) return false;
+
+  // 1. Immediately detect null bytes and control characters
+  if (/[\x00-\x1f\x7f-\x9f\u200B-\u200D\uFEFF\u202A-\u202E\u2066-\u2069]/.test(rawPath)) {
+    return true;
+  }
+
+  // 2. Unicode normalization (NFKC decomposes compatibility chars like fullwidth dots ． and slashes ／ ＼)
+  let normalized: string;
+  try {
+    normalized = rawPath.normalize('NFKC');
+  } catch {
+    normalized = rawPath;
+  }
+
+  // 3. Re-check for control characters or null bytes post-normalization
+  if (/[\x00-\x1f\x7f-\x9f\u200B-\u200D\uFEFF\u202A-\u202E\u2066-\u2069]/.test(normalized)) {
+    return true;
+  }
+
+  // 4. Standardize backslashes and alternate slashes to forward slash
+  const norm = normalized
+    .replace(/\\/g, '/')
+    .replace(/[\u2215\u2044]/g, '/');
+
+  // 5. Absolute paths (Unix root, UNC, or Windows drive letter)
+  if (norm.startsWith('/') || norm.startsWith('//') || /^[a-zA-Z]:/.test(norm)) {
+    return true;
+  }
+
+  // 6. Direct traversal checks in normalized path
+  if (norm.includes('..')) {
+    return true;
+  }
+
+  // 7. Check individual segments
+  const segments = norm.split('/');
+  for (const seg of segments) {
+    const trimmed = seg.trim();
+    if (trimmed === '..' || trimmed.startsWith('..')) {
+      return true;
+    }
+    // Check URL-encoded traversal
+    try {
+      const decoded = decodeURIComponent(trimmed).trim();
+      if (decoded === '..' || decoded.startsWith('..') || decoded.includes('..')) {
+        return true;
+      }
+    } catch {
+      // Ignore non-URI-encoded segments
+    }
+  }
+
+  return false;
+}
+
+export async function computeFileHash(content: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(content);
+
+  // Check if Web Crypto API is available in global scope (browser / modern Node / edge workers)
+  const subtleCrypto =
+    typeof globalThis !== 'undefined' && globalThis.crypto?.subtle
+      ? globalThis.crypto.subtle
+      : typeof window !== 'undefined' && window.crypto?.subtle
+      ? window.crypto.subtle
+      : null;
+
+  if (subtleCrypto) {
+    try {
+      const hashBuffer = await subtleCrypto.digest('SHA-256', data);
+      return Array.from(new Uint8Array(hashBuffer))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+    } catch {
+      // Fall through to Node.js crypto fallback
+    }
+  }
+
+  // Graceful fallback for Node environment where crypto.subtle may not be present globally
+  try {
+    const nodeCrypto = await import(/* @vite-ignore */ 'crypto');
+    return nodeCrypto.createHash('sha256').update(data).digest('hex');
+  } catch {
+    throw new Error('SHA-256 hashing is not supported in this runtime environment.');
+  }
+}
+
 
 export function shouldIgnorePath(path: string): boolean {
   if (!path) return true;
@@ -141,11 +260,13 @@ export async function readDirectoryWithPicker(): Promise<ProjectFile[]> {
               // Skip files larger than 1MB to keep processing snappy
               if (file.size < 1024 * 1024) {
                 const content = await file.text();
+                const sha256 = await computeFileHash(content);
                 files.push({
                   path: entryPath,
                   content,
                   size: file.size,
                   language: detectLanguage(entryPath),
+                  sha256,
                 });
               }
             } catch {
@@ -187,16 +308,11 @@ export async function extractZipArchive(zipBuffer: ArrayBuffer): Promise<Project
     throw new Error('O arquivo ZIP está vazio.');
   }
 
-  const isZipSlipEntry = (p: string) => {
-    const norm = p.replace(/\\/g, '/');
-    return norm.includes('..') || norm.startsWith('/') || /^[a-zA-Z]:/.test(norm);
-  };
-
   // Determine if there is a genuine common root wrapper folder (e.g. from GitHub zipball: "owner-repo-hash/...")
   let commonPrefix = '';
   const relevantEntries = allEntries.filter(
     (e) =>
-      !isZipSlipEntry(e) &&
+      !isZipSlipPath(e) &&
       !e.startsWith('__MACOSX/') &&
       !e.startsWith('__MACOSX') &&
       !e.includes('/._') &&
@@ -218,7 +334,7 @@ export async function extractZipArchive(zipBuffer: ArrayBuffer): Promise<Project
   for (const [rawPath, zipEntry] of Object.entries(zip.files)) {
     if (zipEntry.dir) continue;
     // Reject Zip Slip directory traversal completely
-    if (isZipSlipEntry(rawPath)) continue;
+    if (isZipSlipPath(rawPath)) continue;
 
     // Sanitize path
     const safeRawPath = sanitizeFilePath(rawPath);
@@ -237,11 +353,14 @@ export async function extractZipArchive(zipBuffer: ArrayBuffer): Promise<Project
       // Skip very large single files (> 2MB)
       if (content.length > 2 * 1024 * 1024) continue;
 
+      const sha256 = await computeFileHash(content);
+
       files.push({
         path: relativePath,
         content,
         size: content.length,
         language: detectLanguage(relativePath),
+        sha256,
       });
     } catch {
       // Ignore unreadable individual file

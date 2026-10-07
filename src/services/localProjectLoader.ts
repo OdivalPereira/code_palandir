@@ -1,5 +1,5 @@
 import type { ProjectFile } from '@/types/project';
-import { detectLanguage } from './fileSystem';
+import { detectLanguage, computeFileHash } from './fileSystem';
 
 export async function loadCurrentProjectFiles(): Promise<ProjectFile[]> {
   const modules = import.meta.glob(
@@ -21,11 +21,13 @@ export async function loadCurrentProjectFiles(): Promise<ProjectFile[]> {
       if (cleanPath.includes('.test.') || cleanPath.includes('__tests__')) {
         continue;
       }
+      const sha256 = await computeFileHash(content);
       files.push({
         path: cleanPath,
         content,
         size: content.length,
         language: detectLanguage(cleanPath),
+        sha256,
       });
     } catch (err) {
       console.warn('Failed to load file:', rawPath, err);

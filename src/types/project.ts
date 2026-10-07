@@ -12,6 +12,7 @@ export interface ProjectFile {
   content: string;        // Text content
   size: number;
   language: 'typescript' | 'tsx' | 'javascript' | 'jsx' | 'vue' | 'html' | 'css' | 'json' | 'other';
+  sha256?: string;
 }
 
 export interface ProjectMeta {

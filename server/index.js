@@ -16,7 +16,7 @@ import {
   withRetryAndTimeout,
 } from './ai-client.js';
 
-const port = Number(process.env.PORT ?? 3000);
+const port = Number(process.env.PORT ?? 8787);
 const appBaseUrl = process.env.APP_BASE_URL ?? 'http://localhost:5174';
 const serverBaseUrl = process.env.SERVER_BASE_URL ?? `http://localhost:${port}`;
 const githubClientId = process.env.GITHUB_CLIENT_ID;
@@ -2367,8 +2367,19 @@ if (!process.env.VERCEL && process.env.NODE_ENV !== 'test' && !process.env.VITES
     });
   });
 
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n❌ [Backend] A porta ${port} já está em uso por outro processo nesta máquina.`);
+      console.error(`💡 Solução: Defina outra porta na variável PORT do seu .env ou inicie com:`);
+      console.error(`   PORT=${port + 1} npm run server\n`);
+    } else {
+      console.error('Erro no servidor HTTP:', err);
+    }
+    process.exit(1);
+  });
+
   server.listen(port, () => {
-    console.log(`Auth server listening on port ${port}`);
+    console.log(`Backend server listening on port ${port}`);
   });
 
   try {

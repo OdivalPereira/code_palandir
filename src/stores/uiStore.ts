@@ -2,12 +2,12 @@ import { create } from 'zustand';
 
 interface UIState {
   sidebarOpen: boolean;
-  activeSidebarTab: 'detail' | 'prompt';
+  activeSidebarTab: 'detail' | 'prompt' | 'forensics';
   isImportModalOpen: boolean;
 
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
-  setSidebarTab: (tab: 'detail' | 'prompt') => void;
+  setSidebarTab: (tab: 'detail' | 'prompt' | 'forensics') => void;
   setImportModalOpen: (open: boolean) => void;
 }
 

@@ -43,10 +43,15 @@ export const Dialog: React.FC<DialogProps> = ({
       <div
         className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
         onClick={onClose}
+        aria-hidden="true"
       />
 
       {/* Modal Card */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dialog-title"
+        aria-describedby={description ? 'dialog-description' : undefined}
         className={cn(
           'relative w-full rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl transition-all z-10',
           maxWidths[maxWidth]
@@ -54,18 +59,23 @@ export const Dialog: React.FC<DialogProps> = ({
       >
         <div className="flex items-start justify-between pb-4 border-b border-slate-800">
           <div>
-            <h2 className="text-lg font-semibold text-slate-100">{title}</h2>
+            <h2 id="dialog-title" className="text-lg font-semibold text-slate-100">
+              {title}
+            </h2>
             {description && (
-              <p className="mt-1 text-xs text-slate-400">{description}</p>
+              <p id="dialog-description" className="mt-1 text-xs text-slate-300">
+                {description}
+              </p>
             )}
           </div>
           <Button
             variant="ghost"
             size="icon"
             onClick={onClose}
+            aria-label="Fechar diálogo"
             className="text-slate-400 hover:text-slate-200 -mr-2 -mt-2"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </Button>
         </div>
 

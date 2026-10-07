@@ -7,7 +7,9 @@
         "node": ">=18.0.0"
     },
     "scripts": {
+        "start": "node scripts/dev.mjs",
         "dev": "vite",
+        "dev:all": "node scripts/dev.mjs",
         "build": "tsc -b && vite build",
         "lint": "eslint .",
         "preview": "vite preview",
