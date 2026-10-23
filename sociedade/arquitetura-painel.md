@@ -273,20 +273,54 @@ Responda cada um em `docs/arquitetura.md`, com a escolha e o motivo em até 5 li
   3. Redige a próxima mensagem no estilo de Odival, e Odival aprova.
   4. Mantém a persona.
 - **Modelo:** agora, GPT-6-Luna (Codex, low). Depois, um modelo aberto local, treinado para a tarefa, quando a máquina nova de Odival estiver montada (Q213).
-- **Persona:** um RAG local e incremental.
-  - **Fontes:** as decisões Q###, as entrevistas (com as divergências dos lacres) e as respostas de Odival no painel.
-  - **Onde fica:** só na máquina (`~/.sociedade/persona/`), fora do Git e fora do painel hospedado.
-  - **Uso:** cada resposta da persona fica marcada "respondida por Gwaihir", e Odival pode revogá-la.
+- **Persona, em duas camadas (Q219, Q220):**
+  - **Fontes:**
+    - o histórico completo de Odival, exportado de todas as ferramentas;
+    - as conversas seguintes e toda interação com a Sociedade;
+    - as decisões Q### e as entrevistas, com as divergências dos lacres;
+    - as respostas dele no painel;
+    - o que o Gwaihir ensina a Odival sobre programação e agentes de IA, num caderno de aprendizado: o Gwaihir também é tutor.
+  - **Camada bruta:**
+    - fica só na máquina (`~/.sociedade/persona/`), fora do Git e do painel hospedado;
+    - indexada localmente: SQLite FTS5 agora, embeddings locais com a máquina nova;
+    - na importação, passa pela varredura de segredos e pela marcação dos projetos com dado de cliente.
+  - **Caderno da persona:**
+    - destilado da camada bruta: preferências, padrões de decisão, vocabulário e o que Odival já aprendeu;
+    - revisado e aprovado por Odival.
+  - **O que vai ao GPT-6-Luna, enquanto o Gwaihir rodar nele:** só o caderno e trechos filtrados de projetos sem dado de cliente. O bruto inteiro só vai a modelo local.
+  - **Uso:** cada resposta da persona fica marcada "respondida por Gwaihir", e Odival pode revogá-la; a revogação também ensina a persona.
 - **Limites:**
   - nunca decide o que é de Odival: aprovar ordem, aceitar etapa, gasto, publicação, credencial ou dado real;
   - em projeto com dado de cliente, lê só metadados e passagens já filtradas, nunca a conversa inteira (Q24, Q57);
   - não revisa e não implementa;
   - não estima consumo.
 
-### 9.8 Pontos para o complemento (seção 10 do `docs/arquitetura.md`)
+### 9.8 Compositor visual da tarefa (o grafo a serviço do pedido; Q219)
+- **Para que serve:** Odival junta a informação visualmente para pedir ao arquiteto ou ao Gwaihir de forma direta e precisa.
+- **Como funciona:**
+  - no grafo do projeto, ele seleciona as partes que quer mudar: telas, componentes, rotas, stores e também tabelas e colunas do banco;
+  - a seleção preenche sozinha os caminhos, os detalhes técnicos e o contexto da tarefa nova.
+  - É o que o Code Palandir já faz com o `selectionStore` e o `PromptBuilder`, que passam a alimentar a Tarefa nova.
+- **Peças novas:**
+  - um analisador de esquema de banco (as migrações SQL viram nós de tabela e coluna);
+  - um modelo de pedido para o arquiteto e outro para o Gwaihir;
+  - o grafo de um projeto da Sociedade aberto a partir da tela Projetos.
+- **Fronteira (Q178):**
+  - o grafo é montado na máquina (no navegador, pela pasta local, ou pela ponte);
+  - para a tarefa vão só a seleção, os caminhos e os nomes, nunca o conteúdo dos arquivos.
+
+### 9.9 Autonomia dentro do fluxo combinado (Q219)
+- Depois que Odival e o arquiteto decidem o fluxo e Odival aprova a ordem, a execução corre sozinha, sem clique por disparo. Isso cobre execução, portão, conferência, revisão e correção dentro dos limites Q84 e Q85.
+- A ordem traz uma seção "Autorização prévia", que é a autorização delimitada do AGENTS.md: o que a cadeia pode fazer (finalidade, agentes, ambientes e operações), por exemplo commit e push do ramo da etapa e PR em rascunho.
+- O Gwaihir registra cada passo de forma legível na Conversa, e Odival lê se quiser. Ele chama Odival só quando a decisão ou a opinião dele for de fato necessária: decisão de etapa, mudança de escopo, falha depois de 3 tentativas (Q12), ou ação fora da autorização.
+- **Continua com Odival:** o merge na `main` (Q154), a publicação, o gasto, a credencial e o dado real.
+
+### 9.10 Pontos para o complemento (seção 10 do `docs/arquitetura.md`)
 1. **Onde mora a ponte local:** no pacote (Python, só biblioteca padrão, ao lado do coletor `sc.py painel`) ou no code_palandir (Node).
 2. **Transporte:** Realtime ou consulta periódica, e como retomar depois de queda.
 3. **Formato de `acoes` e `eventos`:** proponha um `painel/2` ou um esquema irmão, e diga o que o `painel/1` precisa ganhar.
 4. **Antigravity:** qual o melhor caminho de disparo hoje (CLI, arquivo de tarefa, MCP); se não houver, mantenha o manual.
 5. **Riscos do disparo remoto** e como cada um é contido.
-6. **Gwaihir:** como a ponte o chama (adaptador do Codex com GPT-6-Luna), o formato do resumo e da triagem de perguntas, e o desenho do RAG da persona para trocar o modelo depois sem refazer nada.
+6. **Gwaihir:** como a ponte o chama (adaptador do Codex com GPT-6-Luna), o formato do resumo e da triagem de perguntas, e o desenho do RAG da persona em duas camadas para trocar o modelo depois sem refazer nada.
+7. **Compositor visual** (seção 9.8): como a seleção vira tarefa, o analisador de esquema SQL e onde o grafo é montado.
+8. **Autonomia** (seção 9.9): a máquina de estados da cadeia, os pontos de chamada de Odival e o formato da seção "Autorização prévia" da ordem.
