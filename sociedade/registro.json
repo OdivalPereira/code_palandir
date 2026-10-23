@@ -1,5 +1,5 @@
 {
-  "atualizado_em": "2026-10-23T20:47:50.136324+00:00",
+  "atualizado_em": "2026-10-23T21:06:03.385765+00:00",
   "caminho_canonico": "/home/odival/Documentos/Projetos/code_palandir",
   "criado_em": "2026-10-07T18:16:25.686486+00:00",
   "eventos": [
@@ -22,11 +22,34 @@
       "simulacao": false,
       "timestamp": "2026-10-23T20:47:50.136278+00:00",
       "tipo": "papel_assumido"
+    },
+    {
+      "autor": "Coordenador",
+      "dados": {
+        "autorizacao_ref": "ordem_sha256:499540f9d712cfe5",
+        "base_efetiva": "00970bcfce70319863acbec8403f5f67654e03d1",
+        "criterios": [
+          "portao"
+        ],
+        "etapa_id": "p1-fundacao",
+        "exigir_revisao": true,
+        "limites": "—",
+        "nivel": "2",
+        "objetivo": "Ordem p1-fundacao — banco, login e ingestão do painel, no Supabase local",
+        "origem": "real",
+        "plano_ref": "ordem:p1-fundacao.md",
+        "responsavel": "Coordenador"
+      },
+      "id": "EVT-000002",
+      "seq": 2,
+      "simulacao": false,
+      "timestamp": "2026-10-23T21:06:03.385727+00:00",
+      "tipo": "etapa_aberta"
     }
   ],
   "projeto_id": "code-palandir",
   "resumos_externos": {},
-  "revisao": 2,
+  "revisao": 3,
   "versao_formato": "2.1.0",
   "versao_inicial": "418e385391fa3a1470a51847298aad613a746a4a"
 }
