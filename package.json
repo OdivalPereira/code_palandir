@@ -24,6 +24,8 @@
         "@types/babel__traverse": "^7.28.0",
         "@types/dagre": "^0.7.54",
         "@xyflow/react": "^12.11.6",
+        "ajv": "^8.17.1",
+        "ajv-formats": "^3.0.1",
         "clsx": "^2.1.0",
         "d3": "^7.9.0",
         "dagre": "^0.8.5",
@@ -32,6 +34,7 @@
         "lucide-react": "^0.363.0",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
+        "react-router-dom": "^6.28.0",
         "reselect": "^5.1.1",
         "tailwind-merge": "^2.2.2",
         "tree-sitter-wasms": "^0.1.13",
@@ -40,6 +43,8 @@
         "zustand": "^5.0.15"
     },
     "devDependencies": {
+        "@playwright/test": "1.63.0",
+        "@testing-library/react": "^16.0.1",
         "@types/d3": "^7.4.3",
         "@types/jszip": "^3.4.0",
         "@types/node": "^20.11.30",

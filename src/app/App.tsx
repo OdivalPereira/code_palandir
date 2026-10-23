@@ -1,97 +1,83 @@
 import React from 'react';
-import { TopBar } from './TopBar';
-import { GraphCanvas } from '@/features/graph/GraphCanvas';
-import { DetailSidebar } from '@/features/detail/DetailSidebar';
-import { PromptBuilder } from '@/features/prompt/PromptBuilder';
-import { ForensicsPanel } from '@/features/detail/ForensicsPanel';
-import { ImportDialog } from '@/features/import/ImportDialog';
-import { useUIStore } from '@/stores/uiStore';
-import { useSelectionStore } from '@/stores/selectionStore';
-import { Info, Sparkles, ShieldAlert } from 'lucide-react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { PainelShell } from './PainelShell';
+import { AnalisadorPage } from './AnalisadorPage';
+import { MolduraPergaminho } from './rpgTheme';
+
+/* Carregamento síncrono dinâmico via Vite glob para desacoplamento de F3 e F4 */
+const hojeModules = import.meta.glob<{
+  HojePage?: React.ComponentType;
+  default?: React.ComponentType;
+}>('../painel/hoje/HojePage.tsx', { eager: true });
+
+const projetosModules = import.meta.glob<{
+  ProjetosPage?: React.ComponentType;
+  default?: React.ComponentType;
+}>('../painel/projetos/ProjetosPage.tsx', { eager: true });
+
+const hojeMod =
+  hojeModules['../painel/hoje/HojePage.tsx'] || Object.values(hojeModules)[0];
+const HojeComponent = hojeMod?.HojePage || hojeMod?.default;
+
+const projetosMod =
+  projetosModules['../painel/projetos/ProjetosPage.tsx'] ||
+  Object.values(projetosModules)[0];
+const ProjetosComponent = projetosMod?.ProjetosPage || projetosMod?.default;
+
+const HojePlaceholder: React.FC = () => (
+  <MolduraPergaminho titulo="O Conselho" subtitulo="Visão geral e abertura">
+    <div className="py-12 text-center" role="status">
+      <p className="text-stone-300 font-serif text-lg">
+        O Conselho está se reunindo em Valfenda...
+      </p>
+      <p className="text-stone-500 text-sm mt-2">
+        Aguardando chegada dos pergaminhos (Fatia 3).
+      </p>
+    </div>
+  </MolduraPergaminho>
+);
+
+const ProjetosPlaceholder: React.FC = () => (
+  <MolduraPergaminho titulo="Regiões" subtitulo="Mapa de projetos e jornadas">
+    <div className="py-12 text-center" role="status">
+      <p className="text-stone-300 font-serif text-lg">
+        Explorando os caminhos da Terra-média...
+      </p>
+      <p className="text-stone-500 text-sm mt-2">
+        Mapeando fortalezas e acampamentos (Fatia 4).
+      </p>
+    </div>
+  </MolduraPergaminho>
+);
+
+const HojeRoute: React.FC = () => {
+  if (HojeComponent) {
+    const Component = HojeComponent;
+    return <Component />;
+  }
+  return <HojePlaceholder />;
+};
+
+const ProjetosRoute: React.FC = () => {
+  if (ProjetosComponent) {
+    const Component = ProjetosComponent;
+    return <Component />;
+  }
+  return <ProjetosPlaceholder />;
+};
 
 export const App: React.FC = () => {
-  const { sidebarOpen, activeSidebarTab, setSidebarTab } = useUIStore();
-  const selectedElements = useSelectionStore((state) => state.selectedElements);
-
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
-      {/* TopBar */}
-      <TopBar />
-
-      {/* Main Content: 2-Panel Layout */}
-      <div className="flex flex-1 min-h-0 relative">
-        {/* Canvas: Flow Graph */}
-        <main className="flex-1 h-full min-w-0 relative">
-          <GraphCanvas />
-        </main>
-
-        {/* Collapsible Right Sidebar */}
-        {sidebarOpen && (
-          <aside className="w-96 flex-shrink-0 h-full border-l border-slate-800 bg-slate-950/95 flex flex-col z-10 shadow-2xl backdrop-blur-md">
-            {/* Sidebar Tabs */}
-            <div className="flex border-b border-slate-800 bg-slate-900/50 p-1 gap-1">
-              <button
-                onClick={() => setSidebarTab('detail')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                  activeSidebarTab === 'detail'
-                    ? 'bg-slate-800 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="Detalhes do Nó Selecionado"
-              >
-                <Info className="h-3.5 w-3.5 text-indigo-400" />
-                <span className="hidden sm:inline">Detalhes</span>
-              </button>
-
-              <button
-                onClick={() => setSidebarTab('prompt')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                  activeSidebarTab === 'prompt'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="Gerador de Prompt para IA"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-amber-300" />
-                <span className="hidden sm:inline">Prompt</span>
-                {selectedElements.length > 0 && (
-                  <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-white text-indigo-900 px-1 text-[9px] font-bold">
-                    {selectedElements.length}
-                  </span>
-                )}
-              </button>
-
-              <button
-                onClick={() => setSidebarTab('forensics')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                  activeSidebarTab === 'forensics'
-                    ? 'bg-purple-700 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="Auditoria Forense & Saúde Arquitetural"
-              >
-                <ShieldAlert className="h-3.5 w-3.5 text-emerald-400" />
-                <span className="hidden sm:inline">Auditoria</span>
-              </button>
-            </div>
-
-            {/* Sidebar Content */}
-            <div className="flex-1 overflow-hidden">
-              {activeSidebarTab === 'detail' ? (
-                <DetailSidebar />
-              ) : activeSidebarTab === 'prompt' ? (
-                <PromptBuilder />
-              ) : (
-                <ForensicsPanel />
-              )}
-            </div>
-          </aside>
-        )}
-      </div>
-
-      {/* Modals & Dialogs */}
-      <ImportDialog />
-    </div>
+    <BrowserRouter>
+      <PainelShell>
+        <Routes>
+          <Route path="/" element={<HojeRoute />} />
+          <Route path="/projetos" element={<ProjetosRoute />} />
+          <Route path="/projetos/:id" element={<ProjetosRoute />} />
+          <Route path="/analisador" element={<AnalisadorPage />} />
+        </Routes>
+      </PainelShell>
+    </BrowserRouter>
   );
 };
 
