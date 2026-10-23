@@ -1,3 +1,5 @@
+> **Retirada em 23/10/2026, sem execução.** O Code Palandir passa a ser o painel da Sociedade do Código (Q206 e Q207 do pacote), e a premissa desta ordem (o produto não cita a Sociedade) deixou de valer. O rodapé neutro do relatório exportado volta a ser discutido na fase B do painel.
+
 # Ordem e1-limpeza — o código e o relatório exportado deixam de citar a Sociedade e seus papéis
 
 Para: Gandalf (Antigravity, Gemini, esforço alto) · CONVERSA NOVA

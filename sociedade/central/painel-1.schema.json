@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sociedade-do-codigo/painel/1",
+  "title": "Instantâneo painel/1 (RASCUNHO da G0, 21/10/2026; congela na etapa B, Q190)",
+  "description": "Só metadados (Q178). Nunca conteúdo de arquivo, código, diff, conversa inteira, segredo ou dado de cliente. Campo desconhecido é null com motivo em 'diagnosticos', nunca zero ou vazio (PC-08).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["esquema", "coletado_em", "maquina", "pacote", "projetos", "diagnosticos"],
+  "properties": {
+    "esquema": {"const": "painel/1"},
+    "coletado_em": {"type": "string", "format": "date-time"},
+    "maquina": {"type": "string", "maxLength": 64, "description": "apelido escolhido por Odival, não hostname"},
+    "pacote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fonte_versao", "instalacoes"],
+      "properties": {
+        "fonte_versao": {"type": ["string", "null"], "maxLength": 32},
+        "instalacoes": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ferramenta", "versao", "origem"],
+            "properties": {
+              "ferramenta": {"enum": ["claude", "codex", "antigravity", "agents", "outra"]},
+              "versao": {"type": ["string", "null"], "maxLength": 32},
+              "origem": {"type": ["string", "null"], "maxLength": 80, "description": "repositório e commit do pacote; null = desconhecida (PC-07)"},
+              "alteracao_local": {"type": ["boolean", "null"]}
+            }
+          }
+        }
+      }
+    },
+    "cardapio": {
+      "type": "array",
+      "maxItems": 40,
+      "description": "nível → modelo por plataforma (Q183, pendente)",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["plataforma", "fornecedor", "nivel", "modelo", "esforco"],
+        "properties": {
+          "plataforma": {"type": "string", "maxLength": 40},
+          "fornecedor": {"type": "string", "maxLength": 40},
+          "nivel": {"enum": ["simples", "moderada", "alta"]},
+          "modelo": {"type": "string", "maxLength": 60},
+          "esforco": {"type": "string", "maxLength": 20}
+        }
+      }
+    },
+    "projetos": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "nome", "pastas", "nucleo", "etapas", "pendencias"],
+        "properties": {
+          "id": {"type": "string", "maxLength": 80, "description": "identidade estável pela raiz canônica, não basename (PC-07)"},
+          "nome": {"type": "string", "maxLength": 80},
+          "envio_ligado": {"type": "boolean", "description": "Q182"},
+          "pastas": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["ferramenta", "caminho", "tipo"],
+              "properties": {
+                "ferramenta": {"enum": ["claude", "codex", "antigravity", "nenhuma"]},
+                "caminho": {"type": "string", "maxLength": 240},
+                "tipo": {"enum": ["canonica", "worktree", "clone", "copia_revisao"]},
+                "ramo": {"type": ["string", "null"], "maxLength": 120},
+                "sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{7,40}$"},
+                "limpa": {"type": ["boolean", "null"]}
+              }
+            }
+          },
+          "nucleo": {"type": ["string", "null"], "maxLength": 32},
+          "formato_registro": {"enum": ["pre-pacote", "2.1.0", "2.1.0-cadeia", "desconhecido"]},
+          "etapas": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "estacao"],
+              "properties": {
+                "id": {"type": "string", "maxLength": 40},
+                "estacao": {"enum": ["pedido", "ordem", "execucao", "conferencia", "revisao", "decisao", "encerrada", "desconhecida"]},
+                "decisao": {"type": ["string", "null"], "maxLength": 40},
+                "grau": {"enum": ["A", "B", "C", "autoconferencia", "emulacao", null]},
+                "interacoes": {
+                  "type": "array",
+                  "maxItems": 60,
+                  "items": {"$ref": "#/$defs/interacao"}
+                },
+                "passagens": {
+                  "type": "array",
+                  "maxItems": 40,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["de", "para", "quando"],
+                    "properties": {
+                      "de": {"type": "string", "maxLength": 40},
+                      "para": {"type": "string", "maxLength": 40},
+                      "quando": {"type": "string", "format": "date-time"},
+                      "bloco": {"type": "string", "maxLength": 2048, "description": "bloco D-COM-001 filtrado pelo validador de segredos"}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "pendencias": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["tipo", "texto"],
+              "properties": {
+                "tipo": {"enum": ["aprovar_ordem", "decidir", "revisao_devida", "passagem_a_levar", "troca_vencendo", "versao_defasada", "divergencia", "outro"]},
+                "texto": {"type": "string", "maxLength": 200},
+                "etapa": {"type": ["string", "null"], "maxLength": 40}
+              }
+            }
+          },
+          "ajustes_metodo": {
+            "type": "array",
+            "maxItems": 60,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "estado"],
+              "properties": {
+                "id": {"type": "string", "maxLength": 40, "description": "ID qualificado pela origem (PC-01)"},
+                "estado": {"enum": ["identificada", "em_avaliacao", "aceita", "incorporada", "mantida_local", "rejeitada", "adiada"]},
+                "resumo": {"type": "string", "maxLength": 200}
+              }
+            }
+          }
+        }
+      }
+    },
+    "diagnosticos": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["projeto", "campo", "motivo"],
+        "properties": {
+          "projeto": {"type": ["string", "null"], "maxLength": 80},
+          "campo": {"type": "string", "maxLength": 80},
+          "motivo": {"type": "string", "maxLength": 200}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "escala": {
+      "description": "Q188: o que o painel monta na mensagem de abertura e o que `sc.py assumir` registra",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["papel", "plataforma", "fornecedor", "modelo", "esforco"],
+      "properties": {
+        "papel": {"enum": ["arquiteto", "coordenador", "revisor", "aragorn", "elrond", "galadriel", "legolas", "jules"]},
+        "plataforma": {"type": "string", "maxLength": 40},
+        "fornecedor": {"type": "string", "maxLength": 40},
+        "modelo": {"type": "string", "maxLength": 60},
+        "esforco": {"type": "string", "maxLength": 20},
+        "subagentes": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "simples": {"type": "string", "maxLength": 60},
+            "moderada": {"type": "string", "maxLength": 60},
+            "alta": {"type": "string", "maxLength": 60}
+          }
+        }
+      }
+    },
+    "interacao": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["escala", "inicio"],
+      "properties": {
+        "escala": {"$ref": "#/$defs/escala"},
+        "inicio": {"type": "string", "format": "date-time"},
+        "modelo_no_log": {"type": ["string", "null"], "maxLength": 60},
+        "avisos": {"type": "array", "maxItems": 10, "items": {"type": "string", "maxLength": 120}}
+      }
+    }
+  }
+}

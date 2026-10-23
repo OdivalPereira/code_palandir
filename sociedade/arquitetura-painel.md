@@ -1,0 +1,183 @@
+# Arquitetura do painel — Code Palandir (proposta do Círdan, 23/10/2026)
+
+O Argon complementa este texto em `docs/arquitetura.md` (seção 8 aqui). Onde os dois divergirem, vale o que Odival decidir no fecho das ordens.
+
+## 1. Objetivo
+O Code Palandir passa a ser o painel da Sociedade do Código: Odival abre no celular e vê, em todos os projetos, o que espera por ele, em que estação está cada etapa, quem passou o bastão para quem, e copia a mensagem de abertura pronta para o próximo agente. A análise visual de código continua como uma das telas.
+
+**Origem:** Q178, Q188 e Q190, e Q202 a Q208 do pacote (entrevista de 23/10, registrada em `sociedade_do_codigo/sociedade/planejamento-4-0.md`, seção 9).
+
+## 2. Princípios
+Estão no perfil como D06 a D10. Em resumo:
+- **D06, contrato único:** só entra no painel o que cabe no `painel/1`.
+- **D07, só metadados:** no desenvolvimento, só dado fictício.
+- **D08, desconhecido não é vazio.**
+- **D09, dono único:** login em tudo, RLS de dono, token por máquina guardado como hash.
+- **D10, nada estimado.**
+
+## 3. Visão geral
+
+```
+máquina de Odival                         nuvem (fase B)                    navegador / celular
+┌──────────────────────┐   POST painel/1   ┌──────────────────────────┐      ┌─────────────────────┐
+│ sc.py painel coletar │ ────────────────▶ │ Edge Function `ingest`   │      │ Code Palandir (SPA) │
+│ (pacote, etapa D)    │  x-painel-token   │  token → hash → máquina  │      │  casca + rotas      │
+└──────────────────────┘                   │  Ajv painel/1, tamanho,  │      │  Hoje · Projetos ·  │
+                                           │  segredos, 1/min         │      │  Analisador · ...   │
+   fase A: `enviar-exemplo`                │  grava `instantaneos`    │      │  Fonte ─┬ Fixture   │
+   manda o exemplo fictício                └────────────┬─────────────┘      │         └ Supabase  │
+                                                        ▼                    └──────────▲──────────┘
+                                           ┌──────────────────────────┐   supabase-js   │
+                                           │ Postgres + RLS de dono   │ ────────────────┘
+                                           │ views do último retrato  │  (sessão do link mágico)
+                                           └──────────────────────────┘
+```
+
+**Na fase A**, tudo roda local:
+- o Supabase sobe pelo Docker (`supabase start`);
+- o app lê o exemplo fictício pela `FonteFixture`.
+
+A ligação do app com o Supabase (login real e `FonteSupabase`) e a publicação ficam para a fase B.
+
+## 4. Fundação (etapa p1-fundacao)
+
+### 4.1 Tabelas (schema `public`)
+| Tabela | Colunas principais | Quem escreve |
+|---|---|---|
+| `maquinas` | `id uuid`, `dono uuid → auth.users`, `apelido text único por dono`, `token_hash text` (SHA-256 hex), `criado_em`, `ultimo_envio_em` | script `nova-maquina` (service role) |
+| `instantaneos` | `id`, `maquina_id`, `dono` (copiado da máquina), `coletado_em timestamptz`, `recebido_em`, `esquema text = 'painel/1'`, `corpo jsonb`, `bytes int`; único em (`maquina_id`, `coletado_em`) | só a `ingest` (service role) |
+| `cotas` | `id`, `dono`, `plataforma`, `estado` (`normal`, `baixa`, `esgotada`, `janela`), `ate timestamptz null`, `nota text`, `atualizado_em` | Odival, pelo app (fase B) |
+
+- **Retenção:** guardar os 20 últimos instantâneos por máquina, apagados pela própria `ingest` depois de gravar.
+- **Leitura:** a view `v_ultimo_instantaneo` traz o último por máquina, com `security_invoker = true`. As views derivadas, como `v_projetos` e `v_pendencias`, ficam a critério do complemento: o `painel/1` ainda é rascunho e congela na etapa B do pacote, e normalizar antes disso gera migração à toa.
+
+### 4.2 RLS
+- RLS ligada em todas as tabelas.
+- `maquinas` e `instantaneos`: `select` só se `dono = auth.uid()`; `authenticated` não tem `insert`, `update` nem `delete`.
+- `cotas`: as quatro operações só para o dono.
+- `anon`: nada.
+- Testes pgTAP em `supabase/tests/` cobrem:
+  - anônimo negado;
+  - outro usuário negado;
+  - dono lê;
+  - `authenticated` não insere em `instantaneos`;
+  - a view respeita a RLS.
+
+### 4.3 Auth
+- Link mágico por e-mail com PKCE.
+- `enable_signup = false`.
+- O dono é criado pelo seed (local, `dono@exemplo.test`) ou convidado pelo painel do Supabase (nuvem, fase B).
+- `site_url` e `additional_redirect_urls` com `http://localhost:5174` na fase A.
+
+### 4.4 Edge Function `ingest`
+- `POST /functions/v1/ingest`, `verify_jwt = false` (a identidade é o token da máquina).
+- **Fluxo:**
+  1. Lê `x-painel-token`.
+  2. Calcula o SHA-256 e acha a máquina; sem máquina, responde 401.
+  3. Recusa corpo acima de 256 KB (413).
+  4. Faz o parse do JSON (400) e valida com Ajv 2020 contra a cópia do `painel/1`; falha dá 422, com até 10 erros resumidos.
+  5. Varre os segredos: os padrões do `redactSecrets` (`src/features/prompt/usePromptGenerator.ts`) aplicados a todas as strings; achou, responde 422 e não grava.
+  6. Limita a 1 envio por minuto por máquina (429).
+  7. Faz `upsert` em (`maquina_id`, `coletado_em`), aplica a retenção, atualiza `ultimo_envio_em` e responde 200 com `{id, recebido_em}`.
+- **Organização:** a lógica fica num módulo puro (`supabase/functions/_shared/ingest.ts`, sem Deno nem rede), testado no Vitest. O `index.ts` só liga o módulo ao `Deno.serve` e ao cliente Supabase.
+- **Contrato:** a cópia do esquema usada pela função fica em `supabase/functions/_shared/painel-1.schema.json`; um teste confere que ela é igual, byte a byte, a `sociedade/central/painel-1.schema.json`.
+
+### 4.5 Scripts locais (`scripts/`)
+- `nova-maquina <apelido>`:
+  - gera um token aleatório de 32 bytes;
+  - grava só o hash;
+  - imprime o token uma vez;
+  - na fase A, só fala com o Supabase local.
+- `enviar-exemplo`: posta `sociedade/central/painel-1.exemplo.json` (com o `coletado_em` trocado pela hora atual) na `ingest` local e mostra o código de resposta. É a fumaça da fundação.
+- Seed (`supabase/seed.sql`):
+  - dono fictício `dono@exemplo.test`;
+  - máquina `notebook-exemplo`, com o hash de um token fixo de teste documentado só no seed;
+  - um instantâneo igual ao exemplo.
+
+## 5. App (etapa p2-leitura)
+
+### 5.1 Casca e rotas
+- **Celular primeiro (360 px, Q169):**
+  - barra inferior no celular;
+  - lateral a partir de `md`.
+- **Rotas:**
+  - `/` Hoje;
+  - `/projetos` e `/projetos/:id`;
+  - `/analisador`, com o app atual inteiro, sem mudar o comportamento.
+- As rotas `/etapas/:projeto/:etapa`, `/evolucao` e `/cotas` ficam reservadas para a fase B.
+- O router é dependência nova (aprovação de Odival na ordem). O `src/__tests__/selfImport.test.ts`, que analisa o próprio `src` e hoje espera uma rota e uma página, precisa ser atualizado com justificativa no retorno.
+- **Login na fase A:** a casca já tem o guarda de rota, mas com a `FonteFixture` ele deixa passar com o aviso "dados de exemplo". O login real entra com a `FonteSupabase` (fase B).
+
+### 5.2 Dados no front
+- Uma interface `Fonte` com `carregar(): Promise<Resultado<Painel1>>`, nos estados carregando, vazio, erro, parcial e sucesso (D05).
+  - `FonteFixture` lê `sociedade/central/painel-1.exemplo.json` e cenários extras em `src/painel/fixtures/`: vazio, só desconhecidos, limites de tamanho e inválido.
+  - `FonteSupabase` lê `v_ultimo_instantaneo` (fase B).
+- Validação Ajv na carga. Instantâneo inválido vira estado de erro com a lista de erros, e nunca renderiza pela metade.
+- Os tipos TypeScript saem do esquema, gerados ou escritos à mão (decisão do complemento), e um teste confere que o exemplo passa.
+- O `painelStore` (Zustand) é independente do `graphStore` e do `projectStore`.
+
+### 5.3 Tela Hoje
+- **"Espera por você":** as `pendencias` de todos os projetos, agrupadas por tipo, com o projeto e a etapa. A ordem é `aprovar_ordem`, `decidir`, `revisao_devida`, `passagem_a_levar`, `troca_vencendo`, `divergencia`, `versao_defasada` e `outro`.
+- **"Desconhecido":** os projetos com `diagnosticos`, cada um com o campo e o motivo (D08). Projeto sem pendências e com diagnóstico **nunca** aparece como "em dia".
+- **Versões:** a `fonte_versao` contra as `instalacoes` e o `nucleo` de cada projeto, com destaque para o que está defasado.
+- **"Montar mensagem de abertura"** (Q188):
+  - Odival escolhe o projeto, a etapa e o papel;
+  - escolhe também a plataforma, o modelo e o esforço, pelo `cardapio` do instantâneo e filtrados pelo nível;
+  - e escolhe os subagentes por nível.
+  - O texto gerado tem as cinco linhas do `sc.py abertura` (pacote, `sc_interacao.py`, `cmd_abertura`).
+  - O botão copia com o `src/services/clipboard.ts`.
+  - O texto passa pelo `redactSecrets` antes de ir para a área de transferência.
+- **Teste-ouro** (entradas fictícias; saída gerada pelo `sc.py abertura` do pacote 3.4.0 em 23/10):
+
+```
+Para: coordenador (Antigravity, Gemini 3.8 Flash, esforço medium) · Etapa: e3-carrinho · CONVERSA NOVA
+Worktree: ~/.sociedade/trabalho/loja-exemplo/e3-carrinho
+Escala: papel=coordenador, plataforma=Antigravity, modelo=Gemini 3.8 Flash, esforço=medium, subagentes: alta=Gemini 4 Argon,moderada=Gemini 3.8 Flash,simples=Gemini 3.8 Flash
+Assumir: sc.py assumir coordenador --etapa e3-carrinho --plataforma "Antigravity" --modelo "Gemini 3.8 Flash" --esforco "medium" --subagentes "alta=Gemini 4 Argon,moderada=Gemini 3.8 Flash,simples=Gemini 3.8 Flash"
+Ação: leia a ordem da etapa (sociedade/ordens/e3-carrinho.md).
+```
+
+  - Entradas: projeto `loja-exemplo`, etapa `e3-carrinho`, papel `coordenador`, Antigravity, Gemini 3.8 Flash, medium, subagentes `alta=Gemini 4 Argon,moderada=Gemini 3.8 Flash,simples=Gemini 3.8 Flash`.
+  - A linha `Worktree:` usa `~/.sociedade/trabalho/<id do projeto>/<etapa>`, como o script. Mostrar a pasta daquela ferramenta (Q188) fica como pergunta do complemento; a mudança, se houver, vai também para o pacote, para os dois continuarem iguais.
+
+### 5.4 Tela Projetos
+- **Lista:** nome, núcleo (com "desconhecido" quando `null`), estação da etapa mais recente e o número de pendências.
+- **Detalhe:**
+  - pastas por ferramenta: tipo, caminho, ramo, SHA curto, limpa ou suja ou desconhecida;
+  - etapas com as seis estações: pedido, ordem, execução, conferência, revisão e decisão, mais encerrada e desconhecida;
+  - ocupantes recentes (`interacoes`): papel, plataforma, modelo e esforço, aviso quando `modelo_no_log` diverge ou é `null`;
+  - passagens "de → para", com o bloco recolhido.
+
+### 5.5 Reaproveitado do Code Palandir
+- Kit `src/ui` (Badge, Button, Card, Dialog, Input), tema slate/indigo e `cn`.
+- `ErrorBoundary`.
+- `redactSecrets` e `createSafeMarkdownFence` (`usePromptGenerator.ts`).
+- `clipboard.ts`.
+- Na fase B, o `GraphCanvas` com dagre para desenhar a etapa como grafo (papéis como nós, passagens como arestas).
+
+## 6. Riscos herdados (levantados em 23/10)
+- **CSP duplicada:** está no `vercel.json` e num `<meta>` do `index.html`, e as duas precisam de `https://*.supabase.co` no `connect-src` quando o app ligar ao Supabase (fase B). Na fase A, o local usa `http://127.0.0.1:54321`.
+- **`polyfills.ts`:** troca `window.process` e `global`; conferir que o supabase-js e o Ajv não se confundem.
+- **`@google/genai: "latest"`:** a versão não é fixa e só é usada pelo `server/`.
+- **`server/`:** é órfão, porque o front não o chama e ele não roda na Vercel. Fica intocado na fase A; o destino é decisão da fase B.
+- **`tsc -b` com `noUnusedLocals`:** pega sobra em código novo.
+- **`selfImport.test.ts`:** sensível a rotas e páginas novas.
+- **CI:** não existe; o portão local é a prova até haver CI.
+
+## 7. Fora do escopo da fase A
+- Publicação (projeto Supabase na nuvem, Vercel, domínio), login real no app, `FonteSupabase`, escrita de cotas.
+- Ações que voltam aos projetos, telas Etapa, Evolução e Cotas.
+- Coletor real (pacote, etapa D).
+- Qualquer mudança no `server/` e no analisador além de movê-lo para uma rota.
+
+## 8. Pontos para o complemento do Argon
+Responda cada um em `docs/arquitetura.md`, com a escolha e o motivo em até 5 linhas. Pergunte a Odival só o que for decisão dele.
+1. **Router:** qual, e como mover o analisador para `/analisador` sem mudar o comportamento, incluindo o que fazer com o `selfImport.test.ts`.
+2. **Sessão do Supabase:** onde guardar. O app evita `localStorage` para segredos, e o padrão do supabase-js é `localStorage`. Considere o uso no celular: link mágico a cada sessão cansa.
+3. **Modelo de dados:** bruto mais views (seção 4.1) ou normalizar já. Inclua retenção e idempotência.
+4. **Ajv na Edge Function** (Deno, `npm:` ou bundle) e a forma de testar a `ingest` só com Vitest mais a fumaça local.
+5. **Tipos do `painel/1`:** gerados (qual ferramenta, dependência de desenvolvimento) ou à mão, e como conferir.
+6. **Desenho das telas Hoje e Projetos em 360 px:** pode usar o Stitch com os dados do exemplo fictício. Inclua uma captura ou descrição por tela.
+7. **Linha `Worktree:`** da mensagem: manter igual ao script ou mostrar a pasta daquela ferramenta (seção 5.3).
+8. **Fatias e níveis das duas ordens:** confirme ou ajuste a divisão, o nível de cada fatia (alta para o Argon; moderada para o Flash medium; simples para o Flash low) e os arquivos de cada uma, sem cruzamento.
+9. **Riscos que eu não vi.**
