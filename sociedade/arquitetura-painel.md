@@ -155,6 +155,31 @@ Ação: leia a ordem da etapa (sociedade/ordens/e3-carrinho.md).
 - `clipboard.ts`.
 - Na fase B, o `GraphCanvas` com dagre para desenhar a etapa como grafo (papéis como nós, passagens como arestas).
 
+### 5.6 Identidade visual: RPG da Terra-média (pedido de Odival, Q215)
+- **Clima:** um RPG que lembra a Terra-média, com mapa e pergaminho, tons de noite e ouro velho, ornamentos discretos e ícones de papel. O desenho é próprio, sem copiar arte nem fonte oficial (uso pessoal, Q49).
+- **Metáforas que orientam as telas:**
+  - **Projetos** são regiões do mapa;
+  - **a etapa é uma jornada**, e as seis estações são os marcos do caminho;
+  - **a passagem é uma mensagem** levada pelo Gwaihir;
+  - **Hoje** é o conselho: o que espera a decisão de Odival.
+- **A leitura vem primeiro (D05):**
+  - fonte decorativa só em títulos, e corpo em fonte legível;
+  - contraste AA nos dois temas;
+  - nada de informação só na cor ou só no ornamento;
+  - em 360 px, o ornamento encolhe antes do conteúdo.
+- **O analisador** entra na moldura da casca, e o interior dele continua como está na fase A.
+
+### 5.7 Cartas dos agentes (tela "Sociedade")
+- **Uma carta por papel**, nos papéis do perfil mais o Gwaihir:
+  - nome e título (por exemplo, "Círdan, o Armador · Arquiteto");
+  - ilustração ou ícone;
+  - ocupante atual (plataforma, fornecedor, modelo e esforço) e estado (ativo, reserva ou espera);
+  - **poderes:** o que o papel faz, tirado da definição do papel (`sc-papeis`);
+  - **forças e fraquezas:** texto curado por Odival e pela experiência das etapas, como "o Flash é rápido, mas deixa escapar casos de borda";
+  - **atributos medidos:** etapas em que atuou, aceites de primeira, achados bloqueadores (revisor), passagens feitas. Só números medidos no registro (D10); sem dado, aparece "desconhecido" (D08).
+- **Verso da carta:** histórico de ocupantes (Q176: ocupante por interação) e as últimas interações.
+- **Fonte:** os textos ficam num arquivo da governança (`sociedade/central/cartas.json`, a propor no complemento), e os atributos medidos pedem um campo novo no contrato (proposta ao `painel/1`). Na fase A, os atributos ficam como "desconhecido".
+
 ## 6. Riscos herdados (levantados em 23/10)
 - **CSP duplicada:** está no `vercel.json` e num `<meta>` do `index.html`, e as duas precisam de `https://*.supabase.co` no `connect-src` quando o app ligar ao Supabase (fase B). Na fase A, o local usa `http://127.0.0.1:54321`.
 - **`polyfills.ts`:** troca `window.process` e `global`; conferir que o supabase-js e o Ajv não se confundem.
@@ -181,6 +206,7 @@ Responda cada um em `docs/arquitetura.md`, com a escolha e o motivo em até 5 li
 7. **Linha `Worktree:`** da mensagem: manter igual ao script ou mostrar a pasta daquela ferramenta (seção 5.3).
 8. **Fatias e níveis das duas ordens:** confirme ou ajuste a divisão, o nível de cada fatia (alta para o Argon; moderada para o Flash medium; simples para o Flash low) e os arquivos de cada uma, sem cruzamento.
 9. **Riscos que eu não vi.**
+10. **Sistema visual RPG** (seção 5.6): paleta, tipografia, ornamentos e componentes (moldura, marco, mapa, selo), feitos sobre o kit `src/ui`. Inclua o esboço da carta (seção 5.7) e o esquema do `cartas.json`. Pode usar o Stitch.
 
 ## 9. Centro de comando (fase B; desenho em construção, adendo 1 de 23/10)
 
@@ -196,7 +222,7 @@ Responda cada um em `docs/arquitetura.md`, com a escolha e o motivo em até 5 li
    - **Perguntas:** a caixa de entrada de Odival;
    - **Conversa:** a linha do tempo entre fornecedores, por tarefa.
 2. **Executores**, de vários tipos, todos no mesmo protocolo:
-   - **local:** um *mensageiro* por máquina, com o token de máquina da p1 (`maquinas`). Os adaptadores começam por:
+   - **local:** uma *ponte local* por máquina (o processo que liga o painel aos aplicativos), com o token de máquina da p1 (`maquinas`). Os adaptadores começam por:
      - Claude Code (`claude -p` ou Agent SDK);
      - Codex (`codex exec`);
      - Gemini CLI;
@@ -204,7 +230,7 @@ Responda cada um em `docs/arquitetura.md`, com a escolha e o motivo em até 5 li
      - os comandos do método (`sc.py`, git no worktree).
      O Antigravity ainda não tem disparo confiável por linha de comando. Até ter, o adaptador dele é *manual*: o painel monta a mensagem, e Odival cola.
    - **nuvem:** Jules (API), Codex na nuvem, rotinas do Claude Code e GitHub Actions, acionados por Edge Function com a credencial no Supabase Vault (cada credencial com o OK de Odival).
-   - **outra máquina:** o mesmo mensageiro, registrado com o token dela.
+   - **outra máquina:** a mesma ponte, registrada com o token dela.
    - **Ferramentas** (Stitch, plugins e MCPs) são capacidades de um adaptador, e não executores.
 
 ### 9.2 Protocolo (tabelas novas, todas com RLS de dono)
@@ -221,10 +247,10 @@ Responda cada um em `docs/arquitetura.md`, com a escolha e o motivo em até 5 li
 - Qualquer exceção é decisão de Odival, projeto a projeto.
 
 ### 9.4 Segurança do disparo
-- **Conexão só de saída:** o mensageiro puxa as ações (Realtime ou consulta periódica), e nada escuta na máquina.
+- **Conexão só de saída:** a ponte puxa as ações (Realtime ou consulta periódica), e nada escuta na máquina.
 - **Lista permitida:** de adaptadores e de comandos por projeto, sempre em worktree, nunca na `main`.
 - **Um clique de Odival por disparo no começo:** aviso e registro. Cadeias automáticas por tipo de ação ficam para quando houver confiança, e também por decisão.
-- **O registro do método continua local, por script:** o mensageiro chama `sc.py assumir` e `sc.py passar`, e o painel nunca grava no `registro.json`.
+- **O registro do método continua local, por script:** a ponte chama `sc.py assumir` e `sc.py passar`, e o painel nunca grava no `registro.json`.
 - Toda ação externa ou irreversível (push, PR, merge, publicação, gasto) continua pedindo o "sim" de Odival.
 
 ### 9.5 Arquiteto mais barato
@@ -234,13 +260,31 @@ Responda cada um em `docs/arquitetura.md`, com a escolha e o motivo em até 5 li
 
 ### 9.6 Sequência sugerida (a confirmar com Odival)
 - **p3:** Tarefa nova, Perguntas e Conversa, sem disparo; Odival ainda cola a mensagem, mas ela nasce no painel.
-- **p4:** mensageiro local com Claude e Codex, por clique.
+- **p4:** ponte local com Claude e Codex, por clique, e o Gwaihir resumindo.
 - **p5:** nuvem (Jules primeiro) e outras máquinas.
 - **p6:** cadeias automáticas e modelos abertos.
 
-### 9.7 Pontos para o complemento (seção 10 do `docs/arquitetura.md`)
-1. **Onde mora o mensageiro:** no pacote (Python, só biblioteca padrão, ao lado do coletor `sc.py painel`) ou no code_palandir (Node).
+### 9.7 Gwaihir, o mensageiro (papel novo; Q212 a Q214)
+- **O que faz:**
+  1. Resume cada interação e passagem em até 2 KB, que viram os `eventos` da Conversa.
+  2. Faz a triagem das perguntas dos agentes. Responde com a persona de Odival o que der, citando a decisão de origem e o grau de confiança, e sobe a Odival só o que for decisão dele ou de baixa confiança.
+  3. Redige a próxima mensagem no estilo de Odival, e Odival aprova.
+  4. Mantém a persona.
+- **Modelo:** agora, GPT-6-Luna (Codex, low). Depois, um modelo aberto local, treinado para a tarefa, quando a máquina nova de Odival estiver montada (Q213).
+- **Persona:** um RAG local e incremental.
+  - **Fontes:** as decisões Q###, as entrevistas (com as divergências dos lacres) e as respostas de Odival no painel.
+  - **Onde fica:** só na máquina (`~/.sociedade/persona/`), fora do Git e fora do painel hospedado.
+  - **Uso:** cada resposta da persona fica marcada "respondida por Gwaihir", e Odival pode revogá-la.
+- **Limites:**
+  - nunca decide o que é de Odival: aprovar ordem, aceitar etapa, gasto, publicação, credencial ou dado real;
+  - em projeto com dado de cliente, lê só metadados e passagens já filtradas, nunca a conversa inteira (Q24, Q57);
+  - não revisa e não implementa;
+  - não estima consumo.
+
+### 9.8 Pontos para o complemento (seção 10 do `docs/arquitetura.md`)
+1. **Onde mora a ponte local:** no pacote (Python, só biblioteca padrão, ao lado do coletor `sc.py painel`) ou no code_palandir (Node).
 2. **Transporte:** Realtime ou consulta periódica, e como retomar depois de queda.
 3. **Formato de `acoes` e `eventos`:** proponha um `painel/2` ou um esquema irmão, e diga o que o `painel/1` precisa ganhar.
 4. **Antigravity:** qual o melhor caminho de disparo hoje (CLI, arquivo de tarefa, MCP); se não houver, mantenha o manual.
 5. **Riscos do disparo remoto** e como cada um é contido.
+6. **Gwaihir:** como a ponte o chama (adaptador do Codex com GPT-6-Luna), o formato do resumo e da triagem de perguntas, e o desenho do RAG da persona para trocar o modelo depois sem refazer nada.
