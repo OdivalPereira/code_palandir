@@ -15,7 +15,7 @@ Ao abrir o Code Palandir, Odival cai na tela **Hoje**:
 - passa para **Projetos**, com pastas, etapas e ocupantes;
 - o analisador de código continua inteiro em **Analisador**.
 
-Tudo isso com o exemplo fictício e no celular (360 px).
+Tudo isso com o exemplo fictício, na web (versão principal) e no celular (360 px).
 
 **Como Odival percebe:**
 - `npm run dev` abre a Hoje com o selo "dados de exemplo";
@@ -46,8 +46,8 @@ Tudo isso com o exemplo fictício e no celular (360 px).
    - aceite (E):
      - rotas `/`, `/projetos`, `/projetos/:id` e `/analisador`;
      - o analisador é idêntico ao de antes (os testes antigos seguem verdes, e o `selfImport` é ajustado com justificativa);
-     - barra inferior em 360 px e lateral a partir de `md`;
-     - sem rolagem horizontal em 360 px;
+     - desenho para a web como versão principal (1280 px), com lateral a partir de `md`;
+     - barra inferior em 360 px, sem rolagem horizontal (Q217);
      - as dependências aprovadas são instaladas aqui.
 2. **Contrato e fonte no front**
    - especialista: Elrond · nível: moderada · modelo: Gemini 3.8 Flash · esforço: medium
@@ -81,7 +81,7 @@ Tudo isso com o exemplo fictício e no celular (360 px).
    - escreva só: `e2e/**`, `playwright.config.ts`, `src/__tests__/painelA11y.test.tsx`
    - aceite (E):
      - D05 nas três telas: foco visível, rótulos ARIA, toque de 44 px ou mais, e os estados carregando, vazio, erro, parcial e sucesso;
-     - capturas em 360 px de Hoje, Projetos e Analisador, anexadas ao retorno.
+     - capturas em 1280 px e em 360 px de Hoje, Projetos e Analisador, anexadas ao retorno.
 
 **Ordem das fatias:** a F1 vem primeiro e a F2 em seguida. A F3 e a F4 rodam juntas, e a F5 fecha. Os arquivos não se cruzam.
 

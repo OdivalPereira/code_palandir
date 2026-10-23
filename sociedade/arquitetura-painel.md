@@ -3,7 +3,7 @@
 O Argon complementa este texto em `docs/arquitetura.md` (seção 8 aqui). Onde os dois divergirem, vale o que Odival decidir no fecho das ordens.
 
 ## 1. Objetivo
-O Code Palandir passa a ser o painel da Sociedade do Código: Odival abre no celular e vê, em todos os projetos, o que espera por ele, em que estação está cada etapa, quem passou o bastão para quem, e copia a mensagem de abertura pronta para o próximo agente. A análise visual de código continua como uma das telas.
+O Code Palandir passa a ser o painel da Sociedade do Código: Odival abre na web (versão principal) ou no celular e vê, em todos os projetos, o que espera por ele, em que estação está cada etapa, quem passou o bastão para quem, e copia a mensagem de abertura pronta para o próximo agente. A análise visual de código continua como uma das telas.
 
 **Origem:** Q178, Q188 e Q190, e Q202 a Q208 do pacote (entrevista de 23/10, registrada em `sociedade_do_codigo/sociedade/planejamento-4-0.md`, seção 9).
 
@@ -97,9 +97,10 @@ A ligação do app com o Supabase (login real e `FonteSupabase`) e a publicaçã
 ## 5. App (etapa p2-leitura)
 
 ### 5.1 Casca e rotas
-- **Celular primeiro (360 px, Q169):**
-  - barra inferior no celular;
-  - lateral a partir de `md`.
+- **A web é a versão principal, e o celular tem de ficar muito bem feito (Q217):**
+  - o desenho parte da tela larga (1280 px ou mais), com lateral a partir de `md`;
+  - em 360 px, tudo funciona sem perda (Q169), com barra inferior e toque de 44 px;
+  - as capturas saem nas duas larguras.
 - **Rotas:**
   - `/` Hoje;
   - `/projetos` e `/projetos/:id`;
@@ -218,9 +219,10 @@ Responda cada um em `docs/arquitetura.md`, com a escolha e o motivo em até 5 li
 
 ### 9.1 Peças
 1. **Painel (plano de controle, hospedado):** o Supabase e o app das fases A e B. Telas novas:
-   - **Tarefa nova:** a entrada única;
+   - **Tarefa nova:** a entrada única; Odival escolhe, por tarefa, quem recebe primeiro: Gwaihir, arquiteto ou um executor direto (Q216);
    - **Perguntas:** a caixa de entrada de Odival;
    - **Conversa:** a linha do tempo entre fornecedores, por tarefa.
+   - **Avisos (Q217):** o app é instalável (PWA) e manda notificação pelo navegador (Web Push) quando uma pergunta ou decisão espera Odival. O Gwaihir decide o que merece aviso, sem serviço de terceiro.
 2. **Executores**, de vários tipos, todos no mesmo protocolo:
    - **local:** uma *ponte local* por máquina (o processo que liga o painel aos aplicativos), com o token de máquina da p1 (`maquinas`). Os adaptadores começam por:
      - Claude Code (`claude -p` ou Agent SDK);
@@ -260,7 +262,7 @@ Responda cada um em `docs/arquitetura.md`, com a escolha e o motivo em até 5 li
 
 ### 9.6 Sequência sugerida (a confirmar com Odival)
 - **p3:** Tarefa nova, Perguntas e Conversa, sem disparo; Odival ainda cola a mensagem, mas ela nasce no painel.
-- **p4:** ponte local com Claude e Codex, por clique, e o Gwaihir resumindo.
+- **p4:** ponte local com Claude e Codex, por clique, e o Gwaihir resumindo; logo depois, o caminho do Google, para disparar o Gandalf e os especialistas sem Odival colar a mensagem (Antigravity ou Gemini CLI, o que funcionar; Q218).
 - **p5:** nuvem (Jules primeiro) e outras máquinas.
 - **p6:** cadeias automáticas e modelos abertos.
 
