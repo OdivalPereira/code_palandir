@@ -1,11 +1,32 @@
 {
-  "atualizado_em": "2026-10-07T18:16:25.686497+00:00",
+  "atualizado_em": "2026-10-23T20:47:50.136324+00:00",
   "caminho_canonico": "/home/odival/Documentos/Projetos/code_palandir",
   "criado_em": "2026-10-07T18:16:25.686486+00:00",
-  "eventos": [],
+  "eventos": [
+    {
+      "autor": "coordenador",
+      "dados": {
+        "esforco": "high",
+        "fornecedor": "Google",
+        "modelo": "Gemini 4 Argon",
+        "papel": "coordenador",
+        "plataforma": "Antigravity",
+        "subagentes": {
+          "alta": "Gemini 4 Argon",
+          "moderada": "Gemini 3.8 Flash",
+          "simples": "Gemini 3.8 Flash"
+        }
+      },
+      "id": "EVT-000001",
+      "seq": 1,
+      "simulacao": false,
+      "timestamp": "2026-10-23T20:47:50.136278+00:00",
+      "tipo": "papel_assumido"
+    }
+  ],
   "projeto_id": "code-palandir",
   "resumos_externos": {},
-  "revisao": 1,
+  "revisao": 2,
   "versao_formato": "2.1.0",
   "versao_inicial": "418e385391fa3a1470a51847298aad613a746a4a"
 }

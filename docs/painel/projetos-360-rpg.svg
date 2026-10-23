@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 820" width="360" height="820" role="img" aria-label="Tela Projetos em 360px no clima RPG da Terra-média">
+  <defs>
+    <linearGradient id="bgNightP" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0c0a09"/>
+      <stop offset="100%" stop-color="#141210"/>
+    </linearGradient>
+    <linearGradient id="goldHeaderP" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#78350f" stop-opacity="0.45"/>
+      <stop offset="50%" stop-color="#b45309" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#78350f" stop-opacity="0.45"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="360" height="820" fill="url(#bgNightP)"/>
+
+  <!-- TopBar RPG -->
+  <rect x="0" y="0" width="360" height="52" fill="#141210" stroke="#78350f" stroke-width="1"/>
+  <text x="16" y="24" fill="#fef3c7" font-family="Georgia, serif" font-size="13" font-weight="bold" letter-spacing="0.8">MAPA DE REGIÕES · PROJETOS</text>
+  <text x="16" y="38" fill="#a8a29e" font-family="system-ui, sans-serif" font-size="10">3 regiões registradas · 1 em névoa (desconhecido)</text>
+  <rect x="242" y="14" width="106" height="24" rx="12" fill="#451a03" stroke="#f59e0b" stroke-width="1"/>
+  <text x="295" y="29" text-anchor="middle" fill="#fde68a" font-family="system-ui, sans-serif" font-size="9.5" font-weight="600">Dados de exemplo</text>
+
+  <!-- Seletor rápido de Regiões (Lista no topo em 360px) -->
+  <rect x="12" y="62" width="336" height="104" rx="8" fill="#1c1917" stroke="#78350f" stroke-width="1"/>
+  <!-- Região 1 (Selecionada): Loja Exemplo -->
+  <rect x="20" y="70" width="320" height="28" rx="5" fill="#451a03" stroke="#f59e0b" stroke-width="1.2"/>
+  <text x="28" y="88" fill="#fef3c7" font-family="Georgia, serif" font-size="10.5" font-weight="bold">▸ Loja Exemplo</text>
+  <text x="148" y="88" fill="#d6d3d1" font-family="system-ui, sans-serif" font-size="9">núcleo 3.4.0 · Estação: Revisão</text>
+  <rect x="292" y="75" width="42" height="18" rx="9" fill="#b45309"/>
+  <text x="313" y="87" text-anchor="middle" fill="#fffbeb" font-family="system-ui, sans-serif" font-size="8.5" font-weight="bold">3 pend</text>
+
+  <!-- Região 2: App Receitas -->
+  <rect x="20" y="102" width="320" height="26" rx="5" fill="#292524" stroke="#44403c"/>
+  <text x="28" y="119" fill="#e7e5e4" font-family="Georgia, serif" font-size="10">App Receitas</text>
+  <text x="148" y="119" fill="#fde68a" font-family="system-ui, sans-serif" font-size="9">núcleo 3.1.0 ! · Estação: Ordem</text>
+  <rect x="292" y="106" width="42" height="18" rx="9" fill="#44403c"/>
+  <text x="313" y="118" text-anchor="middle" fill="#e7e5e4" font-family="system-ui, sans-serif" font-size="8.5">2 pend</text>
+
+  <!-- Região 3: Diário de Campo (Desconhecido D08) -->
+  <rect x="20" y="132" width="320" height="26" rx="5" fill="#2e1065" stroke="#9333ea"/>
+  <text x="28" y="149" fill="#f3e8ff" font-family="Georgia, serif" font-size="10" font-weight="bold">? Diário de Campo</text>
+  <text x="148" y="149" fill="#e9d5ff" font-family="system-ui, sans-serif" font-size="9">núcleo: desconhecido · 3 diag.</text>
+  <rect x="284" y="136" width="50" height="18" rx="9" fill="#581c87"/>
+  <text x="309" y="148" text-anchor="middle" fill="#f3e8ff" font-family="system-ui, sans-serif" font-size="8" font-weight="bold">névoa ?</text>
+
+  <!-- Detalhe da Região Selecionada: Loja Exemplo -->
+  <!-- 1. Marcos da Jornada (Etapa e3-carrinho: 6 estações) -->
+  <rect x="12" y="176" width="336" height="122" rx="8" fill="#1c1917" stroke="#d97706" stroke-width="1.2"/>
+  <rect x="12" y="176" width="336" height="26" rx="8" fill="url(#goldHeaderP)"/>
+  <text x="24" y="193" fill="#fef3c7" font-family="Georgia, serif" font-size="11" font-weight="bold">JORNADA ATUAL · e3-carrinho (Estação 5: Revisão)</text>
+
+  <!-- Linha dos 6 marcos -->
+  <line x1="38" y1="224" x2="322" y2="224" stroke="#57534e" stroke-width="2"/>
+  <line x1="38" y1="224" x2="265" y2="224" stroke="#f59e0b" stroke-width="2.5"/>
+
+  <!-- Marco 1: Pedido -->
+  <circle cx="38" cy="224" r="8" fill="#10b981" stroke="#064e3b" stroke-width="1.5"/>
+  <text x="38" y="244" text-anchor="middle" fill="#a7f3d0" font-family="system-ui, sans-serif" font-size="8">1.Pedido</text>
+  <!-- Marco 2: Ordem -->
+  <circle cx="95" cy="224" r="8" fill="#10b981" stroke="#064e3b" stroke-width="1.5"/>
+  <text x="95" y="244" text-anchor="middle" fill="#a7f3d0" font-family="system-ui, sans-serif" font-size="8">2.Ordem</text>
+  <!-- Marco 3: Execução -->
+  <circle cx="152" cy="224" r="8" fill="#10b981" stroke="#064e3b" stroke-width="1.5"/>
+  <text x="152" y="244" text-anchor="middle" fill="#a7f3d0" font-family="system-ui, sans-serif" font-size="8">3.Exec</text>
+  <!-- Marco 4: Conferência -->
+  <circle cx="208" cy="224" r="8" fill="#10b981" stroke="#064e3b" stroke-width="1.5"/>
+  <text x="208" y="244" text-anchor="middle" fill="#a7f3d0" font-family="system-ui, sans-serif" font-size="8">4.Conf</text>
+  <!-- Marco 5: Revisão (Ativo com halo dourado) -->
+  <circle cx="265" cy="224" r="11" fill="#f59e0b" stroke="#fef3c7" stroke-width="2"/>
+  <text x="265" y="246" text-anchor="middle" fill="#fde68a" font-family="system-ui, sans-serif" font-size="8.5" font-weight="bold">5.Revisão</text>
+  <!-- Marco 6: Decisão -->
+  <circle cx="322" cy="224" r="8" fill="#292524" stroke="#78716c" stroke-width="1.5"/>
+  <text x="322" y="244" text-anchor="middle" fill="#a8a29e" font-family="system-ui, sans-serif" font-size="8">6.Decisão</text>
+
+  <!-- Etapa anterior resumida -->
+  <rect x="22" y="260" width="316" height="28" rx="5" fill="#292524"/>
+  <text x="30" y="278" fill="#a8a29e" font-family="system-ui, sans-serif" font-size="9.5">Etapa anterior: e2-catalogo · Encerrada (aceitar · Grau A)</text>
+
+  <!-- 2. Pastas por Ferramenta -->
+  <rect x="12" y="306" width="336" height="132" rx="8" fill="#1c1917" stroke="#78350f" stroke-width="1"/>
+  <text x="24" y="325" fill="#fef3c7" font-family="Georgia, serif" font-size="11" font-weight="bold">ACAMPAMENTOS · PASTAS POR FERRAMENTA (3)</text>
+
+  <rect x="22" y="333" width="316" height="30" rx="5" fill="#292524"/>
+  <text x="28" y="347" fill="#e7e5e4" font-family="system-ui, sans-serif" font-size="9.5" font-weight="600">[claude · canônica] main @ abc1234 · limpa ✓</text>
+  <text x="28" y="359" fill="#a8a29e" font-family="monospace" font-size="8">/home/dono/Projetos/loja-exemplo</text>
+
+  <rect x="22" y="367" width="316" height="30" rx="5" fill="#451a03" stroke="#f59e0b" stroke-width="0.8"/>
+  <text x="28" y="381" fill="#fde68a" font-family="system-ui, sans-serif" font-size="9.5" font-weight="600">[codex · clone !] main @ 9f8e7d6 · SUJA !</text>
+  <text x="28" y="393" fill="#fcd34d" font-family="monospace" font-size="8">/home/dono/Projetos/loja-exemplo-codex</text>
+
+  <rect x="22" y="401" width="316" height="30" rx="5" fill="#292524"/>
+  <text x="28" y="415" fill="#e7e5e4" font-family="system-ui, sans-serif" font-size="9.5" font-weight="600">[antigravity · worktree] etapa/e3-carrinho @ 1a2b3c4 · limpa ✓</text>
+  <text x="28" y="427" fill="#a8a29e" font-family="monospace" font-size="8">/home/dono/.sociedade/trabalho/loja-exemplo/e3-carrinho</text>
+
+  <!-- 3. Ocupantes Recentes (Interações) -->
+  <rect x="12" y="446" width="336" height="148" rx="8" fill="#1c1917" stroke="#78350f" stroke-width="1"/>
+  <text x="24" y="465" fill="#fef3c7" font-family="Georgia, serif" font-size="11" font-weight="bold">COMPANHIA · OCUPANTES RECENTES (3)</text>
+
+  <rect x="22" y="473" width="316" height="32" rx="5" fill="#292524"/>
+  <text x="28" y="487" fill="#e7e5e4" font-family="system-ui, sans-serif" font-size="9.5" font-weight="600">Arquiteto · Claude Code · Claude Opus 5.5 (high)</text>
+  <text x="28" y="499" fill="#a7f3d0" font-family="system-ui, sans-serif" font-size="8.5">modelo_no_log: Claude Opus 5.5 ✓ · subagentes: Haiku/Sonnet</text>
+
+  <rect x="22" y="509" width="316" height="32" rx="5" fill="#292524"/>
+  <text x="28" y="523" fill="#e7e5e4" font-family="system-ui, sans-serif" font-size="9.5" font-weight="600">Coordenador · Antigravity · Gemini 3.8 Flash (medium)</text>
+  <text x="28" y="535" fill="#a7f3d0" font-family="system-ui, sans-serif" font-size="8.5">modelo_no_log: Gemini 3.8 Flash ✓ · alta=Gemini 4 Argon</text>
+
+  <!-- Aviso quando modelo_no_log é null ou diverge -->
+  <rect x="22" y="545" width="316" height="42" rx="5" fill="#3b0764" stroke="#a855f7" stroke-width="1"/>
+  <text x="28" y="559" fill="#f3e8ff" font-family="system-ui, sans-serif" font-size="9.5" font-weight="bold">Revisor · Codex · GPT-6.1-Sol (xhigh)</text>
+  <text x="28" y="572" fill="#fde68a" font-family="system-ui, sans-serif" font-size="8.5" font-weight="bold">! modelo_no_log: desconhecido (null)</text>
+  <text x="28" y="583" fill="#e9d5ff" font-family="system-ui, sans-serif" font-size="8">Aviso: modelo do log ainda não lido: conversa em andamento</text>
+
+  <!-- 4. Passagens "de -> para" com bloco recolhido -->
+  <rect x="12" y="602" width="336" height="150" rx="8" fill="#1c1917" stroke="#78350f" stroke-width="1"/>
+  <text x="24" y="621" fill="#fef3c7" font-family="Georgia, serif" font-size="11" font-weight="bold">MENSAGENS DE GWAIHIR · PASSAGENS (2)</text>
+
+  <!-- Passagem 1 recolhida (botão >= 44px) -->
+  <rect x="22" y="630" width="316" height="48" rx="6" fill="#292524" stroke="#57534e"/>
+  <text x="32" y="650" fill="#fde68a" font-family="Georgia, serif" font-size="10" font-weight="bold">▸ coordenador → arquiteto</text>
+  <text x="210" y="650" fill="#a8a29e" font-family="monospace" font-size="8.5">22/10 18:20Z</text>
+  <text x="32" y="667" fill="#d6d3d1" font-family="system-ui, sans-serif" font-size="9">Toque para desenrolar o pergaminho (bloco recolhido)</text>
+
+  <!-- Passagem 2 recolhida (botão >= 44px) -->
+  <rect x="22" y="686" width="316" height="48" rx="6" fill="#292524" stroke="#57534e"/>
+  <text x="32" y="706" fill="#fde68a" font-family="Georgia, serif" font-size="10" font-weight="bold">▸ arquiteto → revisor</text>
+  <text x="210" y="706" fill="#a8a29e" font-family="monospace" font-size="8.5">23/10 09:50Z</text>
+  <text x="32" y="723" fill="#d6d3d1" font-family="system-ui, sans-serif" font-size="9">Toque para desenrolar o pergaminho (bloco recolhido)</text>
+
+  <!-- Barra de Navegação Inferior (56px) -->
+  <rect x="0" y="764" width="360" height="56" fill="#141210" stroke="#78350f" stroke-width="1"/>
+  <rect x="10" y="770" width="80" height="44" rx="6" fill="transparent"/>
+  <text x="50" y="790" text-anchor="middle" fill="#a8a29e" font-family="Georgia, serif" font-size="10.5">Conselho</text>
+  <text x="50" y="804" text-anchor="middle" fill="#78716c" font-family="system-ui, sans-serif" font-size="8.5">Hoje (5)</text>
+
+  <rect x="98" y="770" width="80" height="44" rx="6" fill="#451a03" stroke="#f59e0b" stroke-width="1"/>
+  <text x="138" y="790" text-anchor="middle" fill="#fde68a" font-family="Georgia, serif" font-size="10.5" font-weight="bold">Regiões</text>
+  <text x="138" y="804" text-anchor="middle" fill="#fcd34d" font-family="system-ui, sans-serif" font-size="8.5">Projetos (3)</text>
+
+  <rect x="186" y="770" width="80" height="44" rx="6" fill="transparent"/>
+  <text x="226" y="790" text-anchor="middle" fill="#a8a29e" font-family="Georgia, serif" font-size="10.5">Palantír</text>
+  <text x="226" y="804" text-anchor="middle" fill="#78716c" font-family="system-ui, sans-serif" font-size="8.5">Analisador</text>
+
+  <rect x="274" y="770" width="76" height="44" rx="6" fill="transparent"/>
+  <text x="312" y="790" text-anchor="middle" fill="#78716c" font-family="Georgia, serif" font-size="10.5">Sociedade</text>
+  <text x="312" y="804" text-anchor="middle" fill="#57534e" font-family="system-ui, sans-serif" font-size="8.5">Fase B (p3)</text>
+</svg>

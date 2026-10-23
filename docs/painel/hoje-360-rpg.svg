@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 820" width="360" height="820" role="img" aria-label="Tela Hoje em 360px no clima RPG da Terra-média">
+  <defs>
+    <linearGradient id="bgNight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0c0a09"/>
+      <stop offset="100%" stop-color="#141210"/>
+    </linearGradient>
+    <linearGradient id="goldHeader" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#78350f" stop-opacity="0.45"/>
+      <stop offset="50%" stop-color="#b45309" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#78350f" stop-opacity="0.45"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Fundo Noite de Valfenda -->
+  <rect width="360" height="820" fill="url(#bgNight)"/>
+
+  <!-- TopBar RPG (52px) -->
+  <rect x="0" y="0" width="360" height="52" fill="#141210" stroke="#78350f" stroke-width="1"/>
+  <circle cx="24" cy="26" r="10" fill="#1c1917" stroke="#f59e0b" stroke-width="1.5"/>
+  <path d="M20 26 L24 20 L28 26 L24 32 Z" fill="#f59e0b"/>
+  <text x="42" y="24" fill="#fef3c7" font-family="Georgia, serif" font-size="13" font-weight="bold" letter-spacing="0.8">CODE PALANDIR</text>
+  <text x="42" y="38" fill="#a8a29e" font-family="system-ui, sans-serif" font-size="10">Conselho de Hoje · notebook-exemplo</text>
+  <!-- Selo Dados de Exemplo -->
+  <rect x="242" y="14" width="106" height="24" rx="12" fill="#451a03" stroke="#f59e0b" stroke-width="1"/>
+  <text x="295" y="29" text-anchor="middle" fill="#fde68a" font-family="system-ui, sans-serif" font-size="9.5" font-weight="600">Dados de exemplo</text>
+
+  <!-- 1. Bloco: O que espera pelo Conselho (Pendências) -->
+  <rect x="12" y="64" width="336" height="218" rx="8" fill="#1c1917" stroke="#b45309" stroke-width="1.2"/>
+  <rect x="12" y="64" width="336" height="30" rx="8" fill="url(#goldHeader)"/>
+  <!-- Cantoneiras RPG discretas -->
+  <path d="M12 72 L12 64 L20 64" fill="none" stroke="#f59e0b" stroke-width="2"/>
+  <path d="M348 72 L348 64 L340 64" fill="none" stroke="#f59e0b" stroke-width="2"/>
+  <text x="24" y="84" fill="#fef3c7" font-family="Georgia, serif" font-size="12" font-weight="bold" letter-spacing="0.5">I. ESPERA PELO CONSELHO (5)</text>
+
+  <!-- Item 1: aprovar_ordem -->
+  <rect x="22" y="102" width="316" height="38" rx="6" fill="#292524" stroke="#f59e0b" stroke-width="1"/>
+  <rect x="28" y="109" width="76" height="16" rx="4" fill="#78350f"/>
+  <text x="66" y="120" text-anchor="middle" fill="#fde68a" font-family="system-ui, sans-serif" font-size="8.5" font-weight="bold">APROVAR ORDEM</text>
+  <text x="112" y="120" fill="#e7e5e4" font-family="system-ui, sans-serif" font-size="10" font-weight="600">App Receitas · r1-busca</text>
+  <text x="28" y="134" fill="#d6d3d1" font-family="system-ui, sans-serif" font-size="9.5">Ordem r1-busca escrita pelo Círdan; falta aprovação</text>
+
+  <!-- Item 2: revisao_devida -->
+  <rect x="22" y="146" width="316" height="38" rx="6" fill="#292524" stroke="#57534e" stroke-width="1"/>
+  <rect x="28" y="153" width="76" height="16" rx="4" fill="#1e3a8a"/>
+  <text x="66" y="164" text-anchor="middle" fill="#bfdbfe" font-family="system-ui, sans-serif" font-size="8.5" font-weight="bold">REVISÃO DEVIDA</text>
+  <text x="112" y="164" fill="#e7e5e4" font-family="system-ui, sans-serif" font-size="10" font-weight="600">Loja Exemplo · e3-carrinho</text>
+  <text x="28" y="178" fill="#d6d3d1" font-family="system-ui, sans-serif" font-size="9.5">Revisão da e3-carrinho em andamento no Codex</text>
+
+  <!-- Item 3: troca_vencendo + divergencia + versao_defasada (compactados com contador) -->
+  <rect x="22" y="190" width="316" height="44" rx="6" fill="#292524" stroke="#57534e" stroke-width="1"/>
+  <rect x="28" y="196" width="66" height="15" rx="4" fill="#7c2d12"/>
+  <text x="61" y="207" text-anchor="middle" fill="#fed7aa" font-family="system-ui, sans-serif" font-size="8" font-weight="bold">DIVERGÊNCIA</text>
+  <text x="100" y="207" fill="#e7e5e4" font-family="system-ui, sans-serif" font-size="9.5" font-weight="600">Loja Exemplo · clone loja-exemplo-codex</text>
+  <text x="28" y="224" fill="#a8a29e" font-family="system-ui, sans-serif" font-size="9">+ 1 troca vencendo (24/10) · + 1 versão defasada (3.1.0)</text>
+
+  <!-- Rodapé do card -->
+  <text x="24" y="272" fill="#f59e0b" font-family="system-ui, sans-serif" font-size="9.5" font-weight="600">Ordenado por prioridade do método (aprovar → decidir → revisão...)</text>
+
+  <!-- 2. Bloco: Terras em Névoa — Desconhecido (D08) -->
+  <rect x="12" y="292" width="336" height="122" rx="8" fill="#1c1917" stroke="#9333ea" stroke-width="1.2"/>
+  <rect x="12" y="292" width="336" height="28" rx="8" fill="#3b0764" fill-opacity="0.45"/>
+  <text x="24" y="310" fill="#f3e8ff" font-family="Georgia, serif" font-size="11.5" font-weight="bold">II. TERRAS EM NÉVOA · DESCONHECIDO (4)</text>
+  <rect x="266" y="297" width="74" height="18" rx="4" fill="#581c87"/>
+  <text x="303" y="309" text-anchor="middle" fill="#e9d5ff" font-family="system-ui, sans-serif" font-size="8.5" font-weight="bold">NUNCA EM DIA</text>
+
+  <text x="24" y="334" fill="#e9d5ff" font-family="system-ui, sans-serif" font-size="10.5" font-weight="bold">? Diário de Campo (3 diagnósticos — estado desconhecido)</text>
+  <text x="28" y="350" fill="#d6d3d1" font-family="monospace" font-size="9">• nucleo: AGENTS.md sem o bloco da Sociedade</text>
+  <text x="28" y="365" fill="#d6d3d1" font-family="monospace" font-size="9">• etapas: sociedade/registro.json ilegível (linha 3)</text>
+  <text x="28" y="380" fill="#d6d3d1" font-family="monospace" font-size="9">• pastas[0].ramo: pasta sem repositório Git</text>
+  <text x="24" y="400" fill="#c084fc" font-family="monospace" font-size="9">? pacote.instalacoes[2].origem: Antigravity sem origem</text>
+
+  <!-- 3. Bloco: Forjas e Versões (Pacote 3.4.0) -->
+  <rect x="12" y="424" width="336" height="82" rx="8" fill="#1c1917" stroke="#78350f" stroke-width="1"/>
+  <text x="24" y="443" fill="#fef3c7" font-family="Georgia, serif" font-size="11.5" font-weight="bold">III. FORJAS E NÚCLEOS · FONTE 3.4.0</text>
+  <!-- Pílulas de instalações -->
+  <rect x="22" y="452" width="96" height="22" rx="4" fill="#064e3b" stroke="#10b981" stroke-width="0.8"/>
+  <text x="70" y="466" text-anchor="middle" fill="#a7f3d0" font-family="system-ui, sans-serif" font-size="9">Claude 3.4.0 ✓</text>
+  <rect x="124" y="452" width="94" height="22" rx="4" fill="#064e3b" stroke="#10b981" stroke-width="0.8"/>
+  <text x="171" y="466" text-anchor="middle" fill="#a7f3d0" font-family="system-ui, sans-serif" font-size="9">Codex 3.4.0 ✓</text>
+  <rect x="224" y="452" width="114" height="22" rx="4" fill="#78350f" stroke="#f59e0b" stroke-width="1"/>
+  <text x="281" y="466" text-anchor="middle" fill="#fde68a" font-family="system-ui, sans-serif" font-size="9" font-weight="bold">AGY 3.3.0 ! (mod)</text>
+  <text x="24" y="494" fill="#d6d3d1" font-family="system-ui, sans-serif" font-size="9.5">Projetos: Loja 3.4.0 ✓ · App Receitas 3.1.0 (defasado !) · Diário: desconhecido ?</text>
+
+  <!-- 4. Bloco: Convocar Agente — Montar Mensagem de Abertura -->
+  <rect x="12" y="516" width="336" height="236" rx="8" fill="#1c1917" stroke="#d97706" stroke-width="1.4"/>
+  <rect x="12" y="516" width="336" height="28" rx="8" fill="url(#goldHeader)"/>
+  <text x="24" y="534" fill="#fef3c7" font-family="Georgia, serif" font-size="11.5" font-weight="bold">IV. PERGAMINHO DE ABERTURA (sc.py abertura)</text>
+
+  <!-- Seletores em grade 2x3 com altura de toque -->
+  <rect x="22" y="550" width="152" height="28" rx="5" fill="#292524" stroke="#57534e"/>
+  <text x="30" y="568" fill="#e7e5e4" font-family="system-ui, sans-serif" font-size="9.5">Projeto: loja-exemplo ▾</text>
+  <rect x="184" y="550" width="154" height="28" rx="5" fill="#292524" stroke="#57534e"/>
+  <text x="192" y="568" fill="#e7e5e4" font-family="system-ui, sans-serif" font-size="9.5">Etapa: e3-carrinho ▾</text>
+
+  <rect x="22" y="584" width="152" height="28" rx="5" fill="#292524" stroke="#57534e"/>
+  <text x="30" y="602" fill="#e7e5e4" font-family="system-ui, sans-serif" font-size="9.5">Papel: coordenador ▾</text>
+  <rect x="184" y="584" width="154" height="28" rx="5" fill="#292524" stroke="#57534e"/>
+  <text x="192" y="602" fill="#e7e5e4" font-family="system-ui, sans-serif" font-size="9.5">Antigravity · Flash med ▾</text>
+
+  <!-- Preview das 5 linhas do teste-ouro -->
+  <rect x="22" y="618" width="316" height="76" rx="5" fill="#0c0a09" stroke="#44403c"/>
+  <text x="28" y="632" fill="#fde68a" font-family="monospace" font-size="7.8">Para: coordenador (Antigravity, Gemini 3.8 Flash, esforço medium)...</text>
+  <text x="28" y="645" fill="#d6d3d1" font-family="monospace" font-size="7.8">Worktree: ~/.sociedade/trabalho/loja-exemplo/e3-carrinho</text>
+  <text x="28" y="658" fill="#d6d3d1" font-family="monospace" font-size="7.8">Escala: papel=coordenador, plataforma=Antigravity, modelo=...</text>
+  <text x="28" y="671" fill="#d6d3d1" font-family="monospace" font-size="7.8">Assumir: sc.py assumir coordenador --etapa e3-carrinho ...</text>
+  <text x="28" y="684" fill="#a7f3d0" font-family="monospace" font-size="7.8">Ação: leia a ordem da etapa (sociedade/ordens/e3-carrinho.md).</text>
+
+  <!-- Botão de ação (>= 44px de altura para toque) -->
+  <rect x="22" y="700" width="316" height="44" rx="6" fill="#b45309" stroke="#f59e0b" stroke-width="1.2"/>
+  <text x="180" y="726" text-anchor="middle" fill="#fffbeb" font-family="Georgia, serif" font-size="12" font-weight="bold">COPIAR MENSAGEM (FILTRADA POR SEGREDOS)</text>
+
+  <!-- Barra de Navegação Inferior (56px, alvos >= 44px) -->
+  <rect x="0" y="764" width="360" height="56" fill="#141210" stroke="#78350f" stroke-width="1"/>
+  <!-- Aba 1: Hoje (Ativa) -->
+  <rect x="10" y="770" width="80" height="44" rx="6" fill="#451a03" stroke="#f59e0b" stroke-width="1"/>
+  <text x="50" y="790" text-anchor="middle" fill="#fde68a" font-family="Georgia, serif" font-size="10.5" font-weight="bold">Conselho</text>
+  <text x="50" y="804" text-anchor="middle" fill="#fcd34d" font-family="system-ui, sans-serif" font-size="8.5">Hoje (5)</text>
+  <!-- Aba 2: Projetos -->
+  <rect x="98" y="770" width="80" height="44" rx="6" fill="transparent"/>
+  <text x="138" y="790" text-anchor="middle" fill="#a8a29e" font-family="Georgia, serif" font-size="10.5">Regiões</text>
+  <text x="138" y="804" text-anchor="middle" fill="#78716c" font-family="system-ui, sans-serif" font-size="8.5">Projetos (3)</text>
+  <!-- Aba 3: Analisador -->
+  <rect x="186" y="770" width="80" height="44" rx="6" fill="transparent"/>
+  <text x="226" y="790" text-anchor="middle" fill="#a8a29e" font-family="Georgia, serif" font-size="10.5">Palantír</text>
+  <text x="226" y="804" text-anchor="middle" fill="#78716c" font-family="system-ui, sans-serif" font-size="8.5">Analisador</text>
+  <!-- Aba 4: Sociedade / Comando (p3) -->
+  <rect x="274" y="770" width="76" height="44" rx="6" fill="transparent"/>
+  <text x="312" y="790" text-anchor="middle" fill="#78716c" font-family="Georgia, serif" font-size="10.5">Sociedade</text>
+  <text x="312" y="804" text-anchor="middle" fill="#57534e" font-family="system-ui, sans-serif" font-size="8.5">Fase B (p3)</text>
+</svg>
