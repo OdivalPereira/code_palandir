@@ -181,3 +181,66 @@ Responda cada um em `docs/arquitetura.md`, com a escolha e o motivo em até 5 li
 7. **Linha `Worktree:`** da mensagem: manter igual ao script ou mostrar a pasta daquela ferramenta (seção 5.3).
 8. **Fatias e níveis das duas ordens:** confirme ou ajuste a divisão, o nível de cada fatia (alta para o Argon; moderada para o Flash medium; simples para o Flash low) e os arquivos de cada uma, sem cruzamento.
 9. **Riscos que eu não vi.**
+
+## 9. Centro de comando (fase B; desenho em construção, adendo 1 de 23/10)
+
+**Visão de Odival (Q210, Q211):** o Code Palandir integra todos os agentes.
+- Odival começa uma tarefa nova por ele, e dali tudo se decide: modelos, o que fazer, ideias e as perguntas que ele responde.
+- Ali ele acompanha a comunicação entre os fornecedores e orienta até o arquiteto, para gastar menos e decidir melhor.
+- Aproveita as melhores ideias de cada aplicativo nativo (Claude, Antigravity, Codex) e integra Stitch, Jules, modelos abertos, frameworks e plugins.
+- **Base:** o painel hospedado conversa com os aplicativos da máquina de Odival (pastas de projeto e modelos locais). Ele também aciona execução na nuvem e em outras máquinas.
+
+### 9.1 Peças
+1. **Painel (plano de controle, hospedado):** o Supabase e o app das fases A e B. Telas novas:
+   - **Tarefa nova:** a entrada única;
+   - **Perguntas:** a caixa de entrada de Odival;
+   - **Conversa:** a linha do tempo entre fornecedores, por tarefa.
+2. **Executores**, de vários tipos, todos no mesmo protocolo:
+   - **local:** um *mensageiro* por máquina, com o token de máquina da p1 (`maquinas`). Os adaptadores começam por:
+     - Claude Code (`claude -p` ou Agent SDK);
+     - Codex (`codex exec`);
+     - Gemini CLI;
+     - Ollama (modelos abertos);
+     - os comandos do método (`sc.py`, git no worktree).
+     O Antigravity ainda não tem disparo confiável por linha de comando. Até ter, o adaptador dele é *manual*: o painel monta a mensagem, e Odival cola.
+   - **nuvem:** Jules (API), Codex na nuvem, rotinas do Claude Code e GitHub Actions, acionados por Edge Function com a credencial no Supabase Vault (cada credencial com o OK de Odival).
+   - **outra máquina:** o mesmo mensageiro, registrado com o token dela.
+   - **Ferramentas** (Stitch, plugins e MCPs) são capacidades de um adaptador, e não executores.
+
+### 9.2 Protocolo (tabelas novas, todas com RLS de dono)
+| Tabela | Papel |
+|---|---|
+| `tarefas` | pedido em uma frase, projeto, estado, escala escolhida (papel → plataforma, modelo, esforço, subagentes) e etapa ligada |
+| `acoes` | fila: tarefa, executor alvo (máquina ou nuvem), adaptador, papel, parâmetros da lista permitida, estado (`pendente`, `aprovada`, `em_andamento`, `feita`, `falhou`, `cancelada`), quem aprovou e quando |
+| `eventos` | linha do tempo da tarefa: passagem, pergunta, resposta, progresso e erro; cada corpo com até 2 KB, filtrado por segredos |
+| `perguntas` | do agente para Odival, com alternativas, recomendação (visível ou lacrada por hash, como nas entrevistas) e resposta; a resposta volta ao executor como evento |
+
+### 9.3 Fronteira de conteúdo (a Q178 continua valendo)
+- Da máquina saem só metadado, passagem, pergunta e resumo, com até 2 KB e filtrados.
+- Código, diff e conversa inteira ficam no executor; o painel mostra o caminho e o resumo.
+- Qualquer exceção é decisão de Odival, projeto a projeto.
+
+### 9.4 Segurança do disparo
+- **Conexão só de saída:** o mensageiro puxa as ações (Realtime ou consulta periódica), e nada escuta na máquina.
+- **Lista permitida:** de adaptadores e de comandos por projeto, sempre em worktree, nunca na `main`.
+- **Um clique de Odival por disparo no começo:** aviso e registro. Cadeias automáticas por tipo de ação ficam para quando houver confiança, e também por decisão.
+- **O registro do método continua local, por script:** o mensageiro chama `sc.py assumir` e `sc.py passar`, e o painel nunca grava no `registro.json`.
+- Toda ação externa ou irreversível (push, PR, merge, publicação, gasto) continua pedindo o "sim" de Odival.
+
+### 9.5 Arquiteto mais barato
+- A tarefa nova gera o pacote de contexto: objetivo, "Leia só", decisões por ID, nível e escala.
+- A mensagem de abertura do Círdan já chega recortada, e ele não precisa varrer.
+- O consumo aparece só medido pelo log (`sc.py sessao`, regra 8), nunca estimado.
+
+### 9.6 Sequência sugerida (a confirmar com Odival)
+- **p3:** Tarefa nova, Perguntas e Conversa, sem disparo; Odival ainda cola a mensagem, mas ela nasce no painel.
+- **p4:** mensageiro local com Claude e Codex, por clique.
+- **p5:** nuvem (Jules primeiro) e outras máquinas.
+- **p6:** cadeias automáticas e modelos abertos.
+
+### 9.7 Pontos para o complemento (seção 10 do `docs/arquitetura.md`)
+1. **Onde mora o mensageiro:** no pacote (Python, só biblioteca padrão, ao lado do coletor `sc.py painel`) ou no code_palandir (Node).
+2. **Transporte:** Realtime ou consulta periódica, e como retomar depois de queda.
+3. **Formato de `acoes` e `eventos`:** proponha um `painel/2` ou um esquema irmão, e diga o que o `painel/1` precisa ganhar.
+4. **Antigravity:** qual o melhor caminho de disparo hoje (CLI, arquivo de tarefa, MCP); se não houver, mantenha o manual.
+5. **Riscos do disparo remoto** e como cada um é contido.
