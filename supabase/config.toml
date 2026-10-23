@@ -1,0 +1,93 @@
+project_id = "code_palandir"
+
+[api]
+enabled = true
+port = 55321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[api.tls]
+enabled = false
+
+[db]
+port = 55322
+shadow_port = 55320
+
+[db.pooler]
+enabled = false
+port = 55329
+pool_mode = "transaction"
+default_pool_size = 20
+max_client_conn = 100
+
+[db.migrations]
+enabled = true
+schema_paths = []
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[realtime]
+enabled = false
+
+[studio]
+enabled = true
+port = 55323
+api_url = "http://127.0.0.1"
+
+[local_smtp]
+enabled = true
+port = 55324
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+site_url = "http://localhost:5174"
+additional_redirect_urls = ["http://localhost:5174"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = false
+enable_anonymous_sign_ins = false
+enable_manual_linking = false
+
+[auth.rate_limit]
+email_sent = 2
+sms_sent = 30
+anonymous_users = 30
+token_refresh = 150
+sign_in_sign_ups = 30
+token_verifications = 30
+web3 = 30
+
+[auth.email]
+enable_signup = false
+double_confirm_changes = true
+enable_confirmations = false
+secure_password_change = false
+max_frequency = "1s"
+otp_length = 6
+otp_expiry = 3600
+
+[auth.sms]
+enable_signup = false
+enable_confirmations = false
+
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+inspector_port = 55383
+
+[analytics]
+enabled = false
+port = 55327
+vector_port = 55328
+backend = "postgres"
+
+[functions.ingest]
+verify_jwt = false

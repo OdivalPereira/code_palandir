@@ -9,3 +9,7 @@ dist-ssr
 
 # Sociedade do Código
 sociedade/.registro.lock
+
+# Supabase
+supabase/.temp
+supabase/.branches
