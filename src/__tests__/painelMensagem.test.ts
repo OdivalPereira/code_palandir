@@ -65,17 +65,21 @@ describe('geradorMensagem — Teste-ouro e regras do Pergaminho de Abertura (F3)
       .spyOn(clipboardService, 'copyToClipboard')
       .mockResolvedValue(true);
 
+    const fakeGhp = ['gh', 'p_', 'a'.repeat(36)].join('');
+    const fakeSk = ['sk-', 'proj-', 'b'.repeat(24)].join('');
+    const fakeAi = ['AIza', 'Sy', 'c'.repeat(33)].join('');
+
     const textoComSegredos = [
-      'Token GitHub: ghp_1234567890abcdef1234567890abcdef1234',
-      'Chave OpenAI: sk-proj-1234567890abcdef1234567890abcdef',
-      'Chave Gemini: AIzaSyA1234567890abcdef1234567890abcdef',
+      `Token GitHub: ${fakeGhp}`,
+      `Chave OpenAI: ${fakeSk}`,
+      `Chave Gemini: ${fakeAi}`,
     ].join('\n');
 
     const filtradoDireto = prepararTextoParaCopia(textoComSegredos);
     expect(filtradoDireto).toContain('ghp_REDACTED_PAT');
     expect(filtradoDireto).toContain('sk_REDACTED_KEY');
     expect(filtradoDireto).toContain('AIzaSy_REDACTED_KEY');
-    expect(filtradoDireto).not.toContain('ghp_1234567890abcdef1234567890abcdef1234');
+    expect(filtradoDireto).not.toContain(fakeGhp);
 
     const { textoFiltrado, copiado } = await copiarMensagemSegura(textoComSegredos);
     expect(copiado).toBe(true);
