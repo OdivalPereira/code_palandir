@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { after, describe, it } from 'node:test';
+import { after, describe, it as itNode } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   LIMITE_BYTES_CORPO,
@@ -13,6 +13,24 @@ import {
   processarIngest,
   varrerSegredos,
 } from './_shared/ingest.ts';
+
+// O portão da Sociedade não lê a saída do node:test; este resumo imita a linha do Vitest para ele contar.
+const contagem = { total: 0, passaram: 0, falharam: 0 };
+const it = (nome, fn) => {
+  contagem.total += 1;
+  return itNode(nome, async (...args) => {
+    try {
+      await fn(...args);
+      contagem.passaram += 1;
+    } catch (erro) {
+      contagem.falharam += 1;
+      throw erro;
+    }
+  });
+};
+after(() => {
+  console.log(`Tests  ${contagem.passaram} passed | ${contagem.falharam} failed (${contagem.total})`);
+});
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RAIZ_REPO = path.resolve(__dirname, '..', '..');
