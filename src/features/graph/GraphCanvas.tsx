@@ -292,6 +292,7 @@ const GraphCanvasInner: React.FC = () => {
         minZoom={0.1}
         maxZoom={2}
         defaultEdgeOptions={{ type: 'customEdge' }}
+        colorMode="dark"
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#334155" />
 

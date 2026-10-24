@@ -58,14 +58,14 @@ export const TopBar: React.FC = () => {
   const matchCount = nodes.filter((n) => n.data.isSearchMatch).length;
 
   return (
-    <header className="flex h-14 w-full items-center justify-between border-b border-slate-800/80 bg-slate-950/90 px-4 backdrop-blur-md z-20">
+    <header className="flex flex-wrap min-h-14 w-full items-center justify-between gap-y-2 border-b border-slate-800/80 bg-slate-950/90 px-3 sm:px-4 py-2 backdrop-blur-md z-20">
       {/* Left: Branding & Project Meta */}
       <div className="flex items-center gap-3 min-w-0">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/20">
             <Layers className="h-4 w-4" />
           </div>
-          <span className="font-bold text-sm tracking-tight text-white hidden sm:inline">
+          <span className="font-bold text-sm tracking-tight text-white hidden 2xl:inline whitespace-nowrap">
             Code Palandir <span className="text-indigo-400 text-xs font-semibold">v2</span>
           </span>
         </div>
@@ -79,7 +79,7 @@ export const TopBar: React.FC = () => {
               {meta.framework}
             </Badge>
             {analysis && (
-              <span className="text-[11px] text-slate-400 hidden xl:inline">
+              <span className="text-[11px] text-slate-400 hidden 2xl:inline whitespace-nowrap">
                 ({analysis.routes.length} rotas, {analysis.pages.length} telas, {analysis.components.length} componentes)
               </span>
             )}
@@ -89,13 +89,14 @@ export const TopBar: React.FC = () => {
 
       {/* Center: Search & View Filters */}
       {meta && (
-        <div className="flex items-center gap-2 max-w-md w-full mx-4">
-          <div className="relative w-full max-w-xs">
+        <div className="flex items-center gap-2 w-full order-last md:order-none md:w-auto md:flex-1 md:max-w-md md:mx-4">
+          <div className="relative w-full md:max-w-xs">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-500" />
             <Input
               ref={searchInputRef}
               type="text"
               placeholder="Buscar nós (rotas, botões, ações)... (⌘K)"
+              aria-label="Buscar nós no grafo"
               value={filters.searchQuery}
               onChange={(e) => setFilters({ searchQuery: e.target.value })}
               onKeyDown={(e) => {
@@ -109,6 +110,7 @@ export const TopBar: React.FC = () => {
             {filters.searchQuery && (
               <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
                 <span
+                  aria-label={matchCount > 0 ? `${matchCount} nós encontrados` : 'Nenhum nó correspondente'}
                   className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
                     matchCount > 0
                       ? 'bg-amber-500/20 text-amber-300'
@@ -119,9 +121,11 @@ export const TopBar: React.FC = () => {
                   {matchCount}
                 </span>
                 <button
+                  type="button"
                   onClick={() => setFilters({ searchQuery: '' })}
                   className="p-0.5 text-slate-400 hover:text-slate-200"
                   title="Limpar busca (ESC)"
+                  aria-label="Limpar busca"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -130,8 +134,10 @@ export const TopBar: React.FC = () => {
           </div>
 
           {/* Quick Filters */}
-          <div className="hidden lg:flex items-center gap-1 bg-slate-900/80 p-0.5 rounded-lg border border-slate-800 text-[11px]">
+          <div className="hidden 2xl:flex items-center gap-1 bg-slate-900/80 p-0.5 rounded-lg border border-slate-800 text-[11px]">
             <button
+              type="button"
+              aria-pressed={filters.showActions}
               onClick={() => setFilters({ showActions: !filters.showActions })}
               className={`px-2 py-1 rounded font-medium transition-colors ${
                 filters.showActions
@@ -143,6 +149,8 @@ export const TopBar: React.FC = () => {
               Ações
             </button>
             <button
+              type="button"
+              aria-pressed={filters.showApis}
               onClick={() => setFilters({ showApis: !filters.showApis })}
               className={`px-2 py-1 rounded font-medium transition-colors ${
                 filters.showApis
@@ -154,6 +162,8 @@ export const TopBar: React.FC = () => {
               APIs
             </button>
             <button
+              type="button"
+              aria-pressed={filters.showStores}
               onClick={() => setFilters({ showStores: !filters.showStores })}
               className={`px-2 py-1 rounded font-medium transition-colors ${
                 filters.showStores
@@ -166,9 +176,11 @@ export const TopBar: React.FC = () => {
             </button>
           </div>
 
-          {/* Depth / Expand-Collapse Level Controls */}
-          <div className="hidden lg:flex items-center gap-1 bg-slate-900/80 p-0.5 rounded-lg border border-slate-800 text-[11px]">
+          {/* Depth / Expand-Collapse Level Controls (the canvas toolbar has the same levels) */}
+          <div className="hidden 2xl:flex items-center gap-1 bg-slate-900/80 p-0.5 rounded-lg border border-slate-800 text-[11px]">
             <button
+              type="button"
+              aria-pressed={expansionLevel === 1}
               onClick={() => setExpansionLevel(1)}
               className={`px-2 py-1 rounded font-medium transition-colors flex items-center gap-1 ${
                 expansionLevel === 1
@@ -181,6 +193,8 @@ export const TopBar: React.FC = () => {
               <span>Telas</span>
             </button>
             <button
+              type="button"
+              aria-pressed={expansionLevel === 2}
               onClick={() => setExpansionLevel(2)}
               className={`px-2 py-1 rounded font-medium transition-colors flex items-center gap-1 ${
                 expansionLevel === 2
@@ -193,6 +207,8 @@ export const TopBar: React.FC = () => {
               <span>Componentes</span>
             </button>
             <button
+              type="button"
+              aria-pressed={expansionLevel === 3}
               onClick={() => setExpansionLevel(3)}
               className={`px-2 py-1 rounded font-medium transition-colors flex items-center gap-1 ${
                 expansionLevel === 3
@@ -211,8 +227,9 @@ export const TopBar: React.FC = () => {
             variant="outline"
             size="sm"
             onClick={expandedNodeIds.size > 0 ? collapseAll : expandAll}
-            className="lg:hidden h-8 px-2 text-xs text-slate-300 border-slate-800 bg-slate-900/80 hover:bg-slate-800 hover:text-white gap-1"
+            className="2xl:hidden h-11 md:h-8 px-2 text-xs text-slate-300 border-slate-800 bg-slate-900/80 hover:bg-slate-800 hover:text-white gap-1 whitespace-nowrap"
             title={expandedNodeIds.size > 0 ? 'Recolher Tudo' : 'Expandir Tudo'}
+            aria-label={expandedNodeIds.size > 0 ? 'Recolher Tudo' : 'Expandir Tudo'}
           >
             {expandedNodeIds.size > 0 ? (
               <>
@@ -232,7 +249,8 @@ export const TopBar: React.FC = () => {
             variant="outline"
             size="sm"
             onClick={toggleLayoutDirection}
-            className="h-8 px-2 text-xs text-slate-300 border-slate-800 bg-slate-900/80 hover:bg-slate-800 hover:text-white gap-1"
+            className="h-11 md:h-8 px-2 text-xs text-slate-300 border-slate-800 bg-slate-900/80 hover:bg-slate-800 hover:text-white gap-1"
+            aria-label={`Orientação do grafo: ${layoutDirection === 'LR' ? 'horizontal' : 'vertical'}; alternar`}
             title={`Alternar Orientação do Grafo (Atual: ${layoutDirection === 'LR' ? 'Horizontal (Esquerda -> Direita)' : 'Vertical (Cima -> Baixo)'})`}
           >
             <ArrowDownUp className="h-3.5 w-3.5 text-indigo-400" />
@@ -242,15 +260,17 @@ export const TopBar: React.FC = () => {
       )}
 
       {/* Right: Connect Project & Prompt Basket Button */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         <Button
           variant="outline"
           size="sm"
           onClick={() => setImportModalOpen(true)}
-          className="h-8 gap-1.5 text-xs text-slate-200 border-slate-700 bg-slate-900 hover:bg-slate-800"
+          aria-label="Conectar Projeto"
+          title="Conectar Projeto"
+          className="h-11 min-w-[44px] md:h-8 md:min-w-0 gap-1.5 text-xs text-slate-200 border-slate-700 bg-slate-900 hover:bg-slate-800 whitespace-nowrap"
         >
-          <FolderOpen className="h-3.5 w-3.5 text-indigo-400" />
-          <span className="hidden sm:inline">Conectar Projeto</span>
+          <FolderOpen className="h-3.5 w-3.5 text-indigo-400" aria-hidden="true" />
+          <span className="hidden 2xl:inline">Conectar Projeto</span>
         </Button>
 
         {/* Auditoria & Saúde Quick Action */}
@@ -259,11 +279,12 @@ export const TopBar: React.FC = () => {
             size="sm"
             variant="outline"
             onClick={() => setSidebarTab('forensics')}
-            className="h-8 gap-1.5 text-xs font-semibold border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200"
+            className="h-11 min-w-[44px] md:h-8 md:min-w-0 gap-1.5 text-xs font-semibold border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 whitespace-nowrap"
             title="Abrir Painel de Auditoria Forense e Saúde Arquitetural"
+            aria-label="Auditoria"
           >
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">Auditoria</span>
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+            <span className="hidden 2xl:inline">Auditoria</span>
           </Button>
         )}
 
@@ -271,14 +292,18 @@ export const TopBar: React.FC = () => {
         <Button
           size="sm"
           onClick={() => setSidebarTab('prompt')}
-          className={`h-8 gap-1.5 text-xs font-semibold shadow-md transition-all ${
+          aria-label={
+            selectedElements.length > 0 ? `Prompt IA (${selectedElements.length} selecionados)` : 'Prompt IA'
+          }
+          title="Prompt IA"
+          className={`h-11 min-w-[44px] md:h-8 md:min-w-0 gap-1.5 text-xs font-semibold shadow-md transition-all whitespace-nowrap ${
             selectedElements.length > 0
               ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'
               : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
           }`}
         >
-          <Sparkles className="h-3.5 w-3.5 text-amber-300" />
-          <span className="hidden sm:inline">Prompt IA</span>
+          <Sparkles className="h-3.5 w-3.5 text-amber-300" aria-hidden="true" />
+          <span className="hidden 2xl:inline">Prompt IA</span>
           {selectedElements.length > 0 && (
             <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-white text-indigo-900 px-1 text-[10px] font-bold">
               {selectedElements.length}
@@ -291,8 +316,11 @@ export const TopBar: React.FC = () => {
           variant="ghost"
           size="icon"
           onClick={toggleSidebar}
-          className="h-8 w-8 text-slate-400 hover:text-slate-200"
+          className="h-11 w-11 md:h-8 md:w-8 text-slate-400 hover:text-slate-200"
           title={sidebarOpen ? 'Ocultar Painel Lateral' : 'Abrir Painel Lateral'}
+          aria-label={sidebarOpen ? 'Ocultar Painel Lateral' : 'Abrir Painel Lateral'}
+          aria-expanded={sidebarOpen}
+          aria-controls="analisador-painel-lateral"
         >
           {sidebarOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
         </Button>

@@ -20,19 +20,29 @@ export const AnalisadorPage: React.FC = () => {
 
       {/* Main Content: 2-Panel Layout */}
       <div className="flex flex-1 min-h-0 relative">
-        {/* Canvas: Flow Graph */}
-        <main className="flex-1 h-full min-w-0 relative">
+        {/* Canvas: Flow Graph (a casca já tem o <main>) */}
+        <div className="flex-1 h-full min-w-0 relative">
           <GraphCanvas />
-        </main>
+        </div>
 
         {/* Collapsible Right Sidebar */}
         {sidebarOpen && (
-          <aside className="w-96 flex-shrink-0 h-full border-l border-slate-800 bg-slate-950/95 flex flex-col z-10 shadow-2xl backdrop-blur-md">
+          <aside
+            id="analisador-painel-lateral"
+            aria-label="Painel lateral do Analisador"
+            className="absolute inset-y-0 right-0 w-full sm:w-96 md:static md:flex-shrink-0 h-full border-l border-slate-800 bg-slate-950/95 flex flex-col z-10 shadow-2xl backdrop-blur-md"
+          >
             {/* Sidebar Tabs */}
-            <div className="flex border-b border-slate-800 bg-slate-900/50 p-1 gap-1">
+            <div role="tablist" aria-label="Seções do painel lateral" className="flex border-b border-slate-800 bg-slate-900/50 p-1 gap-1">
               <button
+                type="button"
+                role="tab"
+                id="analisador-aba-detail"
+                aria-selected={activeSidebarTab === 'detail'}
+                aria-controls="analisador-painel-aba"
+                aria-label="Detalhes"
                 onClick={() => setSidebarTab('detail')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                className={`flex-1 flex items-center justify-center gap-1.5 min-h-[44px] md:min-h-0 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                   activeSidebarTab === 'detail'
                     ? 'bg-slate-800 text-white shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
@@ -44,8 +54,14 @@ export const AnalisadorPage: React.FC = () => {
               </button>
 
               <button
+                type="button"
+                role="tab"
+                id="analisador-aba-prompt"
+                aria-selected={activeSidebarTab === 'prompt'}
+                aria-controls="analisador-painel-aba"
+                aria-label="Prompt"
                 onClick={() => setSidebarTab('prompt')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                className={`flex-1 flex items-center justify-center gap-1.5 min-h-[44px] md:min-h-0 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                   activeSidebarTab === 'prompt'
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
@@ -62,8 +78,14 @@ export const AnalisadorPage: React.FC = () => {
               </button>
 
               <button
+                type="button"
+                role="tab"
+                id="analisador-aba-forensics"
+                aria-selected={activeSidebarTab === 'forensics'}
+                aria-controls="analisador-painel-aba"
+                aria-label="Auditoria"
                 onClick={() => setSidebarTab('forensics')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                className={`flex-1 flex items-center justify-center gap-1.5 min-h-[44px] md:min-h-0 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                   activeSidebarTab === 'forensics'
                     ? 'bg-purple-700 text-white shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
@@ -76,7 +98,12 @@ export const AnalisadorPage: React.FC = () => {
             </div>
 
             {/* Sidebar Content */}
-            <div className="flex-1 overflow-hidden">
+            <div
+              role="tabpanel"
+              id="analisador-painel-aba"
+              aria-labelledby={`analisador-aba-${activeSidebarTab}`}
+              className="flex-1 overflow-hidden"
+            >
               {activeSidebarTab === 'detail' ? (
                 <DetailSidebar />
               ) : activeSidebarTab === 'prompt' ? (
