@@ -150,7 +150,8 @@ export function resolverEtapaPadrao(projeto?: ProjetoPainel | null): string | nu
   if (!projeto || projeto.etapas.length === 0) return null;
   const carrinho = projeto.etapas.find((e) => e.id === 'e3-carrinho');
   if (carrinho) return carrinho.id;
-  const emAndamento = projeto.etapas.find((e) => e.estacao !== 'encerrada');
+  // Estação desconhecida não é "em andamento" (D08): só vira padrão se não houver outra.
+  const emAndamento = projeto.etapas.find((e) => e.estacao !== 'encerrada' && e.estacao !== 'desconhecida');
   if (emAndamento) return emAndamento.id;
   return projeto.etapas[projeto.etapas.length - 1].id;
 }

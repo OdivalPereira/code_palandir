@@ -54,12 +54,41 @@ export function classificarVersao(e: EntradaVersao): ResultadoVersao {
   if (e.alteracaoLocal === true) {
     return { estado: 'defasado', motivo: 'alteração local' };
   }
-  if (e.versao !== e.fonteVersao) {
+  const ordem = compararVersoes(e.versao, e.fonteVersao);
+  if (ordem === null) {
+    // Formato que não dá para comparar: diferente, mas sem afirmar quem está atrás.
+    return e.versao.trim() === e.fonteVersao.trim()
+      ? { estado: 'em_dia', motivo: '' }
+      : { estado: 'defasado', motivo: 'versão diferente da fonte' };
+  }
+  if (ordem < 0) {
     return { estado: 'defasado', motivo: 'defasado' };
+  }
+  if (ordem > 0) {
+    // Instalação mais nova que a fonte: fora de sincronia, mas não "defasada".
+    return { estado: 'defasado', motivo: 'à frente da fonte' };
   }
 
   // 3º Precedência: Só então -> em_dia
   return { estado: 'em_dia', motivo: '' };
+}
+
+/**
+ * Compara versões x.y.z (com ou sem "v" na frente). Negativo se `a` < `b`, zero se iguais,
+ * positivo se `a` > `b`; null se alguma não tiver o formato numérico (ex.: "3.4.0-rc1").
+ */
+export function compararVersoes(a: string, b: string): number | null {
+  const partes = (v: string) => {
+    const m = v.trim().replace(/^v/i, '').match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?$/);
+    return m ? [Number(m[1]), Number(m[2] ?? 0), Number(m[3] ?? 0)] : null;
+  };
+  const pa = partes(a);
+  const pb = partes(b);
+  if (!pa || !pb) return null;
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] !== pb[i]) return pa[i] - pb[i];
+  }
+  return 0;
 }
 
 /** Rótulo do selo: versão + motivo/estado, sempre em texto. */

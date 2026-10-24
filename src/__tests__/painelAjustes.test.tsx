@@ -506,3 +506,32 @@ describe('Regiões: datas legíveis e SHA curto', () => {
     expect(sha.getAttribute('title')).toBe('0123456789abcdef0123456789abcdef01234567');
   });
 });
+
+describe('Regras de versão e etapa padrão', () => {
+  it('compara versões pelo número, com ou sem "v"', async () => {
+    const { classificarVersao, compararVersoes } = await import('../painel/regras/classificarVersao');
+    expect(compararVersoes('v3.4.0', '3.4.0')).toBe(0);
+    expect(compararVersoes('3.10.0', '3.9.0')).toBeGreaterThan(0);
+    expect(compararVersoes('3.4.0-rc1', '3.4.0')).toBeNull();
+    expect(classificarVersao({ versao: 'v3.4.0', fonteVersao: '3.4.0' })).toEqual({ estado: 'em_dia', motivo: '' });
+    expect(classificarVersao({ versao: '3.1.0', fonteVersao: '3.4.0' })).toEqual({ estado: 'defasado', motivo: 'defasado' });
+    expect(classificarVersao({ versao: '3.5.0', fonteVersao: '3.4.0' })).toEqual({
+      estado: 'defasado',
+      motivo: 'à frente da fonte',
+    });
+    expect(classificarVersao({ versao: '3.4.0-rc1', fonteVersao: '3.4.0' }).motivo).toBe('versão diferente da fonte');
+  });
+
+  it('etapa padrão não escolhe uma de estação desconhecida quando há outra em andamento', async () => {
+    const { resolverEtapaPadrao } = await import('../painel/mensagem/escalaAbertura');
+    const loja = exemploOficial.projetos.find((p) => p.id === 'loja-exemplo')!;
+    const projeto = {
+      ...loja,
+      etapas: [
+        { ...loja.etapas[0], id: 'a', estacao: 'desconhecida' as const },
+        { ...loja.etapas[0], id: 'b', estacao: 'execucao' as const },
+      ],
+    };
+    expect(resolverEtapaPadrao(projeto)).toBe('b');
+  });
+});
