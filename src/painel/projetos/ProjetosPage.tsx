@@ -1,6 +1,6 @@
 import { classificarVersao, type ResultadoVersao } from '../regras/classificarVersao';
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   EstadoTela,
   MolduraPergaminho,
@@ -10,6 +10,7 @@ import {
   RPG_TITLE_STYLE,
 } from '@/app/rpgTheme';
 import { usePainelStore } from '@/stores/painelStore';
+import { pluralizar } from '../formatacao';
 import type {
   InteracaoEtapa,
   PassagemEtapa,
@@ -35,12 +36,13 @@ export const ProjetosPage: React.FC = () => {
 
   const [passagensExpandidas, setPassagensExpandidas] = useState<Record<string, boolean>>({});
 
-  // Sincroniza o parâmetro :id da URL com a store do painel
+  // Sincroniza o parâmetro :id da URL com a store do painel (só id que existe no instantâneo)
+  const paramExiste = !!paramId && !!dados?.projetos?.some((p) => p.id === paramId);
   useEffect(() => {
-    if (paramId && paramId !== projetoSelecionadoId) {
+    if (paramId && paramExiste && paramId !== projetoSelecionadoId) {
       selecionarProjeto(paramId);
     }
-  }, [paramId, projetoSelecionadoId, selecionarProjeto]);
+  }, [paramId, paramExiste, projetoSelecionadoId, selecionarProjeto]);
 
   // Trata os estados de tela D05
   if (estado === 'carregando') {
@@ -85,6 +87,27 @@ export const ProjetosPage: React.FC = () => {
     );
   }
 
+  // Região pedida pela URL que não está no instantâneo: diz isso, não mostra outra no lugar.
+  if (paramId && !paramExiste) {
+    return (
+      <div className="w-full max-w-7xl mx-auto p-3 sm:p-4 md:p-6">
+        <EstadoTela
+          estado="vazio"
+          titulo="Região não encontrada"
+          mensagem={`O projeto "${paramId}" não está no instantâneo atual.`}
+          acao={
+            <Link
+              to="/projetos"
+              className="inline-flex items-center min-h-[44px] px-4 py-2 rounded border border-amber-700 bg-stone-900 text-amber-100 text-sm font-semibold hover:bg-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+            >
+              Ver todas as regiões
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
+
   const fonteVersao = dados.pacote.fonte_versao;
 
   // Resolve o projeto ativo (URL :id tem preferência, depois store, depois primeiro projeto)
@@ -101,6 +124,7 @@ export const ProjetosPage: React.FC = () => {
     fonteVersao,
     diagnosticos: diagsProjetoAtivo.length,
   });
+  const pendenciasAtivo = projetoAtivo.pendencias?.length ?? 0;
 
   const handleSelecionarProjeto = (id: string) => {
     selecionarProjeto(id);
@@ -233,16 +257,18 @@ export const ProjetosPage: React.FC = () => {
                     {/* Pendências e Diagnósticos */}
                     <div className="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-amber-900/30 text-xs">
                       <span className="text-stone-300 font-mono">
-                        {numPendencias} {numPendencias === 1 ? 'pendência' : 'pendências'}
+                        {temDiags
+                          ? pluralizar(numPendencias, 'pendência conhecida', 'pendências conhecidas')
+                          : pluralizar(numPendencias, 'pendência', 'pendências')}
                       </span>
 
                       {temDiags && (
                         <div className="flex items-center gap-1">
                           <SeloEstado
                             estado="desconhecido"
-                            rotulo={`? ${diags.length} diagnósticos · estado desconhecido`}
+                            rotulo={`${pluralizar(diags.length, 'diagnóstico', 'diagnósticos')} · estado desconhecido`}
                           />
-                          <span className="text-[10px] font-mono font-bold uppercase px-1 py-0.2 rounded border border-purple-500 bg-purple-950/90 text-purple-200">
+                          <span className="text-[10px] font-mono font-bold uppercase px-1 py-0.5 rounded border border-purple-500 bg-purple-950/90 text-purple-200">
                             NUNCA EM DIA
                           </span>
                         </div>
@@ -256,7 +282,7 @@ export const ProjetosPage: React.FC = () => {
         </aside>
 
         {/* DETALHE DA REGIÃO SELECIONADA */}
-        <main
+        <section
           aria-label={`Detalhes da Região ${projetoAtivo.nome}`}
           className="flex-1 min-w-0 w-full space-y-4"
         >
@@ -284,12 +310,19 @@ export const ProjetosPage: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <SeloEstado
                     estado="desconhecido"
-                    rotulo={`${diagsProjetoAtivo.length} diagnósticos · estado desconhecido`}
+                    rotulo={`${pluralizar(diagsProjetoAtivo.length, 'diagnóstico', 'diagnósticos')} · estado desconhecido`}
                   />
                   <span className="text-xs font-mono font-bold uppercase px-2 py-0.5 rounded border border-purple-500 bg-purple-950 text-purple-200">
                     NUNCA EM DIA
                   </span>
                 </div>
+              ) : pendenciasAtivo > 0 ? (
+                <SeloEstado
+                  estado="atencao"
+                  rotulo={pluralizar(pendenciasAtivo, 'pendência', 'pendências')}
+                />
+              ) : nucAtivo.estado !== 'em_dia' ? (
+                <SeloEstado estado={nucAtivo.estado} rotulo="núcleo fora de dia" />
               ) : (
                 <SeloEstado estado="em_dia" rotulo="Em dia" />
               )}
@@ -641,7 +674,7 @@ export const ProjetosPage: React.FC = () => {
               )}
             </MolduraPergaminho>
           </div>
-        </main>
+        </section>
       </div>
     </div>
   );

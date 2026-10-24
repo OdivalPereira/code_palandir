@@ -46,7 +46,7 @@ describe('ProjetosPage — Regiões e Jornada (F4)', () => {
     // Diário de Campo: núcleo desconhecido, estação desconhecida, 3 diagnósticos, NUNCA EM DIA
     expect(within(lista).getByText(/nucleo: desconhecido/i)).toBeTruthy();
     expect(within(lista).getByText(/desconhecida \?/i)).toBeTruthy();
-    expect(within(lista).getByText(/\? 3 diagnósticos · estado desconhecido/i)).toBeTruthy();
+    expect(within(lista).getByText(/^3 diagnósticos · estado desconhecido$/i)).toBeTruthy();
     expect(within(lista).getByText('NUNCA EM DIA')).toBeTruthy();
   });
 
