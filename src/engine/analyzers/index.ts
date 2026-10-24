@@ -22,12 +22,13 @@ export function analyzeProject(files: ProjectFile[]): ProjectAnalysis {
 
   for (const file of files) {
     let comps: UIComponent[] = [];
-    if (reactAnalyzer.canHandle(file)) {
+    // Angular first: the React analyzer accepts any .ts file and would shadow *.component.ts.
+    if (angularAnalyzer.canHandle(file)) {
+      comps = angularAnalyzer.analyzeComponents(file);
+    } else if (reactAnalyzer.canHandle(file)) {
       comps = reactAnalyzer.analyzeComponents(file);
     } else if (vueAnalyzer.canHandle(file)) {
       comps = vueAnalyzer.analyzeComponents(file);
-    } else if (angularAnalyzer.canHandle(file)) {
-      comps = angularAnalyzer.analyzeComponents(file);
     }
 
     for (const comp of comps) {

@@ -241,3 +241,55 @@ describe('Importação do GitHub abandonada', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('Parser: o que não é componente não vira componente', () => {
+  const arquivo = (path: string, content: string) => ({ path, content, size: content.length, language: 'tsx' });
+  const nomes = (files: ReturnType<typeof arquivo>[]) => {
+    const a = analyzeProject(files as never);
+    return [...a.pages, ...a.components].map((c) => c.name);
+  };
+
+  it('handlers GET/POST e constantes em maiúsculas não são componentes', () => {
+    const n = nomes([
+      arquivo(
+        'app/api/users/route.ts',
+        'export async function GET() { return Response.json([]); }\nexport async function POST(req: Request) { return new Response(null); }\nexport const API_URL = () => "/api";'
+      ),
+    ]);
+    expect(n).not.toContain('GET');
+    expect(n).not.toContain('POST');
+    expect(n).not.toContain('API_URL');
+  });
+
+  it('um serviço .ts com Promise<void> não ganha componente com o nome do arquivo', () => {
+    const n = nomes([
+      arquivo('src/services/api.ts', 'export async function salvar(): Promise<void> { await fetch("/api/x"); }'),
+      arquivo('src/services/ApiClient.ts', 'export const criar = (): Map<string, number> => new Map();'),
+    ]);
+    expect(n).not.toContain('Api');
+    expect(n).not.toContain('ApiClient');
+  });
+
+  it('Overview.tsx não é página; LoginPage.tsx é', () => {
+    const a = analyzeProject([
+      arquivo('src/components/Overview.tsx', 'export function Overview() { return <section />; }\nfunction Row() { return <div />; }'),
+      arquivo('src/screens/LoginPage.tsx', 'export function LoginPage() { return <form />; }'),
+    ] as never);
+    expect(a.pages.map((p) => p.name)).toContain('LoginPage');
+    expect(a.pages.map((p) => p.name)).not.toContain('Overview');
+    expect(a.pages.map((p) => p.name)).not.toContain('Row');
+  });
+
+  it('componente Angular passa pelo analisador de Angular', () => {
+    const a = analyzeProject([
+      arquivo(
+        'src/app/hero/hero.component.ts',
+        "import { Component } from '@angular/core';\n@Component({ selector: 'app-hero', template: '<button (click)=\"salvar()\">Salvar</button>' })\nexport class HeroComponent { constructor(private heroService: HeroService) {} salvar() {} }"
+      ),
+    ] as never);
+    const hero = [...a.pages, ...a.components].find((c) => c.name === 'HeroComponent');
+    expect(hero).toBeDefined();
+    // só o analisador de Angular reconhece serviço injetado
+    expect(hero!.stores.map((st) => [st.storeName, st.type])).toContainEqual(['HeroService', 'angular-service']);
+  });
+});

@@ -56,6 +56,11 @@ export function looksLikeStoreHook(name: string): boolean {
   return !REACT_BUILTIN_HOOKS.has(name) && /^use\w*(?:Store|State)$/.test(name);
 }
 
+/** PascalCase, not ALL_CAPS: LoginForm yes; GET, POST, API_URL no. */
+function isComponentName(name: string): boolean {
+  return /^[A-Z]/.test(name) && !/^[A-Z0-9_]+$/.test(name);
+}
+
 function safeParseAst(content: string) {
   // 1. Primary parse attempt with full modern plugin suite and errorRecovery: true
   try {
@@ -114,7 +119,8 @@ export function parseSourceWithBabel(
     /(?:^|\/)app\/(?:.+[\\/])?page\.(?:tsx|jsx|js|ts)$/i.test(filePath) ||
     (/(?:^|\/)pages\/.+\.(?:tsx|jsx|js|ts)$/i.test(filePath) && !/(?:_app|_document|_error|[\/\\]api[\/\\])/i.test(filePath)) ||
     /(?:^|\/)views\/.+\.(?:tsx|jsx|vue|svelte|js|ts)$/i.test(filePath) ||
-    /(?:Page|View)\.(?:tsx|jsx|vue|svelte|js|ts)$/i.test(filename);
+    // Case-sensitive: LoginPage.tsx and HomeView.vue are pages; Overview.tsx and Preview.tsx are not.
+    /(?:Page|View)\.(?:tsx|jsx|vue|svelte|js|ts)$/.test(filename);
 
   const ast = safeParseAst(content);
 
@@ -128,8 +134,8 @@ export function parseSourceWithBabel(
             const name = path.node?.id?.name;
             if (!name) return;
 
-            // React component convention: Capitalized name
-            if (/^[A-Z]/.test(name)) {
+            // React component convention: Capitalized name (GET/POST route handlers are not components)
+            if (isComponentName(name)) {
               processComponentNode(path, name);
             }
           } catch {
@@ -143,7 +149,7 @@ export function parseSourceWithBabel(
             if (path.node?.id?.type !== 'Identifier') return;
             const name = path.node.id.name;
 
-            if (!/^[A-Z]/.test(name)) return;
+            if (!isComponentName(name)) return;
 
             const init = path.node.init;
             if (init) {
@@ -651,13 +657,13 @@ function extractComponentsWithRegex(content: string, filePath: string, isLikelyP
   // Function declarations: export function Header, function Header, export default function Header
   const funcMatches = content.matchAll(/(?:export\s+)?(?:default\s+)?function\s+([A-Z][A-Za-z0-9_]*)\s*\(/g);
   for (const m of funcMatches) {
-    names.add(m[1]);
+    if (isComponentName(m[1])) names.add(m[1]);
   }
 
   // Const/let/var declarations: const Header = () =>, export const Header: React.FC = () =>
   const varMatches = content.matchAll(/(?:export\s+)?(?:const|let|var)\s+([A-Z][A-Za-z0-9_]*)\s*(?::[^=]+)?\s*=\s*(?:(?:\([^)]*\)|[a-zA-Z0-9_]+)\s*=>|function\b|React\.memo|memo|React\.forwardRef|forwardRef)/g);
   for (const m of varMatches) {
-    names.add(m[1]);
+    if (isComponentName(m[1])) names.add(m[1]);
   }
 
   // Class declarations: class Header extends ...
@@ -667,10 +673,13 @@ function extractComponentsWithRegex(content: string, filePath: string, isLikelyP
   }
 
   // If no explicit component name found, but file is a page, or PascalCase filename, or contains JSX:
-  if (names.size === 0) {
+  // A plain .ts file cannot hold JSX, and `Promise<void>` is a generic, not a tag: such a file only
+  // yields the components it declares, never one named after the file.
+  const isPlainTs = /\.[cm]?ts$/.test(filePath);
+  if (names.size === 0 && !isPlainTs) {
     const basename = filePath.split('/').pop()?.replace(/\.[^/.]+$/, '') || '';
     const isPascalCase = /^[A-Z][A-Za-z0-9_]*$/.test(basename);
-    const hasJSX = /<[A-Za-z][^>]*>/.test(content);
+    const hasJSX = /<\/[A-Za-z][A-Za-z0-9.]*>|<[A-Za-z][A-Za-z0-9.]*(?:\s[^<>]*)?\/>/.test(content);
     if (isLikelyPage || isPascalCase || hasJSX) {
       const fallbackName = isPascalCase ? basename : (basename.charAt(0).toUpperCase() + basename.slice(1) || 'Component');
       names.add(fallbackName);
