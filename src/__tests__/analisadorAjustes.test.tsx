@@ -289,6 +289,17 @@ describe('Parser: o que não é componente não vira componente', () => {
     expect(a.pages.map((p) => p.name)).not.toContain('Row');
   });
 
+  it('reconhece a classe Angular decorada sem exigir sufixo nem escolher a auxiliar', () => {
+    const a = analyzeProject([arquivo('src/app/app.ts', `
+      import { Component } from '@angular/core';
+      export class Helper {}
+      @Component({ selector: 'app-root', template: '<button>Salvar</button>' })
+      export class App { constructor(private data: DataService) {} }
+    `)] as never);
+    expect([...a.pages, ...a.components].map((c) => c.name)).toEqual(['App']);
+    expect(a.stores.map((s) => s.storeName)).toContain('DataService');
+  });
+
   it('componente Angular passa pelo analisador de Angular', () => {
     const a = analyzeProject([
       arquivo(
