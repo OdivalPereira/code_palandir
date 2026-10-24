@@ -192,7 +192,7 @@ export const HojePage: React.FC = () => {
                       </ul>
                     ) : (
                       <p className="text-xs font-mono text-purple-200">
-                        nucleo: null (sem bloco da Sociedade identificado)
+                        núcleo: desconhecido (o coletor não informou o motivo)
                       </p>
                     )}
                   </div>

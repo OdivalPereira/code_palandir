@@ -535,3 +535,22 @@ describe('Regras de versão e etapa padrão', () => {
     expect(resolverEtapaPadrao(projeto)).toBe('b');
   });
 });
+
+describe('Terras em Névoa sem diagnóstico', () => {
+  beforeEach(() => {
+    usePainelStore.getState().resetar();
+  });
+  it('núcleo nulo sem diagnóstico não inventa o motivo', () => {
+    const loja = exemploOficial.projetos.find((p) => p.id === 'loja-exemplo')!;
+    usePainelStore.setState({
+      dados: { ...exemploOficial, diagnosticos: [], projetos: [{ ...loja, nucleo: null }] },
+    });
+    render(
+      <MemoryRouter>
+        <HojePage />
+      </MemoryRouter>
+    );
+    expect(screen.getByText(/núcleo: desconhecido \(o coletor não informou o motivo\)/)).toBeTruthy();
+    expect(screen.queryByText(/sem bloco da Sociedade/)).toBeNull();
+  });
+});
