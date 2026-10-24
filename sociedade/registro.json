@@ -1,5 +1,5 @@
 {
-  "atualizado_em": "2026-10-24T07:11:53.154138+00:00",
+  "atualizado_em": "2026-10-24T07:17:08.917440+00:00",
   "caminho_canonico": "/home/odival/Documentos/Projetos/code_palandir",
   "criado_em": "2026-10-07T18:16:25.686486+00:00",
   "eventos": [
@@ -369,11 +369,34 @@
       "simulacao": false,
       "timestamp": "2026-10-24T07:11:53.154102+00:00",
       "tipo": "etapa_encerrada"
+    },
+    {
+      "autor": "Coordenador",
+      "dados": {
+        "autorizacao_ref": "ordem_sha256:dc11d933219c53d1",
+        "base_efetiva": "2028ff234b9c6b7fdd6ba3692117fd56546f08aa",
+        "criterios": [
+          "portao"
+        ],
+        "etapa_id": "p2b-versao",
+        "exigir_revisao": true,
+        "limites": "—",
+        "nivel": "2",
+        "objetivo": "Ordem p2b-versao — os dois resíduos do A1 (desconhecido continua desconhecido)",
+        "origem": "real",
+        "plano_ref": "ordem:sociedade/ordens/p2b-versao.md",
+        "responsavel": "Coordenador"
+      },
+      "id": "EVT-000016",
+      "seq": 16,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:17:08.917413+00:00",
+      "tipo": "etapa_aberta"
     }
   ],
   "projeto_id": "code-palandir",
   "resumos_externos": {},
-  "revisao": 16,
+  "revisao": 17,
   "versao_formato": "2.1.0",
   "versao_inicial": "418e385391fa3a1470a51847298aad613a746a4a"
 }
