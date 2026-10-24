@@ -27,6 +27,7 @@ import {
   cenarioParcial,
   cenarioInvalido,
 } from '../painel/fixtures/cenarios';
+import { exemploOficialLiteral } from '../painel/fixtures/exemploOficial';
 import { FonteFixture } from '../painel/fonte/FonteFixture';
 import { usePainelStore } from '../stores/painelStore';
 
@@ -73,6 +74,15 @@ describe('Contrato e Fonte no Front (painel/1)', () => {
       expect(loja.nome).toBe('Loja Exemplo');
       expect(receitas.nome).toBe('App Receitas');
       expect(diario.nome).toBe('Diário de Campo');
+    });
+
+    it('literal TypeScript do exemplo é igual, campo a campo, ao JSON oficial lido do disco', () => {
+      const raiz = path.resolve(__dirname, '../..');
+      const json = JSON.parse(
+        fs.readFileSync(path.join(raiz, 'sociedade/central/painel-1.exemplo.json'), 'utf8'),
+      );
+      expect(exemploOficialLiteral).toStrictEqual(json);
+      expect(exemploOficial).toStrictEqual(json);
     });
 
     it('exercita exaustivamente tipos literais do contrato', () => {

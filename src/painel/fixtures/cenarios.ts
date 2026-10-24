@@ -1,10 +1,10 @@
-import exemploOficialJson from '../../../sociedade/central/painel-1.exemplo.json';
 import type { Painel1 } from '../contrato/painel1.types';
+import { exemploOficialLiteral } from './exemploOficial';
 
 /**
  * Exemplo oficial congelado da Sociedade do Código.
  */
-export const exemploOficial: Painel1 = exemploOficialJson as unknown as Painel1;
+export const exemploOficial: Painel1 = exemploOficialLiteral;
 
 /**
  * Cenário válido baseado no exemplo oficial.
