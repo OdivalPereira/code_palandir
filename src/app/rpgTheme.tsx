@@ -344,7 +344,7 @@ export const RegiaoMapa: React.FC<RegiaoMapaProps> = ({
             </span>
           ))}
           {pastas.length > 4 && (
-            <span className="text-[10px] text-stone-500 font-mono self-center">
+            <span className="text-[10px] text-stone-400 font-mono self-center">
               +{pastas.length - 4}
             </span>
           )}

@@ -77,6 +77,113 @@ describe('Suíte de Acessibilidade e D05 — Painel RPG (F5)', () => {
   });
 
   /* =========================================================================
+     1b. CONTRASTE DE TODO PAR TEXTO/FUNDO DA CASCA E DOS SELOS (COM OPACIDADE)
+     Cada classe de cor de texto presente nos fontes tem de constar na tabela
+     abaixo; cor nova sem par quebra o teste "cobertura".
+     ========================================================================= */
+  describe('1b. Pares texto/fundo da casca e do rpgTheme, com fundo composto', () => {
+    const PALETA: Record<string, string> = {
+      'stone-100': '#f5f5f4', 'stone-200': '#e7e5e4', 'stone-300': '#d6d3d1', 'stone-400': '#a8a29e',
+      'stone-500': '#78716c', 'stone-600': '#57534e', 'stone-700': '#44403c', 'stone-800': '#292524',
+      'stone-900': '#1c1917', 'stone-950': '#0c0a09',
+      'amber-100': '#fef3c7', 'amber-200': '#fde68a', 'amber-300': '#fcd34d', 'amber-400': '#fbbf24',
+      'amber-500': '#f59e0b', 'amber-950': '#451a03',
+      'emerald-200': '#a7f3d0', 'emerald-300': '#6ee7b7', 'emerald-950': '#022c22',
+      'purple-200': '#e9d5ff', 'purple-300': '#d8b4fe', 'purple-950': '#3b0764',
+      'rose-200': '#fecdd3', 'rose-300': '#fda4af', 'rose-950': '#4c0519',
+    };
+
+    type RGB = [number, number, number];
+    const rgb = (hex: string): RGB => [1, 3, 5].map((i) => parseInt(hex.substring(i, i + 2), 16)) as RGB;
+    const hex = (c: RGB) => '#' + c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+
+    /** "stone-900/75" sobre a base. Sem barra, opacidade 100%. */
+    function compor(base: RGB, camada: string): RGB {
+      const [nome, op] = camada.split('/');
+      const a = op === undefined ? 1 : Number(op) / 100;
+      const c = rgb(PALETA[nome]);
+      return [0, 1, 2].map((i) => a * c[i] + (1 - a) * base[i]) as RGB;
+    }
+    const fundoComposto = (camadas: string[]) => camadas.reduce<RGB>(compor, rgb(PALETA['stone-950']));
+
+    /* Camadas de fundo reais, de baixo para cima (a base é sempre stone-950). */
+    const CABECALHO = ['stone-900/95'];
+    const LATERAL = ['stone-900/75'];
+    const RESERVADO = ['stone-900/75', 'stone-950/40'];
+    const BARRA_MOVEL = ['stone-900/95'];
+    const CARTAO = ['stone-900/95'];
+    const SELO_EM_DIA = ['stone-900/95', 'emerald-950/60'];
+    const SELO_ATENCAO = ['stone-900/95', 'amber-950/60'];
+    const SELO_DESC = ['stone-900/95', 'purple-950/60'];
+    const SELO_ERRO = ['stone-900/95', 'rose-950/60'];
+
+    const PARES: Record<string, string[][]> = {
+      'text-stone-100': [[...LATERAL, 'stone-800/80']],
+      'text-stone-200': [[], CABECALHO, CARTAO, ['purple-950/30'], ['rose-950/30'], BARRA_MOVEL],
+      'text-stone-300': [LATERAL, CARTAO, ['stone-900/40'], ['stone-900/50']],
+      'text-stone-400': [
+        CABECALHO, LATERAL, [...LATERAL, 'amber-950/80'], RESERVADO, [...RESERVADO, 'stone-900'], BARRA_MOVEL, CARTAO,
+        [...CARTAO, 'stone-900/70'], ['stone-950'],
+      ],
+      'text-amber-100': [CABECALHO, CARTAO, [...LATERAL, 'amber-950/80']],
+      'text-amber-200': [
+        SELO_ATENCAO, ['stone-950'], ['stone-900'], [...CARTAO, 'amber-950/80'],
+        ['amber-950/20'],
+      ],
+      'text-amber-300': [[...BARRA_MOVEL, 'amber-950/50'], CARTAO],
+      'text-amber-400': [['stone-950'], ['stone-900'], [...RESERVADO, 'stone-900']],
+            'text-emerald-200': [['emerald-950/20']],
+      'text-emerald-300': [SELO_EM_DIA, [...CARTAO, 'emerald-950/40']],
+      'text-purple-200': [SELO_DESC],
+      'text-purple-300': [CARTAO],
+      'text-rose-200': [SELO_ERRO, ['rose-950/20']],
+      'text-rose-300': [['rose-950/20', 'stone-950/80']],
+    };
+    // Texto com opacidade (ex.: amber-500/70): par próprio, texto composto sobre o fundo.
+    const PARES_COM_OPACIDADE: Array<{ classe: string; fundos: string[][] }> = [
+      { classe: 'text-amber-500/80', fundos: [LATERAL, BARRA_MOVEL] },
+      { classe: 'text-amber-500/70', fundos: [RESERVADO] },
+      { classe: 'text-amber-400/80', fundos: [['stone-900']] },
+    ];
+
+    const fontes = ['../app/PainelShell.tsx', '../app/rpgTheme.tsx'].map((f) =>
+      fs.readFileSync(path.resolve(__dirname, f), 'utf-8'),
+    );
+    const RE_COR_TEXTO = /(?<![\w-])text-(?:stone|amber|emerald|purple|rose|slate|white|black)(?:-\d+)?(?:\/\d+)?/g;
+    const classesNosFontes = new Set(fontes.flatMap((src) => src.match(RE_COR_TEXTO) ?? []));
+
+    it('cobertura: toda cor de texto usada na casca e no rpgTheme tem par na tabela, e vice-versa', () => {
+      const tabela = new Set([...Object.keys(PARES), ...PARES_COM_OPACIDADE.map((p) => p.classe)]);
+      const semPar = [...classesNosFontes].filter((c) => !tabela.has(c));
+      const sobrando = [...tabela].filter((c) => !classesNosFontes.has(c));
+      expect(semPar).toEqual([]);
+      expect(sobrando).toEqual([]);
+    });
+
+    const todos: Array<{ id: string; texto: RGB; fundo: RGB; fundoHex: string }> = [];
+    Object.entries(PARES).forEach(([classe, lista]) => {
+      lista.forEach((camadas) => {
+        const nome = classe.replace('text-', '');
+        const fundo = fundoComposto(camadas);
+        todos.push({ id: `${classe} sobre [${camadas.join(' > ') || 'stone-950'}]`, texto: rgb(PALETA[nome]), fundo, fundoHex: hex(fundo) });
+      });
+    });
+    PARES_COM_OPACIDADE.forEach(({ classe, fundos }) => {
+      fundos.forEach((camadas) => {
+        const fundo = fundoComposto(camadas);
+        const texto = compor(fundo, classe.replace('text-', ''));
+        todos.push({ id: `${classe} sobre [${camadas.join(' > ')}]`, texto, fundo, fundoHex: hex(fundo) });
+      });
+    });
+
+    todos.forEach(({ id, texto, fundo, fundoHex }) => {
+      it(`${id} (fundo composto ${fundoHex}) >= 4.5:1`, () => {
+        expect(calcularRazaoContrasteWCAG(hex(texto), hex(fundo))).toBeGreaterThanOrEqual(4.5);
+      });
+    });
+  });
+
+  /* =========================================================================
      2. SEMÂNTICA SEM DEPENDER SÓ DE COR OU ORNAMENTO
      ========================================================================= */
   describe('2. Semântica com ícone/símbolo + rótulo textual explícito', () => {

@@ -52,7 +52,7 @@ export const PainelShell: React.FC<PainelShellProps> = ({ children }) => {
             </div>
             <div className="flex items-center gap-1.5 text-[11px] text-stone-400 font-mono leading-none">
               <span className="truncate">notebook-exemplo</span>
-              <span className="text-stone-600">•</span>
+              <span className="text-stone-400">•</span>
               <time dateTime="2026-10-23T15:00:00Z" className="truncate">
                 23/10 15:00Z
               </time>
@@ -148,7 +148,7 @@ export const PainelShell: React.FC<PainelShellProps> = ({ children }) => {
                 {/* 4. Sociedade (Cartas — Reservado Fase B · p3) */}
                 <div
                   aria-disabled="true"
-                  className="min-h-[44px] flex items-center justify-between px-3 py-2 rounded-md text-sm border border-stone-800/60 bg-stone-950/40 text-stone-500 cursor-not-allowed select-none"
+                  className="min-h-[44px] flex items-center justify-between px-3 py-2 rounded-md text-sm border border-stone-800/60 bg-stone-950/40 text-stone-400 cursor-not-allowed select-none"
                   title="Reservado para Fase B · p3"
                 >
                   <div className="flex items-center gap-3">
@@ -159,7 +159,7 @@ export const PainelShell: React.FC<PainelShellProps> = ({ children }) => {
                       <span className="font-serif text-xs tracking-wide font-medium">
                         Sociedade
                       </span>
-                      <span className="text-[10px] text-stone-600 font-sans">Cartas dos Agentes</span>
+                      <span className="text-[10px] text-stone-400 font-sans">Cartas dos Agentes</span>
                     </div>
                   </div>
                   <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-amber-900/60 bg-stone-900 text-amber-400/80">
@@ -171,14 +171,14 @@ export const PainelShell: React.FC<PainelShellProps> = ({ children }) => {
 
             {/* Seção 2: Centro de Comando (Reservado Fase B · p3) */}
             <div>
-              <div className="px-2 mb-2 text-[10px] font-mono uppercase tracking-wider text-stone-500 font-bold">
+              <div className="px-2 mb-2 text-[10px] font-mono uppercase tracking-wider text-stone-400 font-bold">
                 Centro de Comando
               </div>
               <div className="space-y-1">
                 {/* Tarefa nova */}
                 <div
                   aria-disabled="true"
-                  className="min-h-[44px] flex items-center justify-between px-3 py-2 rounded-md text-xs border border-stone-800/60 bg-stone-950/40 text-stone-500 cursor-not-allowed select-none"
+                  className="min-h-[44px] flex items-center justify-between px-3 py-2 rounded-md text-xs border border-stone-800/60 bg-stone-950/40 text-stone-400 cursor-not-allowed select-none"
                   title="Reservado para Fase B · p3"
                 >
                   <div className="flex items-center gap-2">
@@ -195,7 +195,7 @@ export const PainelShell: React.FC<PainelShellProps> = ({ children }) => {
                 {/* Perguntas */}
                 <div
                   aria-disabled="true"
-                  className="min-h-[44px] flex items-center justify-between px-3 py-2 rounded-md text-xs border border-stone-800/60 bg-stone-950/40 text-stone-500 cursor-not-allowed select-none"
+                  className="min-h-[44px] flex items-center justify-between px-3 py-2 rounded-md text-xs border border-stone-800/60 bg-stone-950/40 text-stone-400 cursor-not-allowed select-none"
                   title="Reservado para Fase B · p3"
                 >
                   <div className="flex items-center gap-2">
@@ -212,7 +212,7 @@ export const PainelShell: React.FC<PainelShellProps> = ({ children }) => {
                 {/* Conversa */}
                 <div
                   aria-disabled="true"
-                  className="min-h-[44px] flex items-center justify-between px-3 py-2 rounded-md text-xs border border-stone-800/60 bg-stone-950/40 text-stone-500 cursor-not-allowed select-none"
+                  className="min-h-[44px] flex items-center justify-between px-3 py-2 rounded-md text-xs border border-stone-800/60 bg-stone-950/40 text-stone-400 cursor-not-allowed select-none"
                   title="Reservado para Fase B · p3"
                 >
                   <div className="flex items-center gap-2">
@@ -303,13 +303,13 @@ export const PainelShell: React.FC<PainelShellProps> = ({ children }) => {
         {/* 4. Sociedade (Reservado) */}
         <div
           aria-disabled="true"
-          className="min-h-[44px] min-w-[44px] flex flex-col items-center justify-center px-2 py-1 text-stone-600 cursor-not-allowed select-none"
+          className="min-h-[44px] min-w-[44px] flex flex-col items-center justify-center px-2 py-1 text-stone-400 cursor-not-allowed select-none"
           title="Sociedade (Cartas) — Fase B · p3"
         >
           <span className="text-base opacity-40 select-none" aria-hidden="true">
             🃏
           </span>
-          <span className="text-[10px] tracking-tight text-amber-500/60">p3</span>
+          <span className="text-[10px] tracking-tight text-amber-500/80">p3</span>
         </div>
       </nav>
     </div>
