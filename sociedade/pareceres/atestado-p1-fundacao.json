@@ -1,0 +1,150 @@
+{
+  "tipo": "atestado_pre_devolucao",
+  "versao": "1.3.0",
+  "timestamp": "2026-10-24T06:56:55.481684Z",
+  "papel": "Coordenador",
+  "etapa_id": "p1-fundacao",
+  "fatia_id": "N/A",
+  "status": "APROVADO",
+  "verificacoes": {
+    "higiene_pastas": {
+      "ok": true,
+      "erros": []
+    },
+    "build": {
+      "ok": true,
+      "comando": "npm run build",
+      "detalhes": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+      "codigo": 0
+    },
+    "tipos_estaticos": {
+      "ok": true,
+      "comando": "npx tsc --noEmit",
+      "detalhes": "",
+      "codigo": 0
+    },
+    "compilacao": {
+      "ok": true,
+      "erros": []
+    },
+    "seguranca_antitoken": {
+      "ok": true,
+      "erros": []
+    },
+    "disjuncao": {
+      "ok": true,
+      "erros": []
+    },
+    "testes": {
+      "ok": true,
+      "detalhes": "app: 140 testes, 0 pulados, 66.0 s | banco: 17 testes, 0 pulados, 38.4 s",
+      "comando": "app: npm test && npx tsc --noEmit && npm run build; banco: supabase db reset && supabase test db && node --test supabase/functions/",
+      "totais": {
+        "total": 157,
+        "pulados": 0,
+        "falhos": 0
+      }
+    },
+    "arvore_limpa": {
+      "ok": true,
+      "suja": []
+    }
+  },
+  "commit": "073f620d77234c5eaf61a19fec3fecac3e80249c",
+  "base": "00970bcfce70319863acbec8403f5f67654e03d1",
+  "origem_arquivos": "git",
+  "total_arquivos_inspecionados": 16,
+  "arquivos_removidos": [],
+  "commits_ignorados": [
+    "22ec84a1ec021358aa77985b0b33785298217167",
+    "7357be617e86f8f7b5c2bcc83a46142bc9e99c3e",
+    "7a55b29a14df9e24933f7843529d88c66914fbd1"
+  ],
+  "python": "3.12.3",
+  "hashes_artefatos": {
+    ".gitignore": "f74c1b0c427b867c5686c0438a9fc1bad102834e0b3c77ffa9863fc656801f4e",
+    "scripts/enviar-exemplo.mjs": "307aefb5f0be59431b0b2d6537e4f087d8fc023614f599f2063f6bc968f66876",
+    "scripts/nova-maquina.mjs": "a600dde57158a9680e7e7c1f26d34269b975e7d22305c28c93e7d09b6e68ecd0",
+    "supabase/.gitignore": "507699eb91144818edf61d3a079212cacf31d8db520eae428e3b48fcf0d6919c",
+    "supabase/config.toml": "d9d81719058265e7d4a71a8a68d5090ccc832ec1191e654e7f5b0b735ef62b23",
+    "supabase/functions/_shared/ingest.ts": "c9db751952453fee54b4e9979329298eff218f66cc309f8a3e074b1ea935641e",
+    "supabase/functions/_shared/painel-1.schema.json": "fdf345d7dbfd654e8cd64f2f432b500ae02a5de2004af553148a63c4e7d56a2c",
+    "supabase/functions/index.js": "c43f039e1c49e699fc12c1d9551d6a224ca6ee87da04b21232958b19ce9060f8",
+    "supabase/functions/ingest.test.mjs": "a410ba9a9b34b8256502417d7f9ebca32ce7b922f10200fd9beb15e01efd9579",
+    "supabase/functions/ingest/index.ts": "775aa69ed4348bc6d2537b62521ae17e83df7f5dd71c81dd6990c56a0867968a",
+    "supabase/migrations/20261023000000_p1_fundacao.sql": "dde29aecf3b1942cccf3523684a544b2fb6ba39354d59cd65e22f87bec05b414",
+    "supabase/migrations/20261024000000_p1_ingest_atomico.sql": "3220f7b1458cd9dfa5254712c602ca678d2c16bf22ae6101e31fdef5f1fa3e42",
+    "supabase/seed.sql": "e6d660382159e17dfddfb9fb95dd5e6684fd7b8334fb3ba020fd846df523d79c",
+    "supabase/tests/001_rls_painel.test.sql": "43f7c47fe95f6f8195073feaf6b33da6d89c70b45b3dd7c11d34d003f8d66899",
+    "supabase/tests/002_ingest_registrar.test.sql": "2f556701d02f390a4e008b06b0e2fa763752d70866cd897fa66c3315ee179b2b",
+    "vitest.config.ts": "5667b96d134d37ec819266976533a6073edd5459aba9ef03a9a5e5e8aa36c113"
+  },
+  "arquivos_inspecionados": [
+    ".gitignore",
+    "scripts/enviar-exemplo.mjs",
+    "scripts/nova-maquina.mjs",
+    "supabase/.gitignore",
+    "supabase/config.toml",
+    "supabase/functions/_shared/ingest.ts",
+    "supabase/functions/_shared/painel-1.schema.json",
+    "supabase/functions/index.js",
+    "supabase/functions/ingest.test.mjs",
+    "supabase/functions/ingest/index.ts",
+    "supabase/migrations/20261023000000_p1_fundacao.sql",
+    "supabase/migrations/20261024000000_p1_ingest_atomico.sql",
+    "supabase/seed.sql",
+    "supabase/tests/001_rls_painel.test.sql",
+    "supabase/tests/002_ingest_registrar.test.sql",
+    "vitest.config.ts"
+  ],
+  "erros": [],
+  "portao": {
+    "modo": "por_area",
+    "perfil": "sociedade/perfil.md",
+    "perfil_sha256": "dceedb1cf00b285b70bd174e8ca6247adc7257c56ff945870ddc80b01754a95f",
+    "commit": "073f620d77234c5eaf61a19fec3fecac3e80249c",
+    "area_pedida": null,
+    "areas_tocadas": [
+      "app",
+      "banco"
+    ],
+    "cobertura_completa": true,
+    "areas": [
+      {
+        "area": "app",
+        "pasta": ".",
+        "comando": "npm test && npx tsc --noEmit && npm run build",
+        "timeout_s": 900,
+        "ok": true,
+        "codigo": 0,
+        "duracao_s": 66.0,
+        "timeout_estourado": false,
+        "testes": {
+          "total": 140,
+          "pulados": 0,
+          "falhos": 0
+        },
+        "motivos": [],
+        "saida_final": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n✓ built in 25.20s"
+      },
+      {
+        "area": "banco",
+        "pasta": ".",
+        "comando": "supabase db reset && supabase test db && node --test supabase/functions/",
+        "timeout_s": 900,
+        "ok": true,
+        "codigo": 0,
+        "duracao_s": 38.4,
+        "timeout_estourado": false,
+        "testes": {
+          "total": 17,
+          "pulados": 0,
+          "falhos": 0
+        },
+        "motivos": [],
+        "saida_final": "ℹ pass 17\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2053.894311"
+      }
+    ]
+  },
+  "atestado_hash": "990df13ee33423241a32152ae993fd6ed72f6703424127a4b10b8df09b075a6d"
+}
