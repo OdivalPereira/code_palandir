@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { PainelShell, tituloDaRota } from '../app/PainelShell';
 import { PaginaNaoEncontrada, ROUTER_FUTURE } from '../app/App';
+import { MarcoJornada } from '../app/rpgTheme';
 import { ProjetosPage } from '../painel/projetos/ProjetosPage';
 import { HojePage } from '../painel/hoje/HojePage';
 import { PergaminhoAbertura } from '../painel/mensagem/PergaminhoAbertura';
@@ -398,5 +399,44 @@ describe('Casca: navegação acessível', () => {
     const movel = screen.getByRole('navigation', { name: 'Navegação Móvel' });
     expect(within(movel).getByText('Sociedade')).toBeTruthy();
     expect(within(movel).getByText(/reservado para a fase B, p3/)).toBeTruthy();
+  });
+});
+
+describe('MarcoJornada', () => {
+  it('é um grupo rotulado, não um landmark de navegação', () => {
+    render(<MarcoJornada estacaoAtual="revisao" rotulo="Marcos da etapa e3-carrinho" />);
+    expect(screen.getByRole('group', { name: 'Marcos da etapa e3-carrinho' })).toBeTruthy();
+    expect(screen.queryByRole('navigation')).toBeNull();
+  });
+
+  it('diz em texto quais estações foram concluídas, além da cor', () => {
+    render(<MarcoJornada estacaoAtual="revisao" />);
+    const itens = screen.getAllByRole('listitem');
+    expect(itens[0].textContent).toContain('(concluída)');
+    expect(itens[4].textContent).toContain('(estação atual)');
+    expect(itens[5].textContent).toContain('(a percorrer)');
+  });
+
+  it('jornada encerrada marca as seis estações como concluídas', () => {
+    render(<MarcoJornada estacaoAtual="encerrada" />);
+    for (const item of screen.getAllByRole('listitem')) {
+      expect(item.textContent).toContain('(concluída)');
+    }
+  });
+});
+
+describe('Regiões: uma tela, muitos selos, nenhuma região viva extra', () => {
+  beforeEach(() => {
+    usePainelStore.getState().resetar();
+  });
+  it('a tela Regiões não tem dezenas de role=status', () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={['/projetos/loja-exemplo']}>
+        <Routes>
+          <Route path="/projetos/:id" element={<ProjetosPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(container.querySelectorAll('[role="status"]').length).toBeLessThanOrEqual(1);
   });
 });

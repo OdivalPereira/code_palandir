@@ -373,7 +373,10 @@ export const ProjetosPage: React.FC = () => {
                             )}
                           </div>
                         </div>
-                        <MarcoJornada estacaoAtual={etapa.estacao} />
+                        <MarcoJornada
+                          estacaoAtual={etapa.estacao}
+                          rotulo={`Marcos da etapa ${etapa.id}`}
+                        />
                       </div>
                     );
                   })}

@@ -141,9 +141,10 @@ export const SeloEstado: React.FC<SeloEstadoProps> = ({
   const texto = rotulo || conf.rotuloPadrao;
 
   return (
+    // Selo estático: sem role="status". Uma tela tem dezenas deles, e regiões vivas
+    // fariam o leitor de tela anunciar todos a cada troca de projeto.
     <Badge
       className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium border rounded font-mono shadow-sm ${conf.classes} ${className}`}
-      role="status"
     >
       <span className="font-bold select-none" aria-hidden="true">
         {conf.simbolo}
@@ -169,6 +170,8 @@ export type EstacaoJornada =
 
 export interface MarcoJornadaProps {
   estacaoAtual?: EstacaoJornada | string | null;
+  /** Nome do grupo para leitor de tela (ex.: "Marcos da etapa e3-carrinho"). */
+  rotulo?: string;
   className?: string;
 }
 
@@ -183,17 +186,20 @@ const ESTACOES_ORDENADAS: Array<{ id: EstacaoJornada; rotulo: string; icone: str
 
 export const MarcoJornada: React.FC<MarcoJornadaProps> = ({
   estacaoAtual,
+  rotulo = 'Marcos da Jornada',
   className = '',
 }) => {
   const normalizada = (estacaoAtual || '').toLowerCase() as EstacaoJornada;
   const indiceAtual = ESTACOES_ORDENADAS.findIndex((e) => e.id === normalizada);
+  const encerrada = normalizada === 'encerrada';
 
+  // Um passo a passo não é navegação: grupo rotulado, não <nav> (evita landmarks repetidos).
   return (
-    <nav aria-label="Marcos da Jornada" className={`w-full ${className}`}>
+    <div role="group" aria-label={rotulo} className={`w-full ${className}`}>
       <ol role="list" className="flex items-center justify-between gap-1 overflow-x-auto py-1">
         {ESTACOES_ORDENADAS.map((est, idx) => {
           const isCurrent = est.id === normalizada;
-          const isPassed = indiceAtual >= 0 && idx < indiceAtual;
+          const isPassed = encerrada || (indiceAtual >= 0 && idx < indiceAtual);
 
           let estadoClasses = 'border-stone-700 bg-stone-900/70 text-stone-400';
           if (isCurrent) {
@@ -213,7 +219,12 @@ export const MarcoJornada: React.FC<MarcoJornadaProps> = ({
                 {est.icone}
               </span>
               <span className="text-[10px] font-sans font-medium tracking-tight mt-0.5 truncate max-w-full">
+                {isPassed && <span aria-hidden="true">✓ </span>}
                 {est.rotulo}
+              </span>
+              {/* Estado também em texto, não só na cor (WCAG 1.4.1) */}
+              <span className="sr-only">
+                {isCurrent ? ' (estação atual)' : isPassed ? ' (concluída)' : ' (a percorrer)'}
               </span>
             </li>
           );
@@ -229,7 +240,7 @@ export const MarcoJornada: React.FC<MarcoJornadaProps> = ({
           <SeloEstado estado="desconhecido" rotulo="Estação Desconhecida" />
         </div>
       )}
-    </nav>
+    </div>
   );
 };
 
