@@ -160,4 +160,24 @@ describe('HojePage — O Conselho e Pergaminho de Abertura (F3)', () => {
       screen.getAllByText(/referência do pacote desconhecida/i).length
     ).toBeGreaterThanOrEqual(1);
   });
+
+  it('cenário do revisor Barbárvore (A1.1): instalação com diagnóstico no campo não mostra (em dia) e mostra o motivo (D08)', () => {
+    const dados = JSON.parse(JSON.stringify(exemploOficial)) as Painel1;
+    dados.diagnosticos.push({
+      projeto: null,
+      campo: 'pacote.instalacoes[0].versao',
+      motivo: 'versão não confirmada (fictício)',
+    });
+    act(() => {
+      usePainelStore.getState().carregarDadoBruto(dados);
+    });
+    render(<HojePage />);
+
+    // Item da instalação claude (índice 0)
+    const elClaude = screen.getByText('claude');
+    const liClaude = elClaude.closest('li');
+    expect(liClaude).toBeTruthy();
+    expect(liClaude?.textContent).not.toContain('(em dia)');
+    expect(liClaude?.textContent).toContain('versão não confirmada (fictício)');
+  });
 });

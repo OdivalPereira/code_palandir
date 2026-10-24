@@ -285,10 +285,27 @@ export const HojePage: React.FC = () => {
                 <ul className="space-y-2">
                   {dados.pacote.instalacoes.map((inst, idx) => {
                     const origemDesconhecida = inst.origem === null;
+                    const prefixoInst = `pacote.instalacoes[${idx}]`;
+                    const diagsInst = dados.diagnosticos.filter(
+                      (d) =>
+                        d.projeto == null &&
+                        (d.campo === prefixoInst || d.campo.startsWith(`${prefixoInst}.`))
+                    );
+                    const diagVersao = diagsInst.find((d) => d.campo.endsWith('.versao'));
+                    const motivoInst =
+                      diagVersao?.motivo ??
+                      (diagsInst.length === 1
+                        ? diagsInst[0].motivo
+                        : diagsInst.length > 1
+                          ? `${diagsInst.length} diagnósticos`
+                          : undefined);
+
                     const ver = classificarVersao({
                       versao: inst.versao,
                       fonteVersao,
                       alteracaoLocal: inst.alteracao_local,
+                      diagnosticos: diagsInst.length,
+                      motivoDiagnostico: motivoInst,
                     });
 
                     return (

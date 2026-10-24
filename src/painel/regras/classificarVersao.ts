@@ -9,8 +9,10 @@ export interface EntradaVersao {
   versao: string | null | undefined;
   fonteVersao: string | null | undefined;
   alteracaoLocal?: boolean | null;
-  /** Quantidade de diagnósticos do campo/projeto. */
-  diagnosticos?: number;
+  /** Quantidade de diagnósticos do campo/projeto ou motivo do diagnóstico. */
+  diagnosticos?: number | string | null;
+  /** Motivo específico de diagnóstico do campo (se houver). */
+  motivoDiagnostico?: string | null;
 }
 
 export interface ResultadoVersao {
@@ -20,25 +22,43 @@ export interface ResultadoVersao {
 }
 
 export function classificarVersao(e: EntradaVersao): ResultadoVersao {
-  const diag = e.diagnosticos ?? 0;
+  const diagCount = typeof e.diagnosticos === 'number' ? e.diagnosticos : 0;
+  const diagTexto = typeof e.diagnosticos === 'string' ? e.diagnosticos : null;
+  const motivoDiagEspecifico = e.motivoDiagnostico ?? diagTexto;
+  const temDiag = diagCount > 0 || (motivoDiagEspecifico != null && motivoDiagEspecifico.length > 0);
+
+  // 1º Precedência: Versão nula, fonte_versao nula ou diagnóstico do campo -> desconhecido
   if (e.versao == null) {
     return { estado: 'desconhecido', motivo: 'versão desconhecida' };
   }
+  if (e.fonteVersao == null) {
+    return {
+      estado: 'desconhecido',
+      motivo:
+        e.alteracaoLocal === true
+          ? 'referência do pacote desconhecida · alteração local'
+          : 'referência do pacote desconhecida',
+    };
+  }
+  if (temDiag) {
+    const baseDiag =
+      motivoDiagEspecifico ??
+      `${diagCount} ${diagCount === 1 ? 'diagnóstico' : 'diagnósticos'}`;
+    return {
+      estado: 'desconhecido',
+      motivo: e.alteracaoLocal === true ? `${baseDiag} · alteração local` : baseDiag,
+    };
+  }
+
+  // 2º Precedência: Depois, alteração local ou versão diferente -> defasado
   if (e.alteracaoLocal === true) {
     return { estado: 'defasado', motivo: 'alteração local' };
-  }
-  if (e.fonteVersao == null) {
-    return { estado: 'desconhecido', motivo: 'referência do pacote desconhecida' };
   }
   if (e.versao !== e.fonteVersao) {
     return { estado: 'defasado', motivo: 'defasado' };
   }
-  if (diag > 0) {
-    return {
-      estado: 'desconhecido',
-      motivo: `${diag} ${diag === 1 ? 'diagnóstico' : 'diagnósticos'}`,
-    };
-  }
+
+  // 3º Precedência: Só então -> em_dia
   return { estado: 'em_dia', motivo: '' };
 }
 
