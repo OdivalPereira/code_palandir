@@ -1,0 +1,112 @@
+{
+  "tipo": "atestado_pre_devolucao",
+  "versao": "1.3.0",
+  "timestamp": "2026-10-23T21:40:52.972882Z",
+  "papel": "Coordenador",
+  "etapa_id": "p2-leitura",
+  "fatia_id": "F2",
+  "status": "APROVADO",
+  "verificacoes": {
+    "higiene_pastas": {
+      "ok": true,
+      "erros": []
+    },
+    "build": {
+      "ok": true,
+      "comando": "npm run build",
+      "detalhes": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+      "codigo": 0
+    },
+    "tipos_estaticos": {
+      "ok": true,
+      "comando": "npx tsc --noEmit",
+      "detalhes": "",
+      "codigo": 0
+    },
+    "compilacao": {
+      "ok": true,
+      "erros": []
+    },
+    "seguranca_antitoken": {
+      "ok": true,
+      "erros": []
+    },
+    "disjuncao": {
+      "ok": true,
+      "erros": []
+    },
+    "testes": {
+      "ok": true,
+      "detalhes": "app: 156 testes, 0 pulados, 40.1 s",
+      "comando": "app: npm test && npx tsc --noEmit && npm run build",
+      "totais": {
+        "total": 156,
+        "pulados": 0,
+        "falhos": 0
+      }
+    },
+    "arvore_limpa": {
+      "ok": true,
+      "suja": []
+    }
+  },
+  "commit": "821a0de3d8f34b972bd6d5c4db341fdcba24c842",
+  "base": "5941f22bd47b0052675b8bdeffbecdc96eef231a",
+  "origem_arquivos": "git",
+  "total_arquivos_inspecionados": 8,
+  "arquivos_removidos": [],
+  "commits_ignorados": [],
+  "python": "3.12.3",
+  "hashes_artefatos": {
+    "src/__tests__/painelContrato.test.ts": "ecec354df3fb01217202478bdaab0aa755705662d294890b6dc523fdc24722c5",
+    "src/painel/contrato/painel-1.schema.json": "fdf345d7dbfd654e8cd64f2f432b500ae02a5de2004af553148a63c4e7d56a2c",
+    "src/painel/contrato/painel1.types.ts": "10e132848a1f6a664b6002aa8b60cc2feb308eb2e5523d5a379987c7ee909843",
+    "src/painel/contrato/validador.ts": "7b7fd6497bcf30b138ff2c00733bf2db2cf3e970bf3656aa65823ffb11e5256d",
+    "src/painel/fixtures/cenarios.ts": "b9a0b030a626d8408601ede12616ca4a09701127c29f0a930283d2011d0848f9",
+    "src/painel/fonte/Fonte.ts": "72ee4d8ae64541e22ce4a99b0f1c13a635c3997e15d13997370a8c4be481d610",
+    "src/painel/fonte/FonteFixture.ts": "715173228544fe84903d7313a0f48dd835853ff4a64158776298a54654919f13",
+    "src/stores/painelStore.ts": "ee6a3fadd58ce96ea292e11f57b0aeb776d1a4581a8791ac844b17c1534ebf72"
+  },
+  "arquivos_inspecionados": [
+    "src/__tests__/painelContrato.test.ts",
+    "src/painel/contrato/painel-1.schema.json",
+    "src/painel/contrato/painel1.types.ts",
+    "src/painel/contrato/validador.ts",
+    "src/painel/fixtures/cenarios.ts",
+    "src/painel/fonte/Fonte.ts",
+    "src/painel/fonte/FonteFixture.ts",
+    "src/stores/painelStore.ts"
+  ],
+  "erros": [],
+  "portao": {
+    "modo": "por_area",
+    "perfil": "sociedade/perfil.md",
+    "perfil_sha256": "dceedb1cf00b285b70bd174e8ca6247adc7257c56ff945870ddc80b01754a95f",
+    "commit": "821a0de3d8f34b972bd6d5c4db341fdcba24c842",
+    "area_pedida": "app",
+    "areas_tocadas": [
+      "app"
+    ],
+    "cobertura_completa": true,
+    "areas": [
+      {
+        "area": "app",
+        "pasta": ".",
+        "comando": "npm test && npx tsc --noEmit && npm run build",
+        "timeout_s": 900,
+        "ok": true,
+        "codigo": 0,
+        "duracao_s": 40.1,
+        "timeout_estourado": false,
+        "testes": {
+          "total": 156,
+          "pulados": 0,
+          "falhos": 0
+        },
+        "motivos": [],
+        "saida_final": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n✓ built in 17.12s"
+      }
+    ]
+  },
+  "atestado_hash": "c1e9d319db7a70f2d16414a8ead3bdaf05db073826ee8e527b684478f2df1846"
+}

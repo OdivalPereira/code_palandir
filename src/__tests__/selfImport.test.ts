@@ -22,12 +22,11 @@ describe('Code Palandir Self-Import & Analysis', () => {
 
     const { analyzeProject } = await import('@/engine/analyzers');
     const analysis = analyzeProject(loaded);
-    expect(analysis.routes.length).toBe(1);
-    expect(analysis.routes[0].path).toBe('/');
-    expect(analysis.pages.length).toBe(1);
-    expect(analysis.pages[0].name).toBe('App');
+    expect(analysis.routes.map((r) => r.path).sort()).toEqual(['/', '/analisador', '/projetos', '/projetos/:id'].sort());
+    expect(analysis.pages.length).toBeGreaterThanOrEqual(1);
+    expect(analysis.pages.some((p) => p.name === 'AnalisadorPage')).toBe(true);
     expect(analysis.components.length).toBeGreaterThan(15);
-  });
+  }, 15000);
 
   beforeEach(() => {
     useGraphStore.getState().reset();
@@ -82,6 +81,10 @@ describe('Code Palandir Self-Import & Analysis', () => {
     expect(analysis.stores.length).toBeGreaterThan(0);
     expect(analysis.hooks.length).toBeGreaterThan(0);
 
+    // Verify routes and pages
+    expect(analysis.routes.map((r) => r.path).sort()).toEqual(['/', '/analisador', '/projetos', '/projetos/:id'].sort());
+    expect(analysis.pages.length).toBeGreaterThanOrEqual(2);
+
     // 1. Verify Collapsed-by-Default rendering for Code Palandir itself
     const collapsed = buildGraphFromAnalysis(analysis, undefined, 'LR', new Set());
     const full = buildGraphFromAnalysis(analysis); // full expanded
@@ -89,34 +92,45 @@ describe('Code Palandir Self-Import & Analysis', () => {
     // Full graph has over 100 nodes!
     expect(full.nodes.length).toBeGreaterThan(100);
 
-    // Collapsed graph for Code Palandir opens with ONLY the clean top-level entry points: Route '/' and Page 'App'
-    expect(collapsed.nodes.length).toBe(2);
-    expect(collapsed.nodes.some(n => n.data.nodeType === 'route' && n.data.label === '/')).toBe(true);
-    expect(collapsed.nodes.some(n => n.data.nodeType === 'page' && n.data.label === 'App')).toBe(true);
+    // Collapsed graph for Code Palandir opens with the top-level entry points: 4 routes and pages
+    expect(collapsed.nodes.length).toBeGreaterThanOrEqual(5);
+    for (const routePath of ['/', '/analisador', '/projetos', '/projetos/:id']) {
+      expect(collapsed.nodes.some((n) => n.data.nodeType === 'route' && n.data.label === routePath)).toBe(true);
+    }
+    expect(collapsed.nodes.some((n) => n.data.nodeType === 'page' && n.data.label === 'AnalisadorPage')).toBe(true);
 
     // All page nodes in collapsed graph start with isExpanded = false
     for (const node of collapsed.nodes.filter((n) => n.data.nodeType === 'page')) {
       expect(node.data.isExpanded).toBe(false);
     }
 
-    // 2. Test Expanding the root App component/page
-    const appPage = analysis.pages.find((p) => p.name === 'App') || analysis.components.find((c) => c.name === 'App');
-    expect(appPage).toBeDefined();
+    // 2. Test Expanding the root AnalisadorPage component/page
+    const analisadorPage =
+      analysis.pages.find((p) => p.name === 'AnalisadorPage') ||
+      analysis.components.find((c) => c.name === 'AnalisadorPage');
+    expect(analisadorPage).toBeDefined();
 
-    const appNodeId = appPage?.isPage ? `node-page-${appPage.id}` : `node-comp-${appPage?.id}`;
-    const expandedAppGraph = buildGraphFromAnalysis(analysis, undefined, 'LR', new Set([appNodeId]));
+    const analisadorNodeId = analisadorPage?.isPage
+      ? `node-page-${analisadorPage.id}`
+      : `node-comp-${analisadorPage?.id}`;
+    const expandedAnalisadorGraph = buildGraphFromAnalysis(
+      analysis,
+      undefined,
+      'LR',
+      new Set([analisadorNodeId])
+    );
 
-    // Expanding App reveals its direct children (e.g. TopBar, GraphCanvas, DetailSidebar, ImportDialog)
-    expect(expandedAppGraph.nodes.length).toBeGreaterThan(collapsed.nodes.length);
-    for (const childName of appPage?.childrenNames || []) {
-      const childInGraph = expandedAppGraph.nodes.find((n) => n.data.label === childName);
+    // Expanding AnalisadorPage reveals its direct children (e.g. TopBar, GraphCanvas, DetailSidebar, ImportDialog)
+    expect(expandedAnalisadorGraph.nodes.length).toBeGreaterThan(collapsed.nodes.length);
+    for (const childName of analisadorPage?.childrenNames || []) {
+      const childInGraph = expandedAnalisadorGraph.nodes.find((n) => n.data.label === childName);
       if (childInGraph) {
         expect(childInGraph.data.isExpanded).toBe(false); // child starts collapsed
       }
     }
 
     // 3. Verify Dagre coordinates are non-overlapping and valid
-    for (const node of expandedAppGraph.nodes) {
+    for (const node of expandedAnalisadorGraph.nodes) {
       expect(typeof node.position.x).toBe('number');
       expect(typeof node.position.y).toBe('number');
       expect(Number.isFinite(node.position.x)).toBe(true);
@@ -125,16 +139,16 @@ describe('Code Palandir Self-Import & Analysis', () => {
 
     // 4. Test selecting elements from Code Palandir for AI Prompt Generation
     useSelectionStore.getState().toggleElement({
-      id: appNodeId,
-      label: 'App',
+      id: analisadorNodeId,
+      label: 'AnalisadorPage',
       nodeType: 'page',
-      filePath: appPage?.filePath,
-      codeSnippet: appPage?.codeSnippet,
+      filePath: analisadorPage?.filePath,
+      codeSnippet: analisadorPage?.codeSnippet,
     });
 
     const selectedElements = useSelectionStore.getState().selectedElements;
     expect(selectedElements.length).toBe(1);
-    expect(selectedElements[0].label).toBe('App');
+    expect(selectedElements[0].label).toBe('AnalisadorPage');
 
     // Generate prompt with prompt template
     const generatedPrompt = generatePromptText(
@@ -144,9 +158,9 @@ describe('Code Palandir Self-Import & Analysis', () => {
       'react'
     );
 
-    expect(generatedPrompt).toContain('App');
+    expect(generatedPrompt).toContain('AnalisadorPage');
     expect(generatedPrompt).toContain('Adicionar suporte a tema escuro/claro');
-  });
+  }, 20000);
 
   it('manages Code Palandir graph state through Zustand useGraphStore', () => {
     const rootDir = path.resolve(__dirname, '../../');

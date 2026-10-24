@@ -1,5 +1,5 @@
 {
-  "atualizado_em": "2026-10-24T07:11:46.312061+00:00",
+  "atualizado_em": "2026-10-24T07:58:40.657443+00:00",
   "caminho_canonico": "/home/odival/Documentos/Projetos/code_palandir",
   "criado_em": "2026-10-07T18:16:25.686486+00:00",
   "eventos": [
@@ -395,11 +395,609 @@
       "simulacao": false,
       "timestamp": "2026-10-24T07:11:46.312030+00:00",
       "tipo": "etapa_encerrada"
+    },
+    {
+      "autor": "Coordenador",
+      "dados": {
+        "autorizacao_ref": "ordem_sha256:77d18916ab7e5e0b",
+        "base_efetiva": "00970bcfce70319863acbec8403f5f67654e03d1",
+        "criterios": [
+          "portao"
+        ],
+        "etapa_id": "p2-leitura",
+        "exigir_revisao": true,
+        "limites": "—",
+        "nivel": "2",
+        "objetivo": "Ordem p2-leitura — o painel no centro: casca RPG, Hoje com \"montar mensagem\" e Projetos",
+        "origem": "real",
+        "plano_ref": "ordem:p2-leitura.md",
+        "responsavel": "Coordenador"
+      },
+      "id": "EVT-000016",
+      "seq": 16,
+      "simulacao": false,
+      "timestamp": "2026-10-23T21:06:03.645827+00:00",
+      "tipo": "etapa_aberta"
+    },
+    {
+      "autor": "coordenador",
+      "dados": {
+        "esforco": "high",
+        "etapa_id": "p2-leitura",
+        "fornecedor": "Google",
+        "modelo": "Gemini 4 Argon",
+        "papel": "coordenador",
+        "plataforma": "Antigravity",
+        "subagentes": {
+          "alta": "Gemini 4 Argon",
+          "moderada": "Gemini 3.8 Flash",
+          "simples": "Gemini 3.8 Flash"
+        }
+      },
+      "id": "EVT-000017",
+      "seq": 17,
+      "simulacao": false,
+      "timestamp": "2026-10-23T21:27:34.137320+00:00",
+      "tipo": "papel_assumido"
+    },
+    {
+      "autor": "coordenador",
+      "dados": {
+        "bloco": "Para: Círdan · De: Gandalf · Etapa: p2-leitura\nSituação: 5 fatias concluídas, revisão interna da F3 aprovada pela Galadriel e portão aprovado no commit 4812323\nFeito: F1 (Casca RPG e rotas, Legolas, 5941f22), F2 (Contrato painel/1 e FonteFixture, Elrond, 821a0de), F3 (O Conselho e Pergaminho de Abertura, Legolas Argon + revisão interna Galadriel Argon, 07f105a), F4 (Regiões / Projetos, Legolas, 1251e86), F5 (Acessibilidade WCAG AA e capturas Playwright em 1280x800 e 360x820, Galadriel, 4812323)\nPendente ou decisão pedida: proposta opcional para a etapa B/D do pacote sincronizar `sc.py abertura` e o painel quando a linha `Worktree:` passar a usar a pasta da ferramenta (`projeto.pastas`)\nPróximo passo de quem recebe: rodar `sc.py conferir --ordem sociedade/ordens/p2-leitura.md` e preparar a cópia de revisão independente para o Barbárvore (`sc.py revisar --etapa p2-leitura --base 00970bc`)\nDetalhe: sociedade/subordens/p2-leitura-retorno.md\n",
+        "de": "coordenador",
+        "etapa_id": "p2-leitura",
+        "hash": "9e94984c98f2a76b8877486aa9c276496193bafd152db0bea09105cd0985aeb6",
+        "para": "arquiteto"
+      },
+      "id": "EVT-000018",
+      "seq": 18,
+      "simulacao": false,
+      "timestamp": "2026-10-24T05:56:36.689642+00:00",
+      "tipo": "passagem_registrada"
+    },
+    {
+      "autor": "coordenador",
+      "dados": {
+        "bloco": "Para: Círdan · De: Gandalf · Etapa: p2-leitura\nSituação: 5 fatias concluídas, revisão interna da F3 aprovada pela Galadriel e portão aprovado no commit 4812323\nFeito: F1 (Casca RPG e rotas, Legolas, 5941f22), F2 (Contrato painel/1 e FonteFixture, Elrond, 821a0de), F3 (O Conselho e Pergaminho de Abertura, Legolas Argon + revisão interna Galadriel Argon, 07f105a), F4 (Regiões / Projetos, Legolas, 1251e86), F5 (Acessibilidade WCAG AA e capturas Playwright em 1280x800 e 360x820, Galadriel, 4812323)\nPendente ou decisão pedida: (1) em `sc.py conferir`, E1..E4 estão `feito` e E5 marca `2 ordens na mesma conversa` apenas porque houve retomada (`\"continue de onde parou\"`) após reinício do servidor Antigravity; (2) proposta opcional para a etapa B/D do pacote sincronizar `sc.py abertura` e o painel quando `Worktree:` passar a usar `projeto.pastas`\nPróximo passo de quem recebe: conferir entregas (`sc.py conferir --ordem sociedade/ordens/p2-leitura.md`) e preparar a cópia de revisão independente para o Barbárvore (`sc.py revisar --etapa p2-leitura --base 00970bc`)\nDetalhe: sociedade/subordens/p2-leitura-retorno.md\n",
+        "de": "coordenador",
+        "etapa_id": "p2-leitura",
+        "hash": "a3ebc02e3b75fce0e2f74be0c7d490f494a95d35e9118c39030914d4e0bf47a9",
+        "para": "arquiteto"
+      },
+      "id": "EVT-000019",
+      "seq": 19,
+      "simulacao": false,
+      "timestamp": "2026-10-24T06:00:50.789481+00:00",
+      "tipo": "passagem_registrada"
+    },
+    {
+      "autor": "conferência automática",
+      "dados": {
+        "commit": "481232353de2cf04bd3a3f93c721ba1c2b538742",
+        "etapa": "p2-leitura",
+        "feitos": 4,
+        "itens": [
+          {
+            "detalhe": "481232353de2",
+            "estado": "feito",
+            "id": "E1",
+            "tipo": "commit_existe"
+          },
+          {
+            "detalhe": "35 arquivos, todos nos prefixos",
+            "estado": "feito",
+            "id": "E2",
+            "tipo": "arquivos_em"
+          },
+          {
+            "detalhe": "APROVADO, 31 arquivos, commit 481232353de2",
+            "estado": "feito",
+            "id": "E3",
+            "tipo": "atestado_aprovado"
+          },
+          {
+            "detalhe": "6 delegações",
+            "estado": "feito",
+            "id": "E4",
+            "tipo": "delegacoes"
+          },
+          {
+            "detalhe": "2 ordens na mesma conversa",
+            "estado": "não feito",
+            "id": "E5",
+            "tipo": "conversa_nova"
+          }
+        ],
+        "ordem": "sociedade/ordens/p2-leitura.md",
+        "total": 5
+      },
+      "id": "EVT-000020",
+      "seq": 20,
+      "simulacao": false,
+      "timestamp": "2026-10-24T06:14:51.738042+00:00",
+      "tipo": "conferencia_registrada"
+    },
+    {
+      "autor": "Barbárvore",
+      "dados": {
+        "etapa_id": "p2-leitura",
+        "impacto": "desconhecido",
+        "versao": "481232353de2cf04bd3a3f93c721ba1c2b538742"
+      },
+      "id": "EVT-000021",
+      "seq": 21,
+      "simulacao": false,
+      "timestamp": "2026-10-24T06:27:32.193479+00:00",
+      "tipo": "versao_atualizada"
+    },
+    {
+      "autor": "Barbárvore",
+      "dados": {
+        "achados_referenciados": [],
+        "commit": "481232353de2cf04bd3a3f93c721ba1c2b538742",
+        "criterios_verificados": {
+          "C01 F1 extrair analisador intacto e criar quatro rotas BrowserRouter": true,
+          "C02 F1 PainelShell/rpgTheme, paleta e títulos locais sem baixar fonte": true,
+          "C03 F1 não tocar src/ui": true,
+          "C04 F1 lateral 1280, barra 360, alvos 44 e sem rolagem horizontal": false,
+          "C05 F1 Sociedade/Tarefa nova/Perguntas/Conversa reservados com Fase B · p3 e sem páginas": true,
+          "C06 F1 casca h-screen/w-screen/overflow-hidden/flex e main flex-1/min-h-0": true,
+          "C07 F1 analisador preservado, testes antigos verdes e ajuste justificado do selfImport": false,
+          "C08 F1 selfImport com lista exata de rotas, limites inferiores e expansão/prompt AnalisadorPage": true,
+          "C09 F1 somente cinco dependências aprovadas": true,
+          "C10 F2 tipos escritos à mão e teste de atribuição estática do exemplo": true,
+          "C11 F2 esquema byte a byte/SHA-256 igual ao oficial": true,
+          "C12 F2 Ajv 2020 valida válido/vazio/só desconhecidos/limites/inválido": false,
+          "C13 F2 instantâneo inválido vira erro com lista, sem render parcial": true,
+          "C14 F2 null preservado e desconhecido não promovido a válido/em dia": true,
+          "C15 F3 quatro seções I–IV, Névoa/Diário/NUNCA EM DIA e versões": true,
+          "C16 F3 pendências na ordem da seção 5.3": true,
+          "C17 F3 Worktree da CLI e ouro exato de cinco linhas": true,
+          "C18 F3 redactSecrets antes de copiar": true,
+          "C19 F3 modelo/esforço só do cardápio, escolhas por nível": true,
+          "C20 F3 colunas 7/12 e 5/12 em 1280": true,
+          "C21 F4 Regiões/lista/detalhe, oito estações, pastas, companhia e passagens recolhidas": true,
+          "C22 F4 aviso modelo_no_log divergente ou null": true,
+          "C23 F5 D05 nas três telas: foco/ARIA/toque e cinco estados": false,
+          "C24 F5 contraste AA mínimo 4.5:1": true,
+          "C25 F5 estados com ícone e rótulo, sem depender só de cor": true,
+          "C26 F5 seis capturas nas dimensões pedidas, anexadas ao retorno": true,
+          "C27 limite aproximado de 1500 linhas de produto sem lock/fixtures": true,
+          "C28 paradas: não tocar supabase/scripts/server/src-ui/vercel/index e não expandir instalação/contrato": true,
+          "C29 dado fictício; sem FonteSupabase/login real nem páginas p3": true,
+          "E1 commit congelado existe": true,
+          "E2 arquivos nas superfícies permitidas do manifesto": true,
+          "E3 atestado aprovado do head correto e portão por área": true,
+          "E4 cinco delegações em sessão identificável": false,
+          "E5 conversa nova do executor": false
+        },
+        "etapa_id": "p2-leitura",
+        "fornecedor_revisor": "OpenAI",
+        "implementadores": [
+          {
+            "agente": "Coordenador",
+            "fornecedor": "Google"
+          }
+        ],
+        "justificativa_independencia": "Nível A documental (implementação Google; revisão OpenAI)",
+        "lacunas": [
+          "Execução da interface pública real (L2), fluxo de copiar/colar no navegador, teclado/leitor de tela, todos os estados renderizados, layout/ausência de clipping ou rolagem horizontal e altura/funcionamento do XYFlow em 360/1280. As imagens foram apenas inspecionadas, sem interação ou recaptura.",
+          "Vitest, validação Ajv, compilação de tipos/build e suíte Playwright: dependências ausentes. `npm test` foi tentado e falhou antes de qualquer teste; não usei npx para evitar busca de pacotes nem instalei ferramentas. Não há aprovação própria do portão nesta sessão.",
+          "S3 roda o código original de funções após retirada de imports e tipos pelo stripTypeScriptTypes do Node 24; clipboard foi substituído por registrador. S4 roda apenas cálculos anteriores ao JSX com hooks mínimos, sem React e sem efeitos. S5 executa declarações/predicados originais e confronta seus resultados com os ramos JSX lidos. Nenhuma dessas sondas substitui L2 ou a suíte oficial.",
+          "Concorrência/interrupção de carregar, rejeição de Promise, troca de cenário durante carregamento e erros de clipboard: não ensaiados. Não há gravação persistente do painel nem operação de publicação no escopo fictício, mas isso não prova robustez de toda API assíncrona.",
+          "Compatibilidade estrutural estática do exemplo (A5), toda a matriz de valores degradados, duplicados/identidades divergentes, formatos legados e preservação sob falha: leitura sem execução integral. Inspecionei os pontos de entrada de validação e as fixtures; não declaro validação exaustiva.",
+          "Não executei sc.py abertura/conferir/revisar nem registro posterior do parecer; esses scripts do pacote não foram entregues nesta cópia. O ouro usado é o bloco documental autorizado. Não auditei push/merge históricos, CI remoto, cadeia criptográfica interna do atestado, sessões de delegação ou logs do executor.",
+          "Modelo/esforço e ID efetivos desta sessão não expostos. Leituras globais das três skills foram declaradas em Independência; isso impede alegar contenção absoluta de todas as leituras à cópia."
+        ],
+        "nivel_independencia": "A",
+        "parecer_id": "PAR-p2-leitura-4812323",
+        "revisor": "Barbárvore",
+        "veredito": "nao_aceitar",
+        "versao_examinada": "481232353de2cf04bd3a3f93c721ba1c2b538742"
+      },
+      "id": "EVT-000022",
+      "seq": 22,
+      "simulacao": false,
+      "timestamp": "2026-10-24T06:27:32.200912+00:00",
+      "tipo": "parecer_registrado"
+    },
+    {
+      "autor": "OdivalPereira",
+      "dados": {
+        "acao": "corrigir",
+        "alcance": "etapa",
+        "decisao_id": "DEC-p2-leitura-corrigir-9",
+        "etapa_id": "p2-leitura",
+        "quem": "OdivalPereira",
+        "referencia": "Parecer não aceitar: A1 bloqueador (D08, fonte desconhecida vira em dia), A2 a A6 relevantes. Correção única (Q84). A7: Odival aceita o volume de cerca de 3.280 linhas de produto, acima do teto de ~1.500, como decisão de escopo dele, sem enxugar. E5: a segunda entrada da conversa 390eb5af é retomada após reinício, sem o marcador RETOMADA, que só passou a existir depois (ca1e041); há uma única ordem na conversa."
+      },
+      "id": "EVT-000023",
+      "seq": 23,
+      "simulacao": false,
+      "timestamp": "2026-10-24T06:29:12.096160+00:00",
+      "tipo": "decisao_registrada"
+    },
+    {
+      "autor": "Círdan",
+      "dados": {
+        "acao": "execucao fora do Google (R3): correção 1 no Claude Code",
+        "alcance": "etapa",
+        "decisao_id": "DEC-p2-leitura-R3-correcao-1",
+        "etapa_id": "p2-leitura",
+        "quem": "Odival Pereira",
+        "referencia": "AUT-20261024-argon-sem-cota: Odival, no chat de 24/10/2026: 'Argon ficou sem quota, execute você mesmo a parte dele aqui com o uso de subagentes que você julgar condizentes.' Correção 1 coordenada por Círdan no Claude Code (Anthropic), subagentes pelo cardápio (Opus 5.5 alta, Sonnet 5.5 moderada); revisão segue no Codex (OpenAI), fornecedor distinto (R2)."
+      },
+      "id": "EVT-000024",
+      "seq": 24,
+      "simulacao": false,
+      "timestamp": "2026-10-24T06:35:26.270900+00:00",
+      "tipo": "decisao_registrada"
+    },
+    {
+      "autor": "coordenador",
+      "dados": {
+        "esforco": "high",
+        "etapa_id": "p2-leitura",
+        "fornecedor": "Anthropic",
+        "modelo": "Claude Opus 5.5",
+        "papel": "coordenador",
+        "plataforma": "Claude Code",
+        "subagentes": {
+          "alta": "Opus 5.5",
+          "moderada": "Sonnet 5.5",
+          "simples": "Haiku 5.5"
+        }
+      },
+      "id": "EVT-000025",
+      "seq": 25,
+      "simulacao": false,
+      "timestamp": "2026-10-24T06:35:26.730377+00:00",
+      "tipo": "papel_assumido"
+    },
+    {
+      "autor": "Barbárvore",
+      "dados": {
+        "etapa_id": "p2-leitura",
+        "impacto": "desconhecido",
+        "versao": "2028ff234b9c6b7fdd6ba3692117fd56546f08aa"
+      },
+      "id": "EVT-000026",
+      "seq": 26,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:06:07.302449+00:00",
+      "tipo": "versao_atualizada"
+    },
+    {
+      "autor": "Barbárvore",
+      "dados": {
+        "achados_referenciados": [],
+        "commit": "2028ff234b9c6b7fdd6ba3692117fd56546f08aa",
+        "criterios_verificados": {
+          "C1 A1 regra pura única, usada em instalações/núcleos e nas duas telas": true,
+          "C10 A6 título acima de 4,5:1 e suíte de pares da casca/selos": true,
+          "C11 A6 seis capturas novas nas mesmas dimensões": true,
+          "C12 limites do delta e vínculo ao candidato/atestado": true,
+          "C2 A1 em_dia só com versões conhecidas, iguais, sem alteração e sem diagnóstico do campo": true,
+          "C3 A1 fonte nula dá desconhecido com motivo, inclusive combinações": true,
+          "C4 A1 testes combinatórios e telas com fonte desconhecida": true,
+          "C5 A2 sem etapa/projeto não inventar ID; bloquear cópia": true,
+          "C6 A3 cardápio vazio/ausente/sem plataforma; padrão só do cardápio": true,
+          "C7 A4 filtrar plataforma e nível, revalidar na troca e omitir subagentes incompletos com aviso": true,
+          "C8 A2–A4 preservar ouro de cinco linhas e redigir antes de copiar": true,
+          "C9 A5 sem cast integral, prova estática eficaz, igualdade ao JSON e contrato triplo": true
+        },
+        "etapa_id": "p2-leitura",
+        "fornecedor_revisor": "OpenAI",
+        "implementadores": [
+          {
+            "agente": "Coordenador",
+            "fornecedor": "Google"
+          }
+        ],
+        "justificativa_independencia": "Nível A documental, fornecedor diferente de Google e Anthropic",
+        "lacunas": [
+          "Playwright, build, navegador gráfico, CSS computado, foco por teclado, recaptura ou inspeção visual integral dos seis PNGs: dispensados para esta reconferência pelo usuário; não se reivindica aprovação visual completa da etapa. A prova de interação é React/jsdom com clipboard simulado.",
+          "Não reabri critérios gerais da revisão anterior sem alteração no delta, A7, comportamento de produção, login, banco, rede ou dados reais. Não auditei corridas/rejeições do clipboard preexistente, nem concorrência da fonte assíncrona inalterada.",
+          "Logs das sessões de implementação, delegações e decisão R3 atualizada não foram entregues; autoria e exceção são documentais. Os objetos Git originais não estão nesta cópia: o vínculo usa o inventário, os hashes e os commits reconstruídos fornecidos.",
+          "Não executei scripts de registro/integração da Sociedade. Modelo, esforço e ID efetivos desta sessão não são confirmados por ferramenta; o cabeçalho distingue a escala pedida dessa limitação. As leituras de skills e a resolução das dependências estão declaradas em Independência."
+        ],
+        "nivel_independencia": "A",
+        "parecer_id": "PAR-p2-leitura-2028ff2",
+        "revisor": "Barbárvore",
+        "veredito": "nao_aceitar",
+        "versao_examinada": "2028ff234b9c6b7fdd6ba3692117fd56546f08aa"
+      },
+      "id": "EVT-000027",
+      "seq": 27,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:06:07.312199+00:00",
+      "tipo": "parecer_registrado"
+    },
+    {
+      "autor": "OdivalPereira",
+      "dados": {
+        "acao": "sem-aceite",
+        "alcance": "etapa",
+        "decisao_id": "DEC-p2-leitura-sem-aceite-14",
+        "etapa_id": "p2-leitura",
+        "quem": "OdivalPereira",
+        "referencia": "Decisão de Odival em 24/10/2026: a reconferência (PAR d12a8667) do commit 2028ff2 confirmou A1 original e A2–A6 corrigidos, mas deixou dois resíduos relevantes do A1: A1.1 (diagnóstico de instalação não impede em dia; HojePage.tsx:288 não passa diagnósticos) e A1.2 (fonte nula com alteração local dá defasado, não desconhecido; classificarVersao.ts:27). Pela Q85 não há correção 2: a etapa encerra sem aceite, A1.1 e A1.2 viram a fatia 1 da etapa p2b, que parte de 2028ff2, e o aceite da p2b autoriza o merge da cadeia p2 + p2b (precedentes Q193 e Q195). A7 segue aceito por Odival."
+      },
+      "id": "EVT-000028",
+      "seq": 28,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:11:53.148516+00:00",
+      "tipo": "decisao_registrada"
+    },
+    {
+      "autor": "OdivalPereira",
+      "dados": {
+        "desfecho": "sem-aceite",
+        "elegivel_publicacao": false,
+        "etapa_id": "p2-leitura",
+        "resumo": "sem-aceite por OdivalPereira: Decisão de Odival em 24/10/2026: a reconferência (PAR d12a8667) do commit 2028ff2 confirmou A1 original e A2–A6 corrigidos, mas deixou dois resíduos relevantes do A1: A1.1 (diagnóstico de instalação não impede em dia; HojePage.tsx:288 não passa diagnósticos) e A1.2 (fonte nula com alteração local dá defasado, não desconhecido; classificarVersao.ts:27). Pela Q85 não há correção 2: a etapa encerra sem aceite, A1.1 e A1.2 viram a fatia 1 da etapa p2b, que parte de 2028ff2, e o aceite da p2b autoriza o merge da cadeia p2 + p2b (precedentes Q193 e Q195). A7 segue aceito por Odival."
+      },
+      "id": "EVT-000029",
+      "seq": 29,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:11:53.154102+00:00",
+      "tipo": "etapa_encerrada"
+    },
+    {
+      "autor": "Coordenador",
+      "dados": {
+        "autorizacao_ref": "ordem_sha256:dc11d933219c53d1",
+        "base_efetiva": "2028ff234b9c6b7fdd6ba3692117fd56546f08aa",
+        "criterios": [
+          "portao"
+        ],
+        "etapa_id": "p2b-versao",
+        "exigir_revisao": true,
+        "limites": "—",
+        "nivel": "2",
+        "objetivo": "Ordem p2b-versao — os dois resíduos do A1 (desconhecido continua desconhecido)",
+        "origem": "real",
+        "plano_ref": "ordem:sociedade/ordens/p2b-versao.md",
+        "responsavel": "Coordenador"
+      },
+      "id": "EVT-000030",
+      "seq": 30,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:17:08.917413+00:00",
+      "tipo": "etapa_aberta"
+    },
+    {
+      "autor": "coordenador",
+      "dados": {
+        "esforco": "high",
+        "etapa_id": "p2b-versao",
+        "fornecedor": "Google",
+        "modelo": "Gemini 3.8 Flash",
+        "papel": "coordenador",
+        "plataforma": "Antigravity",
+        "subagentes": {
+          "alta": "Gemini 3.8 Flash",
+          "moderada": "Gemini 3.8 Flash",
+          "simples": "Gemini 3.8 Flash"
+        }
+      },
+      "id": "EVT-000031",
+      "seq": 31,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:20:15.935774+00:00",
+      "tipo": "papel_assumido"
+    },
+    {
+      "autor": "conferência automática",
+      "dados": {
+        "commit": "3482ec5c6332ee7ef4fa92325a43f10a2219332b",
+        "etapa": "p2b-versao",
+        "feitos": 5,
+        "itens": [
+          {
+            "detalhe": "3482ec5c6332",
+            "estado": "feito",
+            "id": "E1",
+            "tipo": "commit_existe"
+          },
+          {
+            "detalhe": "20 arquivos, todos nos prefixos",
+            "estado": "feito",
+            "id": "E2",
+            "tipo": "arquivos_em"
+          },
+          {
+            "detalhe": "APROVADO, 4 arquivos, commit 3482ec5c6332",
+            "estado": "feito",
+            "id": "E3",
+            "tipo": "atestado_aprovado"
+          },
+          {
+            "detalhe": "1 delegações",
+            "estado": "feito",
+            "id": "E4",
+            "tipo": "delegacoes"
+          },
+          {
+            "detalhe": "1 ordem na conversa",
+            "estado": "feito",
+            "id": "E5",
+            "tipo": "conversa_nova"
+          }
+        ],
+        "ordem": "sociedade/ordens/p2b-versao.md",
+        "total": 5
+      },
+      "id": "EVT-000032",
+      "seq": 32,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:44:10.690906+00:00",
+      "tipo": "conferencia_registrada"
+    },
+    {
+      "autor": "conferência automática",
+      "dados": {
+        "commit": "3482ec5c6332ee7ef4fa92325a43f10a2219332b",
+        "etapa": "p2b-versao",
+        "feitos": 5,
+        "itens": [
+          {
+            "detalhe": "3482ec5c6332",
+            "estado": "feito",
+            "id": "E1",
+            "tipo": "commit_existe"
+          },
+          {
+            "detalhe": "20 arquivos, todos nos prefixos",
+            "estado": "feito",
+            "id": "E2",
+            "tipo": "arquivos_em"
+          },
+          {
+            "detalhe": "APROVADO, 4 arquivos, commit 3482ec5c6332",
+            "estado": "feito",
+            "id": "E3",
+            "tipo": "atestado_aprovado"
+          },
+          {
+            "detalhe": "1 delegações",
+            "estado": "feito",
+            "id": "E4",
+            "tipo": "delegacoes"
+          },
+          {
+            "detalhe": "1 ordem na conversa",
+            "estado": "feito",
+            "id": "E5",
+            "tipo": "conversa_nova"
+          }
+        ],
+        "ordem": "sociedade/ordens/p2b-versao.md",
+        "total": 5
+      },
+      "id": "EVT-000033",
+      "seq": 33,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:44:48.421596+00:00",
+      "tipo": "conferencia_registrada"
+    },
+    {
+      "autor": "Barbárvore",
+      "dados": {
+        "etapa_id": "p2b-versao",
+        "impacto": "desconhecido",
+        "versao": "3482ec5c6332ee7ef4fa92325a43f10a2219332b"
+      },
+      "id": "EVT-000034",
+      "seq": 34,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:58:01.768046+00:00",
+      "tipo": "versao_atualizada"
+    },
+    {
+      "autor": "Barbárvore",
+      "dados": {
+        "achados_referenciados": [],
+        "commit": "3482ec5c6332ee7ef4fa92325a43f10a2219332b",
+        "criterios_verificados": {
+          "C1 Precedência e motivo: nulos/diagnóstico, depois alteração/divergência, depois em_dia": true,
+          "C2 Alteração local preserva desconhecido, podendo compor o motivo": true,
+          "C3 Diagnóstico da instalação chega ao Conselho; núcleos permanecem atendidos": true,
+          "C4 Tabela explícita, fonte nula + alteração e diagnóstico com versões iguais/diferentes": true,
+          "C5 Tela com diagnóstico fictício exato, sem em_dia e com motivo": true,
+          "C6 307 anteriores preservados, adaptações justificadas e tipos sem erro": true,
+          "C7 Escopo só A1.1/A1.2, caminhos permitidos e cerca de 150 linhas de produto": true,
+          "E1 commit_existe: etapa/p2b-versao": true,
+          "E2 arquivos_em: src/ e sociedade/": true,
+          "E3 atestado_aprovado para o candidato": true,
+          "E4 delegação real, uma, Antigravity": true,
+          "E5 conversa_nova Antigravity": true
+        },
+        "etapa_id": "p2b-versao",
+        "fornecedor_revisor": "OpenAI",
+        "implementadores": [
+          {
+            "agente": "Coordenador",
+            "fornecedor": "Google"
+          }
+        ],
+        "justificativa_independencia": "Nível A documental, fornecedor diferente dos implementadores",
+        "lacunas": [
+          "Playwright, build, navegador gráfico, CSS computado e capturas: dispensados pelo usuário para esta revisão reduzida. A prova de tela é React/jsdom com dados fictícios, não uma validação visual completa.",
+          "Logs originais do implementador, delegação e conferência, o ramo/objetos Git originais e CI externo: não fornecidos nesta cópia. O vínculo ao SHA original usa o inventário, atestado e governança validados; a inspeção usa os SHAs reconstruídos. E1, E4 e E5 têm evidência documental, não confirmação por execução histórica.",
+          "Critérios anteriores da p2 fora de A1.1/A1.2, autorização operacional do merge, banco, login, produção, dados reais e serviços externos. Q226 foi lido como vínculo entre o aceite e o próximo passo; o revisor não integra nem registra a decisão.",
+          "Texto literal de todos os diagnósticos nos selos dos núcleos: as chamadas inalteradas passam contagem. O foco desta etapa é preservar desconhecido e corrigir o diagnóstico da instalação; a divergência inicial da sonda está explicitada em Evidências.",
+          "Modelo, esforço e ID efetivos da sessão não estão expostos por ferramenta. O cabeçalho distingue a escala solicitada dessa limitação. Leituras de skills fora da cópia e resolução física das dependências pelo link estão declaradas em Independência."
+        ],
+        "nivel_independencia": "A",
+        "parecer_id": "PAR-p2b-versao-3482ec5",
+        "revisor": "Barbárvore",
+        "veredito": "aceitar",
+        "versao_examinada": "3482ec5c6332ee7ef4fa92325a43f10a2219332b"
+      },
+      "id": "EVT-000035",
+      "seq": 35,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:58:01.787854+00:00",
+      "tipo": "parecer_registrado"
+    },
+    {
+      "autor": "OdivalPereira",
+      "dados": {
+        "ambiente": "local",
+        "comando": "sc.py entregar --etapa p2b-versao",
+        "criterio_id": "portao",
+        "etapa_id": "p2b-versao",
+        "evidencia_id": "EVD-portao-20261024075840639048_0022",
+        "exit_code": 0,
+        "motivo_invalida": null,
+        "saida_hash": "814bf7abbb89383ecc5111ab525288b72a47b722dfa4c44c1ea9bb492448f05c",
+        "saida_resumo": "atestado APROVADO do commit 3482ec5c6332, hash ec2c29e7f8dfe93a, 4 arquivos inspecionados",
+        "valida": true,
+        "verificador": "OdivalPereira",
+        "versao_entrega": "3482ec5c6332ee7ef4fa92325a43f10a2219332b"
+      },
+      "id": "EVT-000036",
+      "seq": 36,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:58:40.639117+00:00",
+      "tipo": "evidencia_registrada"
+    },
+    {
+      "autor": "OdivalPereira",
+      "dados": {
+        "acao": "aceitar",
+        "alcance": "etapa",
+        "atestado_hash": "ec2c29e7f8dfe93aaf2b3cb084ccd9d415f9f98e24a37d3ce21083c3672b1a8e",
+        "commit": "3482ec5c6332ee7ef4fa92325a43f10a2219332b",
+        "decisao_id": "DEC-p2b-versao-aceitar-23",
+        "etapa_id": "p2b-versao",
+        "quem": "OdivalPereira",
+        "referencia": "Aceite de Odival em 24/10/2026: revisão independente aceitar (PAR debf6d60) do commit 3482ec5, sem achados; A1.1 e A1.2 da p2-leitura resolvidos. Pela Q226, este aceite autoriza o merge da cadeia p2-leitura + p2b-versao em painel/base."
+      },
+      "id": "EVT-000037",
+      "seq": 37,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:58:40.647355+00:00",
+      "tipo": "decisao_registrada"
+    },
+    {
+      "autor": "OdivalPereira",
+      "dados": {
+        "elegivel_publicacao": true,
+        "etapa_id": "p2b-versao",
+        "resumo": "aceite de OdivalPereira: parecer do commit 3482ec5c6332"
+      },
+      "id": "EVT-000038",
+      "seq": 38,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:58:40.657402+00:00",
+      "tipo": "etapa_encerrada"
     }
   ],
   "projeto_id": "code-palandir",
   "resumos_externos": {},
-  "revisao": 16,
+  "revisao": 39,
   "versao_formato": "2.1.0",
   "versao_inicial": "418e385391fa3a1470a51847298aad613a746a4a"
 }

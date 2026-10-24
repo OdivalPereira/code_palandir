@@ -1,0 +1,100 @@
+{
+  "tipo": "atestado_pre_devolucao",
+  "versao": "1.3.0",
+  "timestamp": "2026-10-24T05:34:46.425840Z",
+  "papel": "Coordenador",
+  "etapa_id": "p2-leitura",
+  "fatia_id": "F4",
+  "status": "APROVADO",
+  "verificacoes": {
+    "higiene_pastas": {
+      "ok": true,
+      "erros": []
+    },
+    "build": {
+      "ok": true,
+      "comando": "npm run build",
+      "detalhes": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+      "codigo": 0
+    },
+    "tipos_estaticos": {
+      "ok": true,
+      "comando": "npx tsc --noEmit",
+      "detalhes": "",
+      "codigo": 0
+    },
+    "compilacao": {
+      "ok": true,
+      "erros": []
+    },
+    "seguranca_antitoken": {
+      "ok": true,
+      "erros": []
+    },
+    "disjuncao": {
+      "ok": true,
+      "erros": []
+    },
+    "testes": {
+      "ok": true,
+      "detalhes": "app: 174 testes, 0 pulados, 56.8 s",
+      "comando": "app: npm test && npx tsc --noEmit && npm run build",
+      "totais": {
+        "total": 174,
+        "pulados": 0,
+        "falhos": 0
+      }
+    },
+    "arvore_limpa": {
+      "ok": true,
+      "suja": []
+    }
+  },
+  "commit": "1251e86773e52b5ff0691155f69d9bd961899f40",
+  "base": "07f105a3eedee6de7dcc7b79cf94d1646199230c",
+  "origem_arquivos": "git",
+  "total_arquivos_inspecionados": 2,
+  "arquivos_removidos": [],
+  "commits_ignorados": [],
+  "python": "3.12.3",
+  "hashes_artefatos": {
+    "src/__tests__/painelProjetos.test.tsx": "9f5f05b1fde3bee4115fb5b835d0ba99eda0b396f30d7e31f3f5ec09b2a874b5",
+    "src/painel/projetos/ProjetosPage.tsx": "ad003287c5e9ea36ff1e8aae90cf09511beb926a6b8fb14b84ef0f1e02f9f653"
+  },
+  "arquivos_inspecionados": [
+    "src/__tests__/painelProjetos.test.tsx",
+    "src/painel/projetos/ProjetosPage.tsx"
+  ],
+  "erros": [],
+  "portao": {
+    "modo": "por_area",
+    "perfil": "sociedade/perfil.md",
+    "perfil_sha256": "dceedb1cf00b285b70bd174e8ca6247adc7257c56ff945870ddc80b01754a95f",
+    "commit": "1251e86773e52b5ff0691155f69d9bd961899f40",
+    "area_pedida": "app",
+    "areas_tocadas": [
+      "app"
+    ],
+    "cobertura_completa": true,
+    "areas": [
+      {
+        "area": "app",
+        "pasta": ".",
+        "comando": "npm test && npx tsc --noEmit && npm run build",
+        "timeout_s": 900,
+        "ok": true,
+        "codigo": 0,
+        "duracao_s": 56.8,
+        "timeout_estourado": false,
+        "testes": {
+          "total": 174,
+          "pulados": 0,
+          "falhos": 0
+        },
+        "motivos": [],
+        "saida_final": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n✓ built in 26.08s"
+      }
+    ]
+  },
+  "atestado_hash": "c9ac3d51f364a7d042a39fb0b27d0994b7a1c15b687af3845c441654a69bee8f"
+}
