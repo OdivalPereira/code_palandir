@@ -151,7 +151,7 @@ export const ProjetosPage: React.FC = () => {
         passagensComEtapa.push({
           etapaId: etapa.id,
           passagem,
-          idUnico: `${etapa.id}-passagem-${pIdx}`,
+          idUnico: `${projetoAtivo.id}--${etapa.id}--passagem-${pIdx}`,
         });
       });
     }
@@ -322,7 +322,10 @@ export const ProjetosPage: React.FC = () => {
                   rotulo={pluralizar(pendenciasAtivo, 'pendência', 'pendências')}
                 />
               ) : nucAtivo.estado !== 'em_dia' ? (
-                <SeloEstado estado={nucAtivo.estado} rotulo="núcleo fora de dia" />
+                <SeloEstado
+                  estado={nucAtivo.estado}
+                  rotulo={nucAtivo.estado === 'defasado' ? 'núcleo defasado' : 'núcleo desconhecido'}
+                />
               ) : (
                 <SeloEstado estado="em_dia" rotulo="Em dia" />
               )}
@@ -362,8 +365,8 @@ export const ProjetosPage: React.FC = () => {
                           <div>
                             {isEncerrada ? (
                               <SeloEstado
-                                estado="em_dia"
-                                rotulo={`Encerrada (${etapa.decisao} · Grau ${etapa.grau})`}
+                                estado={etapa.decisao ? 'em_dia' : 'desconhecido'}
+                                rotulo={`Encerrada (${etapa.decisao || 'sem decisão'} · Grau ${etapa.grau || '—'})`}
                               />
                             ) : (
                               <SeloEstado estado="atencao" rotulo={etapa.estacao} />

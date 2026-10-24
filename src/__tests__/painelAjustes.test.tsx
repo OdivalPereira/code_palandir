@@ -11,6 +11,8 @@ import { copyToClipboard } from '@/services/clipboard';
 import { formatarColetadoEm, pluralizar } from '../painel/formatacao';
 import { exemploOficial } from '../painel/fixtures/cenarios';
 import { usePainelStore } from '../stores/painelStore';
+import type { Painel1 } from '../painel/contrato/painel1.types';
+import type { Fonte, ResultadoFonte } from '../painel/fonte/Fonte';
 
 function renderShell(rota = '/') {
   return render(
@@ -136,7 +138,7 @@ describe('Conselho e Pergaminho', () => {
         <HojePage />
       </MemoryRouter>
     );
-    expect(screen.getByText('5 pendências')).toBeTruthy();
+    expect(screen.getByText('5 pendências conhecidas')).toBeTruthy();
     expect(screen.queryByText(/pendência\(s\)/)).toBeNull();
   });
 
@@ -208,5 +210,119 @@ describe('Rotas', () => {
     expect(screen.getByText('Caminho fora do mapa')).toBeTruthy();
     fireEvent.click(screen.getByRole('link', { name: 'Voltar ao Conselho' }));
     expect(screen.getByText('conselho')).toBeTruthy();
+  });
+});
+
+describe('D08 e D05: o que não se sabe não aparece como resolvido', () => {
+  beforeEach(() => {
+    usePainelStore.getState().resetar();
+  });
+
+  const loja = exemploOficial.projetos.find((p) => p.id === 'loja-exemplo')!;
+
+  const renderProjetos = (rota: string) =>
+    render(
+      <MemoryRouter initialEntries={[rota]}>
+        <Routes>
+          <Route path="/projetos" element={<ProjetosPage />} />
+          <Route path="/projetos/:id" element={<ProjetosPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+  it('Conselho sem pendências mas com projeto ilegível não mostra o ✓ em dia', () => {
+    usePainelStore.setState({
+      dados: {
+        ...exemploOficial,
+        projetos: exemploOficial.projetos.map((p) => ({ ...p, pendencias: [] })),
+      },
+    });
+    render(
+      <MemoryRouter>
+        <HojePage />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('0 pendências conhecidas')).toBeTruthy();
+    expect(screen.queryByText('0 pendências')).toBeNull();
+  });
+
+  it('etapa encerrada sem decisão nem grau não imprime "null"', () => {
+    const etapa = { ...loja.etapas[0], estacao: 'encerrada' as const, decisao: null, grau: null };
+    usePainelStore.setState({
+      dados: { ...exemploOficial, projetos: [{ ...loja, etapas: [etapa] }] },
+    });
+    renderProjetos('/projetos/loja-exemplo');
+    expect(screen.queryByText(/null/)).toBeNull();
+    expect(screen.getAllByText(/Encerrada \(sem decisão · Grau —\)/).length).toBeGreaterThan(0);
+  });
+
+  it('núcleo desconhecido não é chamado de defasado no cabeçalho', () => {
+    usePainelStore.setState({
+      dados: {
+        ...exemploOficial,
+        diagnosticos: [],
+        projetos: [{ ...loja, nucleo: null, pendencias: [] }],
+      },
+    });
+    renderProjetos('/projetos/loja-exemplo');
+    const detalhe = screen.getByRole('region', { name: /Detalhes da Região Loja Exemplo/i });
+    expect(within(detalhe).getByText('núcleo desconhecido')).toBeTruthy();
+    expect(within(detalhe).queryByText(/fora de dia|defasado/)).toBeNull();
+  });
+
+  it('passagem aberta num projeto não abre sozinha no outro com etapa de mesmo id', () => {
+    const etapaCom = (bloco: string) => ({
+      ...loja.etapas[0],
+      id: 'e1',
+      passagens: [{ de: 'arquiteto', para: 'coordenador', quando: '2026-10-20T10:00:00Z', bloco }],
+    });
+    usePainelStore.setState({
+      dados: {
+        ...exemploOficial,
+        diagnosticos: [],
+        projetos: [
+          { ...loja, id: 'p1', nome: 'Projeto Um', etapas: [etapaCom('BLOCO-Alfa')] },
+          { ...loja, id: 'p2', nome: 'Projeto Dois', etapas: [etapaCom('BLOCO-Beta')] },
+        ],
+      },
+      projetoSelecionadoId: 'p1',
+    });
+    renderProjetos('/projetos/p1');
+    fireEvent.click(screen.getByRole('button', { name: /arquiteto → coordenador/ }));
+    expect(screen.getByText('BLOCO-Alfa')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Projeto Dois/ }));
+    expect(screen.queryByText('BLOCO-Beta')).toBeNull();
+  });
+
+  it('fonte que rejeita leva ao estado de erro, não a "carregando" para sempre', async () => {
+    const fonte: Fonte = { modo: 'supabase', carregar: () => Promise.reject(new Error('rede fora')) };
+    await usePainelStore.getState().carregar(fonte);
+    const st = usePainelStore.getState();
+    expect(st.estado).toBe('erro');
+    expect(st.dados).toBeNull();
+    expect(st.erros[0]).toContain('rede fora');
+  });
+
+  it('resposta lenta de um carregar antigo não sobrescreve a mais nova', async () => {
+    let soltarLenta: (r: ResultadoFonte<Painel1>) => void = () => {};
+    const lenta: Fonte = {
+      modo: 'supabase',
+      carregar: () => new Promise((res) => (soltarLenta = res)),
+    };
+    const nova: Fonte = {
+      modo: 'supabase',
+      carregar: async () => ({
+        estado: 'sucesso',
+        dados: { ...exemploOficial, maquina: 'nova' },
+        erros: [],
+        modo: 'supabase',
+      }),
+    };
+    const p1 = usePainelStore.getState().carregar(lenta);
+    await usePainelStore.getState().carregar(nova);
+    soltarLenta({ estado: 'sucesso', dados: { ...exemploOficial, maquina: 'velha' }, erros: [], modo: 'supabase' });
+    await p1;
+    expect(usePainelStore.getState().dados?.maquina).toBe('nova');
   });
 });

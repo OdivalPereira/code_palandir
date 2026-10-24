@@ -56,6 +56,8 @@ export const HojePage: React.FC = () => {
   }
 
   const pendenciasOrdenadas = ordenarPendencias(dados.projetos);
+  // Projeto com diagnóstico pode ter pendências que o coletor não leu (D08).
+  const projetosIlegiveis = dados.diagnosticos.some((d) => d.projeto !== null);
 
   // Projetos que possuem diagnósticos ou nucleo === null (Regra D08: nunca em dia)
   const projetosEmNevoa = dados.projetos.filter((proj) => {
@@ -97,8 +99,18 @@ export const HojePage: React.FC = () => {
             subtitulo="Pendências priorizadas em todos os projetos"
             selo={
               <SeloEstado
-                estado={pendenciasOrdenadas.length > 0 ? 'atencao' : 'em_dia'}
-                rotulo={pluralizar(pendenciasOrdenadas.length, 'pendência', 'pendências')}
+                estado={
+                  pendenciasOrdenadas.length > 0
+                    ? 'atencao'
+                    : projetosIlegiveis
+                    ? 'desconhecido'
+                    : 'em_dia'
+                }
+                rotulo={
+                  projetosIlegiveis
+                    ? pluralizar(pendenciasOrdenadas.length, 'pendência conhecida', 'pendências conhecidas')
+                    : pluralizar(pendenciasOrdenadas.length, 'pendência', 'pendências')
+                }
               />
             }
           >
