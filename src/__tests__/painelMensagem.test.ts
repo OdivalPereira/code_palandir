@@ -10,6 +10,16 @@ import {
   ordenarPendencias,
   prepararTextoParaCopia,
 } from '../painel/mensagem/geradorMensagem';
+import {
+  montarAbertura,
+  normalizarSelecao,
+  obterOpcoesSubagente,
+  resolverEtapaPadrao,
+  resolverPlataformaPadrao,
+  resolverProjetoPadrao,
+  selecaoInicial,
+} from '../painel/mensagem/escalaAbertura';
+import { cenarioSoDesconhecidos } from '../painel/fixtures/cenarios';
 import * as clipboardService from '@/services/clipboard';
 
 const SAIDA_OURO_SECAO_5_3 = [
@@ -148,5 +158,78 @@ describe('geradorMensagem — Teste-ouro e regras do Pergaminho de Abertura (F3)
     expect(apenasModerada).toHaveLength(1);
     expect(apenasModerada[0].modelo).toBe('Gemini 3.8 Flash');
     expect(apenasModerada[0].esforco).toBe('medium');
+  });
+});
+
+describe('escalaAbertura — regras puras do Pergaminho (A2, A3, A4)', () => {
+  const projetos = exemploOficial.projetos;
+  const cardapio = exemploOficial.cardapio ?? [];
+
+  it('o estado inicial do exemplo oficial monta exatamente a saída-ouro', () => {
+    const r = montarAbertura(projetos, cardapio, selecaoInicial(projetos, cardapio));
+    expect(r.bloqueios).toEqual([]);
+    expect(r.avisoSubagentes).toBeNull();
+    expect(r.mensagem).toBe(SAIDA_OURO_SECAO_5_3);
+  });
+
+  it('A2: não inventa projeto nem etapa', () => {
+    expect(resolverProjetoPadrao([])).toBeNull();
+    const diario = projetos.find((p) => p.id === 'diario-campo');
+    expect(diario?.etapas).toEqual([]);
+    expect(resolverEtapaPadrao(diario)).toBeNull();
+
+    const r = montarAbertura(projetos, cardapio, {
+      ...selecaoInicial(projetos, cardapio),
+      projetoId: 'diario-campo',
+      etapaId: null,
+    });
+    expect(r.selecao.etapaId).toBeNull();
+    expect(r.mensagem).toBeNull();
+    expect(r.bloqueios.join(' ')).toMatch(/Nenhuma etapa coletada/);
+
+    const semProjetos = montarAbertura([], cardapio, selecaoInicial([], cardapio));
+    expect(semProjetos.selecao.projetoId).toBeNull();
+    expect(semProjetos.mensagem).toBeNull();
+  });
+
+  it('A3: cardápio vazio, ausente (so_desconhecidos) ou sem a plataforma bloqueia, sem Antigravity fixo', () => {
+    expect(resolverPlataformaPadrao([])).toBeNull();
+    expect(resolverPlataformaPadrao(undefined)).toBeNull();
+    for (const c of [[], undefined, cenarioSoDesconhecidos.cardapio]) {
+      const r = montarAbertura(projetos, c, selecaoInicial(projetos, c));
+      expect(r.selecao.plataforma).toBeNull();
+      expect(r.mensagem).toBeNull();
+      expect(r.bloqueios.join(' ')).toMatch(/Cardápio indisponível/);
+    }
+    const soCodex = cardapio.filter((i) => i.plataforma === 'Codex');
+    expect(resolverPlataformaPadrao(soCodex)).toBe('Codex');
+  });
+
+  it('A4: subagentes só da plataforma e do nível; troca de plataforma revalida tudo', () => {
+    expect(obterOpcoesSubagente(cardapio, 'Antigravity', 'alta')).toEqual(['Gemini 4 Argon']);
+    expect(obterOpcoesSubagente(cardapio, 'Codex', 'simples')).toEqual(['GPT-6-Luna']);
+    expect(obterOpcoesSubagente(cardapio, null, 'alta')).toEqual([]);
+
+    const inicial = selecaoInicial(projetos, cardapio);
+    const { selecao, opcoes } = normalizarSelecao(projetos, cardapio, {
+      ...inicial,
+      plataforma: 'Claude Code',
+    });
+    expect(selecao.chaveEscala).toBe('moderada::Claude Sonnet 5.5::medium');
+    expect(selecao.subagentes).toEqual({
+      alta: 'Claude Opus 5.5',
+      moderada: 'Claude Sonnet 5.5',
+      simples: 'Claude Haiku 5.5',
+    });
+    expect(Object.values(opcoes.subagentes).flat().join(' ')).not.toMatch(/Gemini|GPT/);
+  });
+
+  it('A4: nível sem opção tira os subagentes da mensagem com o motivo', () => {
+    const semSimples = cardapio.filter((i) => !(i.plataforma === 'Antigravity' && i.nivel === 'simples'));
+    const r = montarAbertura(projetos, semSimples, selecaoInicial(projetos, semSimples));
+    expect(r.selecao.subagentes.simples).toBeNull();
+    expect(r.avisoSubagentes).toMatch(/simples/);
+    expect(r.mensagem).not.toBeNull();
+    expect(r.mensagem).not.toContain('subagentes');
   });
 });

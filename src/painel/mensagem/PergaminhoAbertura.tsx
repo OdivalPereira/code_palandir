@@ -1,19 +1,21 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { MolduraPergaminho, SeloEstado } from '@/app/rpgTheme';
 import { usePainelStore } from '@/stores/painelStore';
 import type {
   ItemCardapio,
+  NivelCardapio,
   PapelEscala,
   ProjetoPainel,
 } from '../contrato/painel1.types';
+import { copiarMensagemSegura, PAPEIS_DISPONIVEIS, prepararTextoParaCopia } from './geradorMensagem';
 import {
-  copiarMensagemSegura,
-  gerarMensagemAbertura,
-  obterOpcoesCardapio,
-  obterPlataformasCardapio,
-  PAPEIS_DISPONIVEIS,
-  prepararTextoParaCopia,
-} from './geradorMensagem';
+  chaveOpcaoCardapio,
+  montarAbertura,
+  NIVEIS_SUBAGENTE,
+  normalizarSelecao,
+  selecaoInicial,
+  type SelecaoAbertura,
+} from './escalaAbertura';
 
 export interface PergaminhoAberturaProps {
   projetos?: ProjetoPainel[];
@@ -22,24 +24,57 @@ export interface PergaminhoAberturaProps {
 }
 
 const SELECT_CLASSES =
-  'w-full min-h-[44px] px-3 py-2 rounded border border-amber-800/80 bg-stone-950 text-stone-100 text-sm font-sans focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 transition-colors';
+  'w-full min-h-[44px] px-3 py-2 rounded border border-amber-800/80 bg-stone-950 text-stone-100 text-sm font-sans focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 transition-colors disabled:opacity-70 disabled:cursor-not-allowed';
 
-function resolverEtapaPadrao(projeto?: ProjetoPainel): string {
-  if (!projeto || projeto.etapas.length === 0) {
-    return 'e1-inicial';
-  }
-  const carrinho = projeto.etapas.find((e) => e.id === 'e3-carrinho');
-  if (carrinho) return carrinho.id;
+const ID_MOTIVO = 'pergaminho-motivo-bloqueio';
+const ID_AVISO_SUB = 'pergaminho-aviso-subagentes';
 
-  const emAndamento = projeto.etapas.find((e) => e.estacao !== 'encerrada');
-  if (emAndamento) return emAndamento.id;
-
-  return projeto.etapas[projeto.etapas.length - 1].id;
+interface CampoProps {
+  id: string;
+  rotulo: string;
+  valor: string | null;
+  opcoes: Array<{ valor: string; texto: string }>;
+  vazio: string;
+  aoMudar: (valor: string) => void;
+  rotuloClasse?: string;
+  descritoPor?: string;
 }
 
-function chaveOpcaoCardapio(item: ItemCardapio): string {
-  return `${item.nivel}::${item.modelo}::${item.esforco}`;
-}
+/** Seletor rotulado; sem opções, fica desativado e mostra o motivo como única opção. */
+const Campo: React.FC<CampoProps> = ({
+  id,
+  rotulo,
+  valor,
+  opcoes,
+  vazio,
+  aoMudar,
+  rotuloClasse = 'block text-xs font-medium text-amber-200 mb-1',
+  descritoPor,
+}) => (
+  <div>
+    <label htmlFor={id} className={rotuloClasse}>
+      {rotulo}
+    </label>
+    <select
+      id={id}
+      value={valor ?? ''}
+      disabled={opcoes.length === 0}
+      aria-describedby={descritoPor}
+      onChange={(e) => aoMudar(e.target.value)}
+      className={SELECT_CLASSES}
+    >
+      {opcoes.length > 0 ? (
+        opcoes.map((o) => (
+          <option key={o.valor} value={o.valor}>
+            {o.texto}
+          </option>
+        ))
+      ) : (
+        <option value="">{vazio}</option>
+      )}
+    </select>
+  </div>
+);
 
 export const PergaminhoAbertura: React.FC<PergaminhoAberturaProps> = ({
   projetos: projetosProp,
@@ -48,425 +83,185 @@ export const PergaminhoAbertura: React.FC<PergaminhoAberturaProps> = ({
 }) => {
   const dadosStore = usePainelStore((s) => s.dados);
   const projetos = projetosProp ?? dadosStore?.projetos ?? [];
-  const cardapio = cardapioProp ?? dadosStore?.cardapio ?? [];
+  const cardapio = cardapioProp ?? dadosStore?.cardapio;
 
-  const plataformas = useMemo(() => obterPlataformasCardapio(cardapio), [cardapio]);
-
-  const projetoInicialId = useMemo(() => {
-    const loja = projetos.find((p) => p.id === 'loja-exemplo');
-    return loja ? loja.id : projetos[0]?.id ?? 'loja-exemplo';
-  }, [projetos]);
-
-  const [projetoId, setProjetoId] = useState<string>(projetoInicialId);
-
-  const projetoAtual = useMemo(
-    () => projetos.find((p) => p.id === projetoId) ?? projetos[0],
-    [projetos, projetoId]
-  );
-
-  const [etapaId, setEtapaId] = useState<string>(() =>
-    resolverEtapaPadrao(projetos.find((p) => p.id === projetoInicialId) ?? projetos[0])
-  );
-
-  const [papel, setPapel] = useState<PapelEscala>('coordenador');
-
-  const plataformaInicial = useMemo(() => {
-    return plataformas.includes('Antigravity')
-      ? 'Antigravity'
-      : plataformas[0] ?? 'Antigravity';
-  }, [plataformas]);
-
-  const [plataforma, setPlataforma] = useState<string>(plataformaInicial);
-
-  const opcoesPlataforma = useMemo(
-    () => obterOpcoesCardapio(cardapio, plataforma),
-    [cardapio, plataforma]
-  );
-
-  const [chaveEscala, setChaveEscala] = useState<string>(() => {
-    const opcoesIniciais = obterOpcoesCardapio(cardapio, plataformaInicial);
-    const moderada =
-      opcoesIniciais.find((o) => o.nivel === 'moderada') ?? opcoesIniciais[0];
-    return moderada ? chaveOpcaoCardapio(moderada) : '';
-  });
-
-  const [incluirSubagentes, setIncluirSubagentes] = useState<boolean>(true);
-
-  const modelosSubagentesDisponiveis = useMemo(() => {
-    const modelosDaPlataforma = opcoesPlataforma.map((o) => o.modelo);
-    const todosModelos = cardapio.map((o) => o.modelo);
-    const unicos = Array.from(new Set([...modelosDaPlataforma, ...todosModelos]));
-    return unicos;
-  }, [opcoesPlataforma, cardapio]);
-
-  const [subAlta, setSubAlta] = useState<string>(() => {
-    const item = obterOpcoesCardapio(cardapio, plataformaInicial, 'alta')[0];
-    return item?.modelo ?? modelosSubagentesDisponiveis[0] ?? '';
-  });
-
-  const [subModerada, setSubModerada] = useState<string>(() => {
-    const item = obterOpcoesCardapio(cardapio, plataformaInicial, 'moderada')[0];
-    return item?.modelo ?? modelosSubagentesDisponiveis[0] ?? '';
-  });
-
-  const [subSimples, setSubSimples] = useState<string>(() => {
-    const item = obterOpcoesCardapio(cardapio, plataformaInicial, 'simples')[0];
-    return item?.modelo ?? modelosSubagentesDisponiveis[0] ?? '';
-  });
-
+  const [bruta, setBruta] = useState<SelecaoAbertura>(() => selecaoInicial(projetos, cardapio));
   const [copiado, setCopiado] = useState<boolean>(false);
 
-  // Sincroniza quando a lista de projetos ou cardápio muda (ex.: troca de cenário)
-  useEffect(() => {
-    if (projetos.length > 0 && !projetos.some((p) => p.id === projetoId)) {
-      const novoProj = projetos.find((p) => p.id === 'loja-exemplo') ?? projetos[0];
-      setProjetoId(novoProj.id);
-      setEtapaId(resolverEtapaPadrao(novoProj));
-    }
-  }, [projetos, projetoId]);
-
-  const handleTrocarProjeto = (novoId: string) => {
-    setProjetoId(novoId);
-    const proj = projetos.find((p) => p.id === novoId);
-    setEtapaId(resolverEtapaPadrao(proj));
-    setCopiado(false);
-  };
-
-  const handleTrocarPlataforma = (novaPlataforma: string) => {
-    setPlataforma(novaPlataforma);
-    const novasOpcoes = obterOpcoesCardapio(cardapio, novaPlataforma);
-    const moderada = novasOpcoes.find((o) => o.nivel === 'moderada') ?? novasOpcoes[0];
-    if (moderada) {
-      setChaveEscala(chaveOpcaoCardapio(moderada));
-    }
-    const alta = novasOpcoes.find((o) => o.nivel === 'alta')?.modelo ?? moderada?.modelo;
-    const mod = novasOpcoes.find((o) => o.nivel === 'moderada')?.modelo ?? moderada?.modelo;
-    const simp = novasOpcoes.find((o) => o.nivel === 'simples')?.modelo ?? moderada?.modelo;
-    if (alta) setSubAlta(alta);
-    if (mod) setSubModerada(mod);
-    if (simp) setSubSimples(simp);
-    setCopiado(false);
-  };
-
-  const itemEscalaSelecionado = useMemo(() => {
-    return (
-      opcoesPlataforma.find((o) => chaveOpcaoCardapio(o) === chaveEscala) ??
-      opcoesPlataforma.find((o) => o.nivel === 'moderada') ??
-      opcoesPlataforma[0]
-    );
-  }, [opcoesPlataforma, chaveEscala]);
-
-  const modeloSelecionado = itemEscalaSelecionado?.modelo ?? '';
-  const esforcoSelecionado = itemEscalaSelecionado?.esforco ?? '';
-
-  const mensagemBruta = useMemo(() => {
-    return gerarMensagemAbertura({
-      projetoId,
-      etapaId,
-      papel,
-      plataforma,
-      modelo: modeloSelecionado,
-      esforco: esforcoSelecionado,
-      subagentes: incluirSubagentes
-        ? {
-            alta: subAlta,
-            moderada: subModerada,
-            simples: subSimples,
-          }
-        : undefined,
-    });
-  }, [
-    projetoId,
-    etapaId,
-    papel,
-    plataforma,
-    modeloSelecionado,
-    esforcoSelecionado,
-    incluirSubagentes,
-    subAlta,
-    subModerada,
-    subSimples,
-  ]);
-
-  const mensagemSegura = useMemo(
-    () => prepararTextoParaCopia(mensagemBruta),
-    [mensagemBruta]
+  // Revalida a cada render: se o instantâneo mudar, nada inválido sobrevive na tela.
+  const resultado = useMemo(
+    () => montarAbertura(projetos, cardapio, bruta),
+    [projetos, cardapio, bruta]
   );
+  const { selecao, opcoes, bloqueios, avisoSubagentes, mensagem } = resultado;
+  const bloqueado = mensagem === null;
+
+  const alterar = (parcial: Partial<SelecaoAbertura>) => {
+    setBruta({ ...selecao, ...parcial });
+    setCopiado(false);
+  };
+
+  const trocarPlataforma = (plataforma: string) => {
+    setBruta(normalizarSelecao(projetos, cardapio, { ...selecao, plataforma }).selecao);
+    setCopiado(false);
+  };
 
   const handleCopiar = async () => {
-    const resultado = await copiarMensagemSegura(mensagemBruta);
-    if (resultado.copiado) {
-      setCopiado(true);
-    }
+    if (mensagem === null) return;
+    const r = await copiarMensagemSegura(mensagem);
+    if (r.copiado) setCopiado(true);
   };
 
-  const etapasDoProjeto = projetoAtual?.etapas ?? [];
+  const projetoAtual = projetos.find((p) => p.id === selecao.projetoId);
 
   return (
     <MolduraPergaminho
       variante="destaque"
       titulo="IV. Pergaminho de Abertura"
       subtitulo="Montar mensagem de abertura (sc.py abertura · pacote 3.4.0)"
-      selo={<SeloEstado estado="em_dia" rotulo="5 linhas" />}
+      selo={
+        bloqueado ? (
+          <SeloEstado estado="desconhecido" rotulo="escala incompleta" />
+        ) : (
+          <SeloEstado estado="em_dia" rotulo="5 linhas" />
+        )
+      }
       className={className}
     >
       <div className="space-y-3">
-        {/* Linha 1: Projeto e Etapa */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label
-              htmlFor="pergaminho-projeto"
-              className="block text-xs font-medium text-amber-200 mb-1"
-            >
-              Projeto
-            </label>
-            <select
-              id="pergaminho-projeto"
-              value={projetoId}
-              onChange={(e) => handleTrocarProjeto(e.target.value)}
-              className={SELECT_CLASSES}
-            >
-              {projetos.length > 0 ? (
-                projetos.map((proj) => (
-                  <option key={proj.id} value={proj.id}>
-                    {proj.nome} ({proj.id})
-                  </option>
-                ))
-              ) : (
-                <option value="loja-exemplo">loja-exemplo</option>
-              )}
-            </select>
-          </div>
-
-          <div>
-            <label
-              htmlFor="pergaminho-etapa"
-              className="block text-xs font-medium text-amber-200 mb-1"
-            >
-              Etapa
-            </label>
-            <select
-              id="pergaminho-etapa"
-              value={etapaId}
-              onChange={(e) => {
-                setEtapaId(e.target.value);
-                setCopiado(false);
-              }}
-              className={SELECT_CLASSES}
-            >
-              {etapasDoProjeto.length > 0 ? (
-                etapasDoProjeto.map((etapa) => (
-                  <option key={etapa.id} value={etapa.id}>
-                    {etapa.id} ({etapa.estacao})
-                  </option>
-                ))
-              ) : (
-                <option value={etapaId}>{etapaId} (sem etapas registradas)</option>
-              )}
-            </select>
-          </div>
+          <Campo
+            id="pergaminho-projeto"
+            rotulo="Projeto"
+            valor={selecao.projetoId}
+            opcoes={projetos.map((p) => ({ valor: p.id, texto: `${p.nome} (${p.id})` }))}
+            vazio="nenhum projeto coletado"
+            aoMudar={(projetoId) => alterar({ projetoId, etapaId: null })}
+          />
+          <Campo
+            id="pergaminho-etapa"
+            rotulo="Etapa"
+            valor={selecao.etapaId}
+            opcoes={(projetoAtual?.etapas ?? []).map((e) => ({
+              valor: e.id,
+              texto: `${e.id} (${e.estacao})`,
+            }))}
+            vazio="nenhuma etapa coletada"
+            aoMudar={(etapaId) => alterar({ etapaId })}
+          />
         </div>
 
-        {/* Linha 2: Papel e Plataforma */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label
-              htmlFor="pergaminho-papel"
-              className="block text-xs font-medium text-amber-200 mb-1"
-            >
-              Papel
-            </label>
-            <select
-              id="pergaminho-papel"
-              value={papel}
-              onChange={(e) => {
-                setPapel(e.target.value as PapelEscala);
-                setCopiado(false);
-              }}
-              className={SELECT_CLASSES}
-            >
-              {PAPEIS_DISPONIVEIS.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label
-              htmlFor="pergaminho-plataforma"
-              className="block text-xs font-medium text-amber-200 mb-1"
-            >
-              Plataforma
-            </label>
-            <select
-              id="pergaminho-plataforma"
-              value={plataforma}
-              onChange={(e) => handleTrocarPlataforma(e.target.value)}
-              className={SELECT_CLASSES}
-            >
-              {plataformas.map((plat) => (
-                <option key={plat} value={plat}>
-                  {plat}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Campo
+            id="pergaminho-papel"
+            rotulo="Papel"
+            valor={selecao.papel}
+            opcoes={PAPEIS_DISPONIVEIS.map((p) => ({ valor: p, texto: p }))}
+            vazio="sem papéis"
+            aoMudar={(papel) => alterar({ papel: papel as PapelEscala })}
+          />
+          <Campo
+            id="pergaminho-plataforma"
+            rotulo="Plataforma"
+            valor={selecao.plataforma}
+            opcoes={opcoes.plataformas.map((p) => ({ valor: p, texto: p }))}
+            vazio="cardápio indisponível"
+            aoMudar={trocarPlataforma}
+          />
         </div>
 
-        {/* Linha 3: Nível / Modelo e Esforço (exclusivamente do cardápio) */}
-        <div>
-          <label
-            htmlFor="pergaminho-escala"
-            className="block text-xs font-medium text-amber-200 mb-1"
-          >
-            Nível / Modelo e Esforço (cardápio)
-          </label>
-          <select
-            id="pergaminho-escala"
-            value={
-              itemEscalaSelecionado ? chaveOpcaoCardapio(itemEscalaSelecionado) : chaveEscala
-            }
-            onChange={(e) => {
-              setChaveEscala(e.target.value);
-              setCopiado(false);
-            }}
-            className={SELECT_CLASSES}
-          >
-            {opcoesPlataforma.map((item) => {
-              const chave = chaveOpcaoCardapio(item);
-              return (
-                <option key={chave} value={chave}>
-                  {item.nivel}: {item.modelo} · esforço {item.esforco}
-                </option>
-              );
-            })}
-          </select>
-        </div>
+        <Campo
+          id="pergaminho-escala"
+          rotulo="Nível / Modelo e Esforço (cardápio)"
+          valor={selecao.chaveEscala}
+          opcoes={opcoes.escala.map((i) => ({
+            valor: chaveOpcaoCardapio(i),
+            texto: `${i.nivel}: ${i.modelo} · esforço ${i.esforco}`,
+          }))}
+          vazio="cardápio indisponível"
+          aoMudar={(chaveEscala) => alterar({ chaveEscala })}
+        />
 
-        {/* Linha 4: Subagentes por nível */}
         <div className="pt-2 border-t border-amber-900/40 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <label
-              htmlFor="pergaminho-incluir-subagentes"
-              className="inline-flex items-center gap-2 min-h-[44px] text-xs font-medium text-amber-200 cursor-pointer select-none"
-            >
-              <input
-                id="pergaminho-incluir-subagentes"
-                type="checkbox"
-                checked={incluirSubagentes}
-                onChange={(e) => {
-                  setIncluirSubagentes(e.target.checked);
-                  setCopiado(false);
-                }}
-                className="w-4 h-4 accent-amber-500 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
-              />
-              <span>Incluir subagentes por nível (alta, moderada, simples)</span>
-            </label>
-          </div>
+          <label
+            htmlFor="pergaminho-incluir-subagentes"
+            className="inline-flex items-center gap-2 min-h-[44px] text-xs font-medium text-amber-200 cursor-pointer select-none"
+          >
+            <input
+              id="pergaminho-incluir-subagentes"
+              type="checkbox"
+              checked={selecao.incluirSubagentes}
+              aria-describedby={avisoSubagentes ? ID_AVISO_SUB : undefined}
+              onChange={(e) => alterar({ incluirSubagentes: e.target.checked })}
+              className="w-4 h-4 accent-amber-500 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+            />
+            <span>Incluir subagentes por nível (alta, moderada, simples)</span>
+          </label>
 
-          {incluirSubagentes && (
+          {selecao.incluirSubagentes && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <div>
-                <label
-                  htmlFor="pergaminho-subagente-alta"
-                  className="block text-[11px] font-medium text-stone-300 mb-1"
-                >
-                  Subagente (alta)
-                </label>
-                <select
-                  id="pergaminho-subagente-alta"
-                  value={subAlta}
-                  onChange={(e) => {
-                    setSubAlta(e.target.value);
-                    setCopiado(false);
-                  }}
-                  className={SELECT_CLASSES}
-                >
-                  {modelosSubagentesDisponiveis.map((mod) => (
-                    <option key={mod} value={mod}>
-                      {mod}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="pergaminho-subagente-moderada"
-                  className="block text-[11px] font-medium text-stone-300 mb-1"
-                >
-                  Subagente (moderada)
-                </label>
-                <select
-                  id="pergaminho-subagente-moderada"
-                  value={subModerada}
-                  onChange={(e) => {
-                    setSubModerada(e.target.value);
-                    setCopiado(false);
-                  }}
-                  className={SELECT_CLASSES}
-                >
-                  {modelosSubagentesDisponiveis.map((mod) => (
-                    <option key={mod} value={mod}>
-                      {mod}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="pergaminho-subagente-simples"
-                  className="block text-[11px] font-medium text-stone-300 mb-1"
-                >
-                  Subagente (simples)
-                </label>
-                <select
-                  id="pergaminho-subagente-simples"
-                  value={subSimples}
-                  onChange={(e) => {
-                    setSubSimples(e.target.value);
-                    setCopiado(false);
-                  }}
-                  className={SELECT_CLASSES}
-                >
-                  {modelosSubagentesDisponiveis.map((mod) => (
-                    <option key={mod} value={mod}>
-                      {mod}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {NIVEIS_SUBAGENTE.map((nivel: NivelCardapio) => (
+                <Campo
+                  key={nivel}
+                  id={`pergaminho-subagente-${nivel}`}
+                  rotulo={`Subagente (${nivel})`}
+                  rotuloClasse="block text-[11px] font-medium text-stone-300 mb-1"
+                  valor={selecao.subagentes[nivel]}
+                  opcoes={opcoes.subagentes[nivel].map((m) => ({ valor: m, texto: m }))}
+                  vazio="sem opção no cardápio"
+                  descritoPor={avisoSubagentes ? ID_AVISO_SUB : undefined}
+                  aoMudar={(modelo) =>
+                    alterar({ subagentes: { ...selecao.subagentes, [nivel]: modelo } })
+                  }
+                />
+              ))}
             </div>
+          )}
+
+          {avisoSubagentes && (
+            <p id={ID_AVISO_SUB} className="text-xs text-amber-200">
+              <span aria-hidden="true">⚠ </span>
+              {avisoSubagentes}
+            </p>
           )}
         </div>
 
-        {/* Caixa de pré-visualização */}
         <div className="pt-2">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-amber-200">
-              Pré-visualização (filtrada por redactSecrets)
-            </span>
-          </div>
+          <span className="block text-xs font-medium text-amber-200 mb-1">
+            Pré-visualização (filtrada por redactSecrets)
+          </span>
           <pre
             aria-label="Pré-visualização da mensagem de abertura"
             className="p-3 rounded border border-amber-900/70 bg-stone-950 text-amber-100 font-mono text-xs leading-relaxed overflow-x-auto whitespace-pre-wrap break-words"
           >
-            {mensagemSegura}
+            {mensagem !== null
+              ? prepararTextoParaCopia(mensagem)
+              : 'Prévia indisponível: a escala está incompleta (veja o motivo junto ao botão).'}
           </pre>
         </div>
 
-        {/* Ação de cópia acessível */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
           <button
             type="button"
             onClick={handleCopiar}
-            className="min-h-[44px] px-4 py-2 rounded border border-amber-500 bg-amber-900/60 hover:bg-amber-800/70 text-amber-100 font-semibold text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+            disabled={bloqueado}
+            aria-disabled={bloqueado ? 'true' : 'false'}
+            aria-describedby={bloqueado ? ID_MOTIVO : undefined}
+            className="min-h-[44px] px-4 py-2 rounded border border-amber-500 bg-amber-900/60 hover:bg-amber-800/70 text-amber-100 font-semibold text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-amber-900/60"
           >
             Copiar mensagem
           </button>
+
+          {bloqueado && (
+            <div id={ID_MOTIVO} className="text-xs text-amber-200 space-y-0.5">
+              {bloqueios.map((m) => (
+                <p key={m}>
+                  <span aria-hidden="true">✕ </span>
+                  {m}
+                </p>
+              ))}
+            </div>
+          )}
 
           {copiado && (
             <span
