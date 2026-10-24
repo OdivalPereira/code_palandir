@@ -101,6 +101,25 @@ describe('Regiões: selos que não afirmam o que não sabem', () => {
     expect(within(detalhe).getByText('Em dia')).toBeTruthy();
   });
 
+  it.each([
+    ['3.5.0', 'núcleo: à frente da fonte'],
+    ['3.3.0', 'núcleo defasado'],
+  ])('cabeçalho distingue núcleo %s da fonte 3.4.0', (versao, rotulo) => {
+    const loja = exemploOficial.projetos.find((p) => p.id === 'loja-exemplo')!;
+    usePainelStore.setState({
+      dados: {
+        ...exemploOficial,
+        pacote: { ...exemploOficial.pacote, fonte_versao: '3.4.0' },
+        diagnosticos: [],
+        projetos: [{ ...loja, nucleo: versao, pendencias: [] }],
+      },
+    });
+    renderProjetos('/projetos/loja-exemplo');
+    const detalhe = screen.getByRole('region', { name: /Detalhes da Região Loja Exemplo/i });
+    expect(within(detalhe).getByText(rotulo)).toBeTruthy();
+    if (versao === '3.5.0') expect(within(detalhe).queryByText('núcleo defasado')).toBeNull();
+  });
+
   it('projeto com diagnósticos conta só as pendências conhecidas, sem "?" duplicado', () => {
     renderProjetos('/projetos');
     const lista = screen.getByRole('complementary', { name: /Lista de Regiões/i });

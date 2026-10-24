@@ -329,7 +329,11 @@ export const ProjetosPage: React.FC = () => {
               ) : nucAtivo.estado !== 'em_dia' ? (
                 <SeloEstado
                   estado={nucAtivo.estado}
-                  rotulo={nucAtivo.estado === 'defasado' ? 'núcleo defasado' : 'núcleo desconhecido'}
+                  rotulo={
+                    nucAtivo.estado === 'defasado'
+                      ? nucAtivo.motivo === 'defasado' ? 'núcleo defasado' : `núcleo: ${nucAtivo.motivo}`
+                      : 'núcleo desconhecido'
+                  }
                 />
               ) : (
                 <SeloEstado estado="em_dia" rotulo="Em dia" />
