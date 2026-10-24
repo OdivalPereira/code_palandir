@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { PergaminhoAbertura } from '../painel/mensagem/PergaminhoAbertura';
 import { cenarioSoDesconhecidos, exemploOficial } from '../painel/fixtures/cenarios';
 import type { ItemCardapio } from '../painel/contrato/painel1.types';
@@ -149,5 +149,86 @@ describe('PergaminhoAbertura — só copia escala válida do instantâneo (A2, A
     expect(await screen.findByText(/Mensagem copiada!/i)).toBeTruthy();
     expect(spyCopy).toHaveBeenCalledTimes(1);
     spyCopy.mockRestore();
+  });
+
+  function copiaLiberada(): boolean {
+    const botao = screen.getByRole('button', { name: /Copiar mensagem/i }) as HTMLButtonElement;
+    return !botao.disabled && botao.getAttribute('aria-disabled') === 'false';
+  }
+
+  it('R1: cenário novo no store sem a plataforma escolhida bloqueia com motivo; escolher outra libera', () => {
+    render(<PergaminhoAbertura />);
+    fireEvent.change(screen.getByLabelText('Plataforma'), { target: { value: 'Codex' } });
+    expect(copiaLiberada()).toBe(true);
+
+    act(() => {
+      usePainelStore.setState({
+        dados: { ...exemploOficial, cardapio: cardapioOficial.filter((i) => i.plataforma !== 'Codex') },
+      });
+    });
+
+    const plataforma = screen.getByLabelText('Plataforma') as HTMLSelectElement;
+    expect(plataforma.value).toBe('Codex');
+    expect(plataforma.disabled).toBe(false);
+    expect(plataforma.getAttribute('aria-invalid')).toBe('true');
+    expect(plataforma.textContent).toContain('Codex (não está mais no instantâneo)');
+    esperarCopiaBloqueada(/Cardápio indisponível para a plataforma Codex.*escolha outra/);
+
+    fireEvent.change(plataforma, { target: { value: 'Antigravity' } });
+    expect(copiaLiberada()).toBe(true);
+    expect(previa()).toContain('Para: coordenador (Antigravity, Gemini 3.8 Flash, esforço medium)');
+  });
+
+  it('R1: projeto escolhido que some do instantâneo bloqueia; escolher outro libera', () => {
+    const { rerender } = render(
+      <PergaminhoAbertura projetos={exemploOficial.projetos} cardapio={cardapioOficial} />
+    );
+    fireEvent.change(screen.getByLabelText('Projeto'), { target: { value: 'app-receitas' } });
+    expect(copiaLiberada()).toBe(true);
+
+    rerender(
+      <PergaminhoAbertura
+        projetos={exemploOficial.projetos.filter((p) => p.id !== 'app-receitas')}
+        cardapio={cardapioOficial}
+      />
+    );
+    expect((screen.getByLabelText('Projeto') as HTMLSelectElement).value).toBe('app-receitas');
+    esperarCopiaBloqueada(/projeto app-receitas não está mais no instantâneo/);
+
+    fireEvent.change(screen.getByLabelText('Projeto'), { target: { value: 'loja-exemplo' } });
+    expect(copiaLiberada()).toBe(true);
+    expect(previa()).toContain('Worktree: ~/.sociedade/trabalho/loja-exemplo/e3-carrinho');
+  });
+
+  it('R1: etapa escolhida que some do instantâneo bloqueia; escolher outra libera', () => {
+    const { rerender } = render(
+      <PergaminhoAbertura projetos={exemploOficial.projetos} cardapio={cardapioOficial} />
+    );
+    fireEvent.change(screen.getByLabelText('Etapa'), { target: { value: 'e2-catalogo' } });
+    expect(copiaLiberada()).toBe(true);
+
+    rerender(
+      <PergaminhoAbertura
+        projetos={exemploOficial.projetos.map((p) =>
+          p.id === 'loja-exemplo' ? { ...p, etapas: p.etapas.filter((e) => e.id !== 'e2-catalogo') } : p
+        )}
+        cardapio={cardapioOficial}
+      />
+    );
+    expect((screen.getByLabelText('Etapa') as HTMLSelectElement).value).toBe('e2-catalogo');
+    esperarCopiaBloqueada(/etapa e2-catalogo não está mais no instantâneo/);
+
+    fireEvent.change(screen.getByLabelText('Etapa'), { target: { value: 'e3-carrinho' } });
+    expect(copiaLiberada()).toBe(true);
+  });
+
+  it('R2: linha com modelo ou esforço vazio não gera "(X, , esforço )"', () => {
+    const comVazias: ItemCardapio[] = [
+      { plataforma: 'Antigravity', fornecedor: 'Google', nivel: 'moderada', modelo: ' ', esforco: 'medium' },
+      { plataforma: 'Antigravity', fornecedor: 'Google', nivel: 'alta', modelo: 'Gemini 4 Argon', esforco: '  ' },
+    ];
+    render(<PergaminhoAbertura projetos={exemploOficial.projetos} cardapio={comVazias} />);
+    esperarCopiaBloqueada(/Cardápio indisponível/);
+    expect(document.body.textContent).not.toMatch(/, ,|esforço \)/);
   });
 });

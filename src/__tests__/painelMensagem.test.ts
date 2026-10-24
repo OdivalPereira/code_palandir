@@ -11,6 +11,7 @@ import {
   prepararTextoParaCopia,
 } from '../painel/mensagem/geradorMensagem';
 import {
+  escolherPlataforma,
   montarAbertura,
   normalizarSelecao,
   obterOpcoesSubagente,
@@ -166,7 +167,7 @@ describe('escalaAbertura — regras puras do Pergaminho (A2, A3, A4)', () => {
   const cardapio = exemploOficial.cardapio ?? [];
 
   it('o estado inicial do exemplo oficial monta exatamente a saída-ouro', () => {
-    const r = montarAbertura(projetos, cardapio, selecaoInicial(projetos, cardapio));
+    const r = montarAbertura(projetos, cardapio, selecaoInicial());
     expect(r.bloqueios).toEqual([]);
     expect(r.avisoSubagentes).toBeNull();
     expect(r.mensagem).toBe(SAIDA_OURO_SECAO_5_3);
@@ -179,7 +180,7 @@ describe('escalaAbertura — regras puras do Pergaminho (A2, A3, A4)', () => {
     expect(resolverEtapaPadrao(diario)).toBeNull();
 
     const r = montarAbertura(projetos, cardapio, {
-      ...selecaoInicial(projetos, cardapio),
+      ...selecaoInicial(),
       projetoId: 'diario-campo',
       etapaId: null,
     });
@@ -187,7 +188,7 @@ describe('escalaAbertura — regras puras do Pergaminho (A2, A3, A4)', () => {
     expect(r.mensagem).toBeNull();
     expect(r.bloqueios.join(' ')).toMatch(/Nenhuma etapa coletada/);
 
-    const semProjetos = montarAbertura([], cardapio, selecaoInicial([], cardapio));
+    const semProjetos = montarAbertura([], cardapio, selecaoInicial());
     expect(semProjetos.selecao.projetoId).toBeNull();
     expect(semProjetos.mensagem).toBeNull();
   });
@@ -196,7 +197,7 @@ describe('escalaAbertura — regras puras do Pergaminho (A2, A3, A4)', () => {
     expect(resolverPlataformaPadrao([])).toBeNull();
     expect(resolverPlataformaPadrao(undefined)).toBeNull();
     for (const c of [[], undefined, cenarioSoDesconhecidos.cardapio]) {
-      const r = montarAbertura(projetos, c, selecaoInicial(projetos, c));
+      const r = montarAbertura(projetos, c, selecaoInicial());
       expect(r.selecao.plataforma).toBeNull();
       expect(r.mensagem).toBeNull();
       expect(r.bloqueios.join(' ')).toMatch(/Cardápio indisponível/);
@@ -210,7 +211,7 @@ describe('escalaAbertura — regras puras do Pergaminho (A2, A3, A4)', () => {
     expect(obterOpcoesSubagente(cardapio, 'Codex', 'simples')).toEqual(['GPT-6-Luna']);
     expect(obterOpcoesSubagente(cardapio, null, 'alta')).toEqual([]);
 
-    const inicial = selecaoInicial(projetos, cardapio);
+    const inicial = selecaoInicial();
     const { selecao, opcoes } = normalizarSelecao(projetos, cardapio, {
       ...inicial,
       plataforma: 'Claude Code',
@@ -226,10 +227,68 @@ describe('escalaAbertura — regras puras do Pergaminho (A2, A3, A4)', () => {
 
   it('A4: nível sem opção tira os subagentes da mensagem com o motivo', () => {
     const semSimples = cardapio.filter((i) => !(i.plataforma === 'Antigravity' && i.nivel === 'simples'));
-    const r = montarAbertura(projetos, semSimples, selecaoInicial(projetos, semSimples));
+    const r = montarAbertura(projetos, semSimples, selecaoInicial());
     expect(r.selecao.subagentes.simples).toBeNull();
     expect(r.avisoSubagentes).toMatch(/simples/);
     expect(r.mensagem).not.toBeNull();
     expect(r.mensagem).not.toContain('subagentes');
+  });
+
+  it('R1: plataforma escolhida que some do cardápio bloqueia, sem trocar em silêncio; escolher outra libera', () => {
+    const semCodex = cardapio.filter((i) => i.plataforma !== 'Codex');
+    const escolhida = escolherPlataforma(cardapio, selecaoInicial(), 'Codex');
+    expect(montarAbertura(projetos, cardapio, escolhida).mensagem).toContain('(Codex, GPT-6.1-Sol');
+
+    const r = montarAbertura(projetos, semCodex, escolhida);
+    expect(r.selecao.plataforma).toBe('Codex');
+    expect(r.ausentes.plataforma).toBe('Codex');
+    expect(r.mensagem).toBeNull();
+    expect(r.bloqueios.join(' ')).toMatch(/Cardápio indisponível para a plataforma Codex.*escolha outra/);
+
+    const outra = montarAbertura(projetos, semCodex, escolherPlataforma(semCodex, escolhida, 'Antigravity'));
+    expect(outra.bloqueios).toEqual([]);
+    expect(outra.mensagem).toBe(SAIDA_OURO_SECAO_5_3);
+
+    // Sem escolha do usuário, o padrão pode vir do cardápio novo.
+    const semAntigravity = cardapio.filter((i) => i.plataforma !== 'Antigravity');
+    const padrao = montarAbertura(projetos, semAntigravity, selecaoInicial());
+    expect(padrao.selecao.plataforma).toBe('Claude Code');
+    expect(padrao.mensagem).not.toBeNull();
+  });
+
+  it('R1: projeto e etapa escolhidos que somem do instantâneo bloqueiam com motivo', () => {
+    const semReceitas = projetos.filter((p) => p.id !== 'app-receitas');
+    const r = montarAbertura(semReceitas, cardapio, { ...selecaoInicial(), projetoId: 'app-receitas' });
+    expect(r.selecao.projetoId).toBe('app-receitas');
+    expect(r.mensagem).toBeNull();
+    expect(r.bloqueios.join(' ')).toMatch(/projeto app-receitas não está mais no instantâneo/);
+
+    const lojaSoCarrinho = projetos.map((p) =>
+      p.id === 'loja-exemplo' ? { ...p, etapas: p.etapas.filter((e) => e.id === 'e3-carrinho') } : p
+    );
+    const e = montarAbertura(lojaSoCarrinho, cardapio, {
+      ...selecaoInicial(),
+      projetoId: 'loja-exemplo',
+      etapaId: 'e2-catalogo',
+    });
+    expect(e.selecao.etapaId).toBe('e2-catalogo');
+    expect(e.mensagem).toBeNull();
+    expect(e.bloqueios.join(' ')).toMatch(/etapa e2-catalogo não está mais no instantâneo/);
+  });
+
+  it('R2: linha do cardápio com modelo ou esforço vazio conta como ausente', () => {
+    const soVazias = [
+      { plataforma: 'Codex', fornecedor: 'OpenAI', nivel: 'moderada' as const, modelo: '  ', esforco: 'medium' },
+      { plataforma: 'Codex', fornecedor: 'OpenAI', nivel: 'alta' as const, modelo: 'GPT-6-Astra', esforco: '' },
+    ];
+    const r = montarAbertura(projetos, soVazias, selecaoInicial());
+    expect(r.mensagem).toBeNull();
+    expect(r.bloqueios.join(' ')).toMatch(/Cardápio indisponível/);
+
+    const misturado = [...cardapio.filter((i) => i.plataforma === 'Antigravity'), ...soVazias];
+    const m = montarAbertura(projetos, misturado, escolherPlataforma(misturado, selecaoInicial(), 'Antigravity'));
+    expect(m.opcoes.plataformas).toEqual(['Antigravity']);
+    expect(m.mensagem).toBe(SAIDA_OURO_SECAO_5_3);
+    expect(m.mensagem).not.toMatch(/, ,|esforço \)/);
   });
 });

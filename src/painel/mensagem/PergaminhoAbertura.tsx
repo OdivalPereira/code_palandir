@@ -10,9 +10,9 @@ import type {
 import { copiarMensagemSegura, PAPEIS_DISPONIVEIS, prepararTextoParaCopia } from './geradorMensagem';
 import {
   chaveOpcaoCardapio,
+  escolherPlataforma,
   montarAbertura,
   NIVEIS_SUBAGENTE,
-  normalizarSelecao,
   selecaoInicial,
   type SelecaoAbertura,
 } from './escalaAbertura';
@@ -40,7 +40,10 @@ interface CampoProps {
   descritoPor?: string;
 }
 
-/** Seletor rotulado; sem opções, fica desativado e mostra o motivo como única opção. */
+/**
+ * Seletor rotulado; sem opções, fica desativado e mostra o motivo como única opção.
+ * Escolha que sumiu do instantâneo continua visível (marcada) até o usuário escolher outra.
+ */
 const Campo: React.FC<CampoProps> = ({
   id,
   rotulo,
@@ -50,19 +53,27 @@ const Campo: React.FC<CampoProps> = ({
   aoMudar,
   rotuloClasse = 'block text-xs font-medium text-amber-200 mb-1',
   descritoPor,
-}) => (
+}) => {
+  const fora = valor !== null && opcoes.length > 0 && !opcoes.some((o) => o.valor === valor);
+  return (
   <div>
     <label htmlFor={id} className={rotuloClasse}>
       {rotulo}
     </label>
     <select
       id={id}
-      value={valor ?? ''}
+      value={opcoes.length > 0 ? valor ?? '' : ''}
       disabled={opcoes.length === 0}
-      aria-describedby={descritoPor}
+      aria-invalid={fora ? 'true' : undefined}
+      aria-describedby={fora ? ID_MOTIVO : descritoPor}
       onChange={(e) => aoMudar(e.target.value)}
       className={SELECT_CLASSES}
     >
+      {fora && (
+        <option value={valor as string} disabled>
+          {valor} (não está mais no instantâneo)
+        </option>
+      )}
       {opcoes.length > 0 ? (
         opcoes.map((o) => (
           <option key={o.valor} value={o.valor}>
@@ -74,7 +85,8 @@ const Campo: React.FC<CampoProps> = ({
       )}
     </select>
   </div>
-);
+  );
+};
 
 export const PergaminhoAbertura: React.FC<PergaminhoAberturaProps> = ({
   projetos: projetosProp,
@@ -85,7 +97,7 @@ export const PergaminhoAbertura: React.FC<PergaminhoAberturaProps> = ({
   const projetos = projetosProp ?? dadosStore?.projetos ?? [];
   const cardapio = cardapioProp ?? dadosStore?.cardapio;
 
-  const [bruta, setBruta] = useState<SelecaoAbertura>(() => selecaoInicial(projetos, cardapio));
+  const [bruta, setBruta] = useState<SelecaoAbertura>(selecaoInicial);
   const [copiado, setCopiado] = useState<boolean>(false);
 
   // Revalida a cada render: se o instantâneo mudar, nada inválido sobrevive na tela.
@@ -97,12 +109,12 @@ export const PergaminhoAbertura: React.FC<PergaminhoAberturaProps> = ({
   const bloqueado = mensagem === null;
 
   const alterar = (parcial: Partial<SelecaoAbertura>) => {
-    setBruta({ ...selecao, ...parcial });
+    setBruta((b) => ({ ...b, ...parcial }));
     setCopiado(false);
   };
 
   const trocarPlataforma = (plataforma: string) => {
-    setBruta(normalizarSelecao(projetos, cardapio, { ...selecao, plataforma }).selecao);
+    setBruta((b) => escolherPlataforma(cardapio, b, plataforma));
     setCopiado(false);
   };
 
@@ -210,9 +222,10 @@ export const PergaminhoAbertura: React.FC<PergaminhoAberturaProps> = ({
                   opcoes={opcoes.subagentes[nivel].map((m) => ({ valor: m, texto: m }))}
                   vazio="sem opção no cardápio"
                   descritoPor={avisoSubagentes ? ID_AVISO_SUB : undefined}
-                  aoMudar={(modelo) =>
-                    alterar({ subagentes: { ...selecao.subagentes, [nivel]: modelo } })
-                  }
+                  aoMudar={(modelo) => {
+                    setBruta((b) => ({ ...b, subagentes: { ...b.subagentes, [nivel]: modelo } }));
+                    setCopiado(false);
+                  }}
                 />
               ))}
             </div>
