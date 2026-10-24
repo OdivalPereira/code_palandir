@@ -1,19 +1,16 @@
 export const LIMITE_BYTES_CORPO = 262_144;
-export const JANELA_LIMITE_MS = 60_000;
-export const LIMITE_RETENCAO_POR_MAQUINA = 20;
 export const LIMITE_ERROS_ESQUEMA = 10;
 
-export interface MaquinaRegistro { id: string; dono: string; apelido?: string; token_hash: string; ultimo_envio_em: string | null; }
-export interface NovoInstantaneo { maquina_id: string; dono: string; coletado_em: string; recebido_em: string; esquema: string; corpo: Record<string, unknown>; bytes: number; }
-export interface InstantaneoSalvo { id: string; recebido_em: string; }
-export interface InstantaneoResumo { id: string; coletado_em: string; recebido_em: string; }
+export interface MaquinaRegistro { id: string; dono?: string; }
+/** Dados que a gravação atômica recebe; o `dono` sai da máquina, no banco, nunca do corpo. */
+export interface EnvioParaRegistrar { maquina_id: string; coletado_em: string; corpo: Record<string, unknown>; bytes: number; }
+/** Contrato de `public.ingest_registrar`: 'ok' gravou; 'limite' é janela de 1 minuto ativa e nada foi gravado. */
+export type ResultadoRegistro = { resultado: 'ok'; id: string; recebido_em: string } | { resultado: 'limite' };
 
 export interface IngestRepositorio {
   buscarMaquinaPorTokenHash(tokenHash: string): Promise<MaquinaRegistro | null>;
-  upsertInstantaneo(instantaneo: NovoInstantaneo): Promise<InstantaneoSalvo>;
-  listarInstantaneosDaMaquina(maquinaId: string): Promise<InstantaneoResumo[]>;
-  removerInstantaneos(ids: string[]): Promise<void>;
-  atualizarUltimoEnvio(maquinaId: string, recebidoEm: string): Promise<void>;
+  /** Uma só operação: reserva a janela, faz o upsert e aplica a retenção numa transação (RPC `ingest_registrar`). */
+  registrarEnvio(envio: EnvioParaRegistrar): Promise<ResultadoRegistro>;
 }
 
 export interface ErroEsquema { caminho: string; mensagem: string; }
@@ -21,8 +18,17 @@ export interface ResultadoValidacaoEsquema { valido: boolean; erros?: ErroEsquem
 export interface ErroAjvLike { instancePath?: string; message?: string; keyword?: string; params?: Record<string, unknown>; }
 export type FuncaoAjvLike = ((dados: unknown) => boolean) & { errors?: ErroAjvLike[] | null };
 export type ValidadorEsquema = ((dados: unknown) => ResultadoValidacaoEsquema) | FuncaoAjvLike;
-export interface RequisicaoIngest { metodo?: string; tokenMaquina: string | null | undefined; corpoBruto: string; agora?: Date; }
+export type ResultadoLeituraCorpo = { excedeu: false; texto: string; bytes: number } | { excedeu: true };
+/** Leitor preguiçoso do corpo: só é chamado depois de a máquina ser autenticada. */
+export type LeitorCorpo = () => Promise<ResultadoLeituraCorpo>;
+export interface RequisicaoIngest { tokenMaquina: string | null | undefined; lerCorpo: LeitorCorpo; }
 export interface RespostaIngest { status: number; corpo: Record<string, unknown>; }
+export interface OpcoesIngest {
+  validarEsquema: ValidadorEsquema;
+  repositorio: IngestRepositorio;
+  /** Recebe a exceção para log no servidor; o cliente só vê `erro_interno`. */
+  registrarErro?: (erro: unknown) => void;
+}
 
 const REGRAS_SEGREDO: Array<{ nome: string; padrao: RegExp }> = [
   { nome: 'github_pat_classic', padrao: new RegExp('gh' + 'p_[a-zA-Z0-9]{36}') },
@@ -87,12 +93,81 @@ function executarValidacaoEsquema(validador: ValidadorEsquema, dados: unknown): 
   return { valido: resultado.valido, erros: (resultado.erros ?? []).slice(0, LIMITE_ERROS_ESQUEMA) };
 }
 
-export async function processarIngest(
-  requisicao: RequisicaoIngest,
-  opcoes: { validarEsquema: ValidadorEsquema; repositorio: IngestRepositorio },
-): Promise<RespostaIngest> {
+function interpretarContentLength(valor: string | number | null | undefined): number | null {
+  if (typeof valor === 'number') return Number.isSafeInteger(valor) && valor >= 0 ? valor : null;
+  if (typeof valor !== 'string' || !/^\s*\d+\s*$/.test(valor)) return null;
+  const n = Number(valor.trim());
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+/**
+ * Lê o corpo do stream contando bytes. Um `Content-Length` acima do limite recusa sem ler nada;
+ * sem ele (ou com ele mentindo), a leitura para e cancela o reader assim que passa do limite.
+ */
+export async function lerCorpoLimitado(
+  stream: ReadableStream<Uint8Array> | null | undefined,
+  limite: number = LIMITE_BYTES_CORPO,
+  contentLength?: string | number | null,
+): Promise<ResultadoLeituraCorpo> {
+  const declarado = interpretarContentLength(contentLength);
+  if (declarado !== null && declarado > limite) {
+    if (stream) await stream.cancel().catch(() => {});
+    return { excedeu: true };
+  }
+  if (!stream) return { excedeu: false, texto: '', bytes: 0 };
+
+  const reader = stream.getReader();
+  const blocos: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || value.byteLength === 0) continue;
+      total += value.byteLength;
+      if (total > limite) {
+        await reader.cancel().catch(() => {});
+        return { excedeu: true };
+      }
+      blocos.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const unido = new Uint8Array(total);
+  let posicao = 0;
+  for (const bloco of blocos) {
+    unido.set(bloco, posicao);
+    posicao += bloco.byteLength;
+  }
+  return { excedeu: false, texto: new TextDecoder('utf-8').decode(unido), bytes: total };
+}
+
+/** Converte a resposta do PostgREST (array de linhas) da RPC `ingest_registrar` no contrato; forma inesperada lança. */
+export function interpretarRespostaRegistrar(resposta: unknown): ResultadoRegistro {
+  const linha = (Array.isArray(resposta) ? resposta[0] : resposta) as Record<string, unknown> | null | undefined;
+  if (linha && linha.resultado === 'limite') return { resultado: 'limite' };
+  if (linha && linha.resultado === 'ok' && typeof linha.id === 'string' && typeof linha.recebido_em === 'string') {
+    return { resultado: 'ok', id: linha.id, recebido_em: linha.recebido_em };
+  }
+  throw new Error('resposta inesperada de ingest_registrar');
+}
+
+const ERRO_INTERNO: RespostaIngest = { status: 500, corpo: { erro: 'erro_interno' } };
+
+/** Fluxo da arquitetura 4.4: token, máquina, tamanho, JSON, esquema, segredos e, só então, a gravação atômica. */
+export async function processarIngest(requisicao: RequisicaoIngest, opcoes: OpcoesIngest): Promise<RespostaIngest> {
+  try {
+    return await executarFluxo(requisicao, opcoes);
+  } catch (erro) {
+    opcoes.registrarErro?.(erro);
+    return { status: ERRO_INTERNO.status, corpo: { ...ERRO_INTERNO.corpo } };
+  }
+}
+
+async function executarFluxo(requisicao: RequisicaoIngest, opcoes: OpcoesIngest): Promise<RespostaIngest> {
   const { validarEsquema, repositorio } = opcoes;
-  const agora = requisicao.agora ?? new Date();
 
   const tokenBruto = requisicao.tokenMaquina?.trim() ?? '';
   if (!tokenBruto) return { status: 401, corpo: { erro: 'token_invalido' } };
@@ -101,14 +176,14 @@ export async function processarIngest(
   const maquina = await repositorio.buscarMaquinaPorTokenHash(tokenHash);
   if (!maquina) return { status: 401, corpo: { erro: 'token_invalido' } };
 
-  const bytes = new TextEncoder().encode(requisicao.corpoBruto).byteLength;
-  if (bytes > LIMITE_BYTES_CORPO) {
-    return { status: 413, corpo: { erro: 'corpo_acima_do_limite', limite_bytes: LIMITE_BYTES_CORPO, bytes } };
+  const leitura = await requisicao.lerCorpo();
+  if (leitura.excedeu) {
+    return { status: 413, corpo: { erro: 'corpo_acima_do_limite', limite_bytes: LIMITE_BYTES_CORPO } };
   }
 
   let payload: unknown;
   try {
-    payload = JSON.parse(requisicao.corpoBruto);
+    payload = JSON.parse(leitura.texto);
   } catch {
     return { status: 400, corpo: { erro: 'json_invalido' } };
   }
@@ -127,38 +202,15 @@ export async function processarIngest(
     return { status: 422, corpo: { erro: 'segredo_detectado', caminho: segredoDetectado.caminho, regra: segredoDetectado.regra } };
   }
 
-  if (maquina.ultimo_envio_em) {
-    const ultimoEnvioMs = Date.parse(maquina.ultimo_envio_em);
-    if (!Number.isNaN(ultimoEnvioMs) && agora.getTime() - ultimoEnvioMs < JANELA_LIMITE_MS) {
-      return { status: 429, corpo: { erro: 'limite_frequencia_excedido' } };
-    }
-  }
-
   const corpoObjeto = payload as Record<string, unknown>;
-  const coletadoEm = String(corpoObjeto.coletado_em);
-  const recebidoEm = agora.toISOString();
-
-  const salvo = await repositorio.upsertInstantaneo({
+  const registro = await repositorio.registrarEnvio({
     maquina_id: maquina.id,
-    dono: maquina.dono,
-    coletado_em: coletadoEm,
-    recebido_em: recebidoEm,
-    esquema: 'painel/1',
+    coletado_em: String(corpoObjeto.coletado_em),
     corpo: corpoObjeto,
-    bytes,
+    bytes: leitura.bytes,
   });
 
-  const instantaneosAtuais = await repositorio.listarInstantaneosDaMaquina(maquina.id);
-  const ordenados = [...instantaneosAtuais].sort((a, b) => {
-    const diffColetado = Date.parse(b.coletado_em) - Date.parse(a.coletado_em);
-    return diffColetado !== 0 ? diffColetado : Date.parse(b.recebido_em) - Date.parse(a.recebido_em);
-  });
-
-  if (ordenados.length > LIMITE_RETENCAO_POR_MAQUINA) {
-    const idsExcedentes = ordenados.slice(LIMITE_RETENCAO_POR_MAQUINA).map((item) => item.id);
-    if (idsExcedentes.length > 0) await repositorio.removerInstantaneos(idsExcedentes);
-  }
-
-  await repositorio.atualizarUltimoEnvio(maquina.id, recebidoEm);
-  return { status: 200, corpo: { id: salvo.id, recebido_em: salvo.recebido_em } };
+  if (registro.resultado === 'limite') return { status: 429, corpo: { erro: 'limite_frequencia_excedido' } };
+  if (registro.resultado === 'ok') return { status: 200, corpo: { id: registro.id, recebido_em: registro.recebido_em } };
+  throw new Error('resultado desconhecido do repositorio');
 }
