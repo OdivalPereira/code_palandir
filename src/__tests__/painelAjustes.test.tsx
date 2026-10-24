@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { PainelShell } from '../app/PainelShell';
+import { PaginaNaoEncontrada, ROUTER_FUTURE } from '../app/App';
 import { ProjetosPage } from '../painel/projetos/ProjetosPage';
 import { HojePage } from '../painel/hoje/HojePage';
 import { PergaminhoAbertura } from '../painel/mensagem/PergaminhoAbertura';
@@ -191,5 +192,21 @@ describe('copyToClipboard (alternativa por textarea)', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(await copyToClipboard('texto')).toBe(false);
     expect(document.querySelectorAll('textarea')).toHaveLength(0);
+  });
+});
+
+describe('Rotas', () => {
+  it('caminho desconhecido mostra "Caminho fora do mapa" com volta ao Conselho', () => {
+    render(
+      <MemoryRouter initialEntries={['/nada-aqui']} future={ROUTER_FUTURE}>
+        <Routes>
+          <Route path="/" element={<p>conselho</p>} />
+          <Route path="*" element={<PaginaNaoEncontrada />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Caminho fora do mapa')).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: 'Voltar ao Conselho' }));
+    expect(screen.getByText('conselho')).toBeTruthy();
   });
 });

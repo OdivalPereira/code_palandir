@@ -22,7 +22,7 @@ describe('Code Palandir Self-Import & Analysis', () => {
 
     const { analyzeProject } = await import('@/engine/analyzers');
     const analysis = analyzeProject(loaded);
-    expect(analysis.routes.map((r) => r.path).sort()).toEqual(['/', '/analisador', '/projetos', '/projetos/:id'].sort());
+    expect(analysis.routes.map((r) => r.path).sort()).toEqual(['*', '/', '/analisador', '/projetos', '/projetos/:id'].sort());
     expect(analysis.pages.length).toBeGreaterThanOrEqual(1);
     expect(analysis.pages.some((p) => p.name === 'AnalisadorPage')).toBe(true);
     expect(analysis.components.length).toBeGreaterThan(15);
@@ -82,7 +82,7 @@ describe('Code Palandir Self-Import & Analysis', () => {
     expect(analysis.hooks.length).toBeGreaterThan(0);
 
     // Verify routes and pages
-    expect(analysis.routes.map((r) => r.path).sort()).toEqual(['/', '/analisador', '/projetos', '/projetos/:id'].sort());
+    expect(analysis.routes.map((r) => r.path).sort()).toEqual(['*', '/', '/analisador', '/projetos', '/projetos/:id'].sort());
     expect(analysis.pages.length).toBeGreaterThanOrEqual(2);
 
     // 1. Verify Collapsed-by-Default rendering for Code Palandir itself

@@ -1,80 +1,42 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Link, Routes, Route } from 'react-router-dom';
 import { PainelShell } from './PainelShell';
 import { AnalisadorPage } from './AnalisadorPage';
-import { MolduraPergaminho } from './rpgTheme';
+import { EstadoTela } from './rpgTheme';
+import { HojePage } from '../painel/hoje/HojePage';
+import { ProjetosPage } from '../painel/projetos/ProjetosPage';
 
-/* Carregamento síncrono dinâmico via Vite glob para desacoplamento de F3 e F4 */
-const hojeModules = import.meta.glob<{
-  HojePage?: React.ComponentType;
-  default?: React.ComponentType;
-}>('../painel/hoje/HojePage.tsx', { eager: true });
+/** Comportamento do React Router v7, já ligado na v6 (e sem os avisos no console). */
+export const ROUTER_FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
 
-const projetosModules = import.meta.glob<{
-  ProjetosPage?: React.ComponentType;
-  default?: React.ComponentType;
-}>('../painel/projetos/ProjetosPage.tsx', { eager: true });
-
-const hojeMod =
-  hojeModules['../painel/hoje/HojePage.tsx'] || Object.values(hojeModules)[0];
-const HojeComponent = hojeMod?.HojePage || hojeMod?.default;
-
-const projetosMod =
-  projetosModules['../painel/projetos/ProjetosPage.tsx'] ||
-  Object.values(projetosModules)[0];
-const ProjetosComponent = projetosMod?.ProjetosPage || projetosMod?.default;
-
-const HojePlaceholder: React.FC = () => (
-  <MolduraPergaminho titulo="O Conselho" subtitulo="Visão geral e abertura">
-    <div className="py-12 text-center" role="status">
-      <p className="text-stone-300 font-serif text-lg">
-        O Conselho está se reunindo em Valfenda...
-      </p>
-      <p className="text-stone-500 text-sm mt-2">
-        Aguardando chegada dos pergaminhos (Fatia 3).
-      </p>
-    </div>
-  </MolduraPergaminho>
+export const PaginaNaoEncontrada: React.FC = () => (
+  <div className="w-full max-w-7xl mx-auto p-3 sm:p-4 md:p-6">
+    <EstadoTela
+      estado="vazio"
+      titulo="Caminho fora do mapa"
+      mensagem="Esta página não existe no painel."
+      acao={
+        <Link
+          to="/"
+          className="inline-flex items-center min-h-[44px] px-4 py-2 rounded border border-amber-700 bg-stone-900 text-amber-100 text-sm font-semibold hover:bg-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+        >
+          Voltar ao Conselho
+        </Link>
+      }
+    />
+  </div>
 );
-
-const ProjetosPlaceholder: React.FC = () => (
-  <MolduraPergaminho titulo="Regiões" subtitulo="Mapa de projetos e jornadas">
-    <div className="py-12 text-center" role="status">
-      <p className="text-stone-300 font-serif text-lg">
-        Explorando os caminhos da Terra-média...
-      </p>
-      <p className="text-stone-500 text-sm mt-2">
-        Mapeando fortalezas e acampamentos (Fatia 4).
-      </p>
-    </div>
-  </MolduraPergaminho>
-);
-
-const HojeRoute: React.FC = () => {
-  if (HojeComponent) {
-    const Component = HojeComponent;
-    return <Component />;
-  }
-  return <HojePlaceholder />;
-};
-
-const ProjetosRoute: React.FC = () => {
-  if (ProjetosComponent) {
-    const Component = ProjetosComponent;
-    return <Component />;
-  }
-  return <ProjetosPlaceholder />;
-};
 
 export const App: React.FC = () => {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={ROUTER_FUTURE}>
       <PainelShell>
         <Routes>
-          <Route path="/" element={<HojeRoute />} />
-          <Route path="/projetos" element={<ProjetosRoute />} />
-          <Route path="/projetos/:id" element={<ProjetosRoute />} />
+          <Route path="/" element={<HojePage />} />
+          <Route path="/projetos" element={<ProjetosPage />} />
+          <Route path="/projetos/:id" element={<ProjetosPage />} />
           <Route path="/analisador" element={<AnalisadorPage />} />
+          <Route path="*" element={<PaginaNaoEncontrada />} />
         </Routes>
       </PainelShell>
     </BrowserRouter>
