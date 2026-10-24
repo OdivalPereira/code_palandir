@@ -15,6 +15,7 @@ export const AnalisadorPage: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full w-full flex-1 min-h-0 bg-slate-950 text-slate-100 overflow-hidden font-sans">
+      <h1 className="sr-only">Palantír — Analisador visual</h1>
       {/* TopBar */}
       <TopBar />
 

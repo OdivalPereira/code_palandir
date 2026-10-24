@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { PainelShell } from '../app/PainelShell';
+import { PainelShell, tituloDaRota } from '../app/PainelShell';
 import { PaginaNaoEncontrada, ROUTER_FUTURE } from '../app/App';
 import { ProjetosPage } from '../painel/projetos/ProjetosPage';
 import { HojePage } from '../painel/hoje/HojePage';
@@ -369,5 +369,34 @@ describe('Pergaminho: valores do instantâneo não viram comando na linha Assumi
     const r = montarAbertura(exemploOficial.projetos, ruim, selecaoInicial());
     expect(r.mensagem).toBeNull();
     expect(r.bloqueios.join(' ')).toMatch(/subagente \(alta\)/);
+  });
+});
+
+describe('Casca: navegação acessível', () => {
+  beforeEach(() => {
+    usePainelStore.getState().resetar();
+  });
+
+  it('nomeia cada tela pela rota', () => {
+    expect(tituloDaRota('/')).toBe('O Conselho');
+    expect(tituloDaRota('/projetos')).toBe('Regiões');
+    expect(tituloDaRota('/projetos/loja-exemplo')).toBe('Regiões');
+    expect(tituloDaRota('/analisador')).toBe('Palantír — Analisador');
+    expect(tituloDaRota('/etapas/x')).toBe('Caminho fora do mapa');
+  });
+
+  it('põe o nome da tela no título da aba e oferece pular para o conteúdo', () => {
+    renderShell('/projetos/loja-exemplo');
+    expect(document.title).toBe('Regiões · Code Palandir');
+    const pular = screen.getByRole('link', { name: 'Pular para o conteúdo' });
+    expect(pular.getAttribute('href')).toBe('#conteudo');
+    expect(document.getElementById('conteudo')?.tagName).toBe('MAIN');
+  });
+
+  it('o item reservado da barra móvel diz o que é', () => {
+    renderShell('/');
+    const movel = screen.getByRole('navigation', { name: 'Navegação Móvel' });
+    expect(within(movel).getByText('Sociedade')).toBeTruthy();
+    expect(within(movel).getByText(/reservado para a fase B, p3/)).toBeTruthy();
   });
 });

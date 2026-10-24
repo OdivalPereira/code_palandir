@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { RPG_TITLE_STYLE, SeloEstado } from './rpgTheme';
 import { usePainelStore } from '@/stores/painelStore';
@@ -8,17 +8,43 @@ export interface PainelShellProps {
   children: React.ReactNode;
 }
 
+/** Nome da tela pela rota: título da aba do navegador e anúncio da troca de tela. */
+export function tituloDaRota(pathname: string): string {
+  if (pathname === '/') return 'O Conselho';
+  if (pathname === '/projetos' || pathname.startsWith('/projetos/')) return 'Regiões';
+  if (pathname.startsWith('/analisador')) return 'Palantír — Analisador';
+  return 'Caminho fora do mapa';
+}
+
 export const PainelShell: React.FC<PainelShellProps> = ({ children }) => {
   const dados = usePainelStore((s) => s.dados);
   const location = useLocation();
   const currentPath = location.pathname;
+  const mainRef = useRef<HTMLElement>(null);
+  const secaoAnterior = useRef<string | null>(null);
+
+  // Troca de tela: título da aba e foco no conteúdo (só quando muda a seção, não a região).
+  useEffect(() => {
+    document.title = `${tituloDaRota(currentPath)} · Code Palandir`;
+    const secao = currentPath.split('/')[1] ?? '';
+    if (secaoAnterior.current !== null && secaoAnterior.current !== secao) {
+      mainRef.current?.focus({ preventScroll: true });
+    }
+    secaoAnterior.current = secao;
+  }, [currentPath]);
 
   const isAnalisador = currentPath.startsWith('/analisador');
   const isConselho = currentPath === '/';
   const isProjetos = currentPath.startsWith('/projetos');
 
   return (
-    <div className="h-screen w-screen overflow-hidden flex flex-col bg-stone-950 text-stone-200 font-sans">
+    <div className="h-screen h-dvh w-screen overflow-hidden flex flex-col bg-stone-950 text-stone-200 font-sans">
+      <a
+        href="#conteudo"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 min-h-[44px] focus:inline-flex focus:items-center focus:px-3 focus:rounded bg-stone-900 text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+      >
+        Pular para o conteúdo
+      </a>
       {/* ===================================================================
           TOPO (HEADER >= 52px)
           =================================================================== */}
@@ -249,10 +275,14 @@ export const PainelShell: React.FC<PainelShellProps> = ({ children }) => {
 
         {/* Conteúdo Principal (<main>) */}
         <main
+          id="conteudo"
+          ref={mainRef}
+          tabIndex={-1}
+          aria-label={tituloDaRota(currentPath)}
           className={
             isAnalisador
-              ? 'flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden relative'
-              : 'flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden p-3 xl:p-6'
+              ? 'flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden relative focus:outline-none'
+              : 'flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden p-3 xl:p-6 focus:outline-none'
           }
         >
           {children}
@@ -326,7 +356,8 @@ export const PainelShell: React.FC<PainelShellProps> = ({ children }) => {
           <span className="text-base opacity-40 select-none" aria-hidden="true">
             🃏
           </span>
-          <span className="text-[10px] tracking-tight text-amber-500/80">p3</span>
+          <span className="text-[10px] tracking-tight">Sociedade</span>
+          <span className="sr-only">(reservado para a fase B, p3)</span>
         </div>
       </nav>
     </div>
