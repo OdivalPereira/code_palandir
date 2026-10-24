@@ -10,7 +10,7 @@ import {
   RPG_TITLE_STYLE,
 } from '@/app/rpgTheme';
 import { usePainelStore } from '@/stores/painelStore';
-import { pluralizar } from '../formatacao';
+import { formatarColetadoEm, pluralizar } from '../formatacao';
 import type {
   InteracaoEtapa,
   PassagemEtapa,
@@ -487,7 +487,9 @@ export const ProjetosPage: React.FC = () => {
                           <div className="flex items-center gap-1">
                             <span>sha:</span>
                             {pasta.sha ? (
-                              <span className="text-stone-200 font-bold">{pasta.sha}</span>
+                              <span className="text-stone-200 font-bold" title={pasta.sha}>
+                                {pasta.sha.slice(0, 7)}
+                              </span>
                             ) : (
                               <SeloEstado estado="desconhecido" rotulo="sha: desconhecido" />
                             )}
@@ -584,7 +586,13 @@ export const ProjetosPage: React.FC = () => {
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-stone-400 font-mono pt-1">
                           <div>
                             <span>Início: </span>
-                            <span className="text-stone-300">{interacao.inicio}</span>
+                            <time
+                              dateTime={interacao.inicio}
+                              title={interacao.inicio}
+                              className="text-stone-300"
+                            >
+                              {formatarColetadoEm(interacao.inicio)}
+                            </time>
                           </div>
 
                           {interacao.escala.subagentes &&
@@ -655,9 +663,13 @@ export const ProjetosPage: React.FC = () => {
                             <span className="font-mono font-semibold text-amber-200 text-xs sm:text-sm">
                               {item.passagem.de} → {item.passagem.para}
                             </span>
-                            <span className="text-xs text-stone-400 font-mono">
-                              ({item.passagem.quando})
-                            </span>
+                            <time
+                              dateTime={item.passagem.quando}
+                              title={item.passagem.quando}
+                              className="text-xs text-stone-400 font-mono"
+                            >
+                              ({formatarColetadoEm(item.passagem.quando)})
+                            </time>
                             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-stone-800 bg-stone-900 text-stone-400">
                               {item.etapaId}
                             </span>

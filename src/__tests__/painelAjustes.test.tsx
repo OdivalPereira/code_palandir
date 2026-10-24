@@ -476,3 +476,33 @@ describe('Regiões: a URL é a fonte da região escolhida', () => {
     expect(usePainelStore.getState().projetoSelecionadoId).toBe('app-receitas');
   });
 });
+
+describe('Regiões: datas legíveis e SHA curto', () => {
+  beforeEach(() => {
+    usePainelStore.getState().resetar();
+  });
+
+  it('passagem mostra a data formatada, com o ISO no atributo', () => {
+    const loja = exemploOficial.projetos.find((p) => p.id === 'loja-exemplo')!;
+    const etapa = {
+      ...loja.etapas[0],
+      passagens: [{ de: 'arquiteto', para: 'coordenador', quando: '2026-10-20T10:05:00Z' }],
+    };
+    const pasta = { ...loja.pastas[0], sha: '0123456789abcdef0123456789abcdef01234567' };
+    usePainelStore.setState({
+      dados: { ...exemploOficial, projetos: [{ ...loja, etapas: [etapa], pastas: [pasta] }] },
+    });
+    render(
+      <MemoryRouter initialEntries={['/projetos/loja-exemplo']}>
+        <Routes>
+          <Route path="/projetos/:id" element={<ProjetosPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    const quando = screen.getByText('(20/10 10:05Z)');
+    expect(quando.getAttribute('datetime')).toBe('2026-10-20T10:05:00Z');
+    expect(screen.queryByText(/2026-10-20T10:05:00Z/)).toBeNull();
+    const sha = screen.getByText('0123456');
+    expect(sha.getAttribute('title')).toBe('0123456789abcdef0123456789abcdef01234567');
+  });
+});
