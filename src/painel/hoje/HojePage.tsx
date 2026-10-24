@@ -9,6 +9,7 @@ import {
 import { usePainelStore } from '@/stores/painelStore';
 import { ordenarPendencias } from '../mensagem/geradorMensagem';
 import { PergaminhoAbertura } from '../mensagem/PergaminhoAbertura';
+import { pluralizar } from '../formatacao';
 
 export const HojePage: React.FC = () => {
   const { estado, dados, erros } = usePainelStore();
@@ -97,7 +98,7 @@ export const HojePage: React.FC = () => {
             selo={
               <SeloEstado
                 estado={pendenciasOrdenadas.length > 0 ? 'atencao' : 'em_dia'}
-                rotulo={`${pendenciasOrdenadas.length} pendência(s)`}
+                rotulo={pluralizar(pendenciasOrdenadas.length, 'pendência', 'pendências')}
               />
             }
           >

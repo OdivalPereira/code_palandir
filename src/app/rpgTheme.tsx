@@ -68,13 +68,13 @@ export const MolduraPergaminho: React.FC<MolduraPergaminhoProps> = ({
             {titulo && (
               <h2
                 style={RPG_TITLE_STYLE}
-                className="text-amber-100 uppercase tracking-wide text-sm sm:text-base font-semibold truncate"
+                className="text-amber-100 uppercase tracking-wide text-sm sm:text-base font-semibold break-words"
               >
                 {titulo}
               </h2>
             )}
             {subtitulo && (
-              <p className="text-xs text-stone-400 font-sans mt-0.5 truncate">
+              <p className="text-xs text-stone-400 font-sans mt-0.5 break-words">
                 {subtitulo}
               </p>
             )}

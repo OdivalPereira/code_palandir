@@ -26,6 +26,9 @@ export interface PergaminhoAberturaProps {
 const SELECT_CLASSES =
   'w-full min-h-[44px] px-3 py-2 rounded border border-amber-800/80 bg-stone-950 text-stone-100 text-sm font-sans focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 transition-colors disabled:opacity-70 disabled:cursor-not-allowed';
 
+// Em xl o Pergaminho ocupa a coluna estreita do Conselho: os pares empilham até 2xl.
+const GRADE_PARES = 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2 gap-3';
+
 const ID_MOTIVO = 'pergaminho-motivo-bloqueio';
 const ID_AVISO_SUB = 'pergaminho-aviso-subagentes';
 
@@ -98,7 +101,7 @@ export const PergaminhoAbertura: React.FC<PergaminhoAberturaProps> = ({
   const cardapio = cardapioProp ?? dadosStore?.cardapio;
 
   const [bruta, setBruta] = useState<SelecaoAbertura>(selecaoInicial);
-  const [copiado, setCopiado] = useState<boolean>(false);
+  const [copia, setCopia] = useState<'ociosa' | 'feita' | 'falhou'>('ociosa');
 
   // Revalida a cada render: se o instantâneo mudar, nada inválido sobrevive na tela.
   const resultado = useMemo(
@@ -110,18 +113,18 @@ export const PergaminhoAbertura: React.FC<PergaminhoAberturaProps> = ({
 
   const alterar = (parcial: Partial<SelecaoAbertura>) => {
     setBruta((b) => ({ ...b, ...parcial }));
-    setCopiado(false);
+    setCopia('ociosa');
   };
 
   const trocarPlataforma = (plataforma: string) => {
     setBruta((b) => escolherPlataforma(cardapio, b, plataforma));
-    setCopiado(false);
+    setCopia('ociosa');
   };
 
   const handleCopiar = async () => {
     if (mensagem === null) return;
     const r = await copiarMensagemSegura(mensagem);
-    if (r.copiado) setCopiado(true);
+    setCopia(r.copiado ? 'feita' : 'falhou');
   };
 
   const projetoAtual = projetos.find((p) => p.id === selecao.projetoId);
@@ -141,7 +144,7 @@ export const PergaminhoAbertura: React.FC<PergaminhoAberturaProps> = ({
       className={className}
     >
       <div className="space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className={GRADE_PARES}>
           <Campo
             id="pergaminho-projeto"
             rotulo="Projeto"
@@ -163,7 +166,7 @@ export const PergaminhoAbertura: React.FC<PergaminhoAberturaProps> = ({
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className={GRADE_PARES}>
           <Campo
             id="pergaminho-papel"
             rotulo="Papel"
@@ -211,7 +214,7 @@ export const PergaminhoAbertura: React.FC<PergaminhoAberturaProps> = ({
           </label>
 
           {selecao.incluirSubagentes && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3 gap-2">
               {NIVEIS_SUBAGENTE.map((nivel: NivelCardapio) => (
                 <Campo
                   key={nivel}
@@ -224,7 +227,7 @@ export const PergaminhoAbertura: React.FC<PergaminhoAberturaProps> = ({
                   descritoPor={avisoSubagentes ? ID_AVISO_SUB : undefined}
                   aoMudar={(modelo) => {
                     setBruta((b) => ({ ...b, subagentes: { ...b.subagentes, [nivel]: modelo } }));
-                    setCopiado(false);
+                    setCopia('ociosa');
                   }}
                 />
               ))}
@@ -276,16 +279,21 @@ export const PergaminhoAbertura: React.FC<PergaminhoAberturaProps> = ({
             </div>
           )}
 
-          {copiado && (
-            <span
-              role="status"
-              aria-live="polite"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-emerald-500/60 bg-emerald-950/70 text-emerald-200 text-xs font-mono"
-            >
-              <span aria-hidden="true">✓</span>
-              <span>Mensagem copiada!</span>
-            </span>
-          )}
+          {/* Região viva sempre montada: leitores de tela anunciam a troca do conteúdo. */}
+          <span role="status" aria-live="polite" className="inline-flex">
+            {copia === 'feita' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-emerald-500/60 bg-emerald-950/70 text-emerald-200 text-xs font-mono">
+                <span aria-hidden="true">✓</span>
+                <span>Mensagem copiada!</span>
+              </span>
+            )}
+            {copia === 'falhou' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-rose-500/60 bg-rose-950/70 text-rose-200 text-xs font-mono">
+                <span aria-hidden="true">✕</span>
+                <span>Não deu para copiar; selecione o texto da prévia.</span>
+              </span>
+            )}
+          </span>
         </div>
       </div>
     </MolduraPergaminho>

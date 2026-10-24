@@ -1,8 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { PainelShell } from '../app/PainelShell';
 import { ProjetosPage } from '../painel/projetos/ProjetosPage';
+import { HojePage } from '../painel/hoje/HojePage';
+import { PergaminhoAbertura } from '../painel/mensagem/PergaminhoAbertura';
+import * as clipboardService from '@/services/clipboard';
+import { copyToClipboard } from '@/services/clipboard';
 import { formatarColetadoEm, pluralizar } from '../painel/formatacao';
 import { exemploOficial } from '../painel/fixtures/cenarios';
 import { usePainelStore } from '../stores/painelStore';
@@ -114,5 +118,78 @@ describe('Regiões: selos que não afirmam o que não sabem', () => {
       '/projetos'
     );
     expect(usePainelStore.getState().projetoSelecionadoId).toBe('loja-exemplo');
+  });
+});
+
+describe('Conselho e Pergaminho', () => {
+  beforeEach(() => {
+    usePainelStore.getState().resetar();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('contagem de pendências concorda em número', () => {
+    render(
+      <MemoryRouter>
+        <HojePage />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('5 pendências')).toBeTruthy();
+    expect(screen.queryByText(/pendência\(s\)/)).toBeNull();
+  });
+
+  it('a região de anúncio da cópia existe antes do clique', () => {
+    render(<PergaminhoAbertura projetos={exemploOficial.projetos} cardapio={exemploOficial.cardapio} />);
+    const vivas = document.querySelectorAll('[role="status"][aria-live="polite"]');
+    expect(vivas.length).toBeGreaterThan(0);
+  });
+
+  it('cópia que falha avisa em vez de ficar calada', async () => {
+    vi.spyOn(clipboardService, 'copyToClipboard').mockResolvedValue(false);
+    render(<PergaminhoAbertura projetos={exemploOficial.projetos} cardapio={exemploOficial.cardapio} />);
+    fireEvent.click(screen.getByRole('button', { name: /Copiar mensagem/i }));
+    expect(await screen.findByText(/Não deu para copiar/)).toBeTruthy();
+    expect(screen.queryByText(/Mensagem copiada!/)).toBeNull();
+  });
+
+  it('mudar a escolha depois de copiar apaga o aviso', async () => {
+    vi.spyOn(clipboardService, 'copyToClipboard').mockResolvedValue(true);
+    render(<PergaminhoAbertura projetos={exemploOficial.projetos} cardapio={exemploOficial.cardapio} />);
+    fireEvent.click(screen.getByRole('button', { name: /Copiar mensagem/i }));
+    expect(await screen.findByText(/Mensagem copiada!/)).toBeTruthy();
+    fireEvent.change(document.getElementById('pergaminho-papel')!, { target: { value: 'arquiteto' } });
+    expect(screen.queryByText(/Mensagem copiada!/)).toBeNull();
+  });
+});
+
+describe('copyToClipboard (alternativa por textarea)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('devolve o foco ao botão e não deixa textarea para trás', async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    const exec = vi.fn().mockReturnValue(true);
+    (document as unknown as { execCommand: typeof exec }).execCommand = exec;
+    const botao = document.createElement('button');
+    document.body.appendChild(botao);
+    botao.focus();
+
+    expect(await copyToClipboard('texto')).toBe(true);
+    expect(exec).toHaveBeenCalledWith('copy');
+    expect(document.activeElement).toBe(botao);
+    expect(document.querySelectorAll('textarea')).toHaveLength(0);
+    botao.remove();
+  });
+
+  it('remove a textarea mesmo quando o navegador recusa a cópia', async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    (document as unknown as { execCommand: () => boolean }).execCommand = () => {
+      throw new Error('negado');
+    };
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await copyToClipboard('texto')).toBe(false);
+    expect(document.querySelectorAll('textarea')).toHaveLength(0);
   });
 });
