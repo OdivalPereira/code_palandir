@@ -1,5 +1,5 @@
 import { parse, type ParserPlugin } from '@babel/parser';
-import traverseModule from '@babel/traverse';
+import traverseModule, { type NodePath } from '@babel/traverse';
 import type { UIComponent, ComponentAction, ComponentHook, ComponentStoreAccess, ApiCall, UIWireframeElement } from '@/types/analysis';
 
 // Handle ES module default export vs CommonJS
@@ -56,9 +56,17 @@ export function looksLikeStoreHook(name: string): boolean {
   return !REACT_BUILTIN_HOOKS.has(name) && /^use\w*(?:Store|State)$/.test(name);
 }
 
-/** PascalCase, not ALL_CAPS: LoginForm yes; GET, POST, API_URL no. */
-function isComponentName(name: string): boolean {
-  return /^[A-Z]/.test(name) && !/^[A-Z0-9_]+$/.test(name);
+/** Siglas também são componentes quando a declaração contém JSX. */
+function isComponentName(name: string, declaration?: NodePath): boolean {
+  if (!/^[A-Z]/.test(name)) return false;
+  if (!/^[A-Z0-9_]+$/.test(name)) return true;
+  if (!declaration) return false;
+  let hasJSX = false;
+  declaration.traverse({
+    JSXElement(path) { hasJSX = true; path.stop(); },
+    JSXFragment(path) { hasJSX = true; path.stop(); },
+  });
+  return hasJSX;
 }
 
 function safeParseAst(content: string) {
@@ -135,7 +143,7 @@ export function parseSourceWithBabel(
             if (!name) return;
 
             // React component convention: Capitalized name (GET/POST route handlers are not components)
-            if (isComponentName(name)) {
+            if (isComponentName(name, path)) {
               processComponentNode(path, name);
             }
           } catch {
@@ -149,7 +157,7 @@ export function parseSourceWithBabel(
             if (path.node?.id?.type !== 'Identifier') return;
             const name = path.node.id.name;
 
-            if (!isComponentName(name)) return;
+            if (!isComponentName(name, path)) return;
 
             const init = path.node.init;
             if (init) {

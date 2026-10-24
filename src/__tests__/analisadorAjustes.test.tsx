@@ -270,6 +270,19 @@ describe('Parser: o que não é componente não vira componente', () => {
     expect(n).not.toContain('API_URL');
   });
 
+  it('preserva siglas com JSX sem transformar handlers e constantes em componentes', () => {
+    const a = analyzeProject([arquivo('src/widgets.tsx', `
+      export function App() { return <FAQ />; }
+      export function FAQ() { return <section><CTA /></section>; }
+      export const CTA = () => <><button>Ajuda</button></>;
+      export function GET() { return Response.json([]); }
+      export const API_URL = () => '/api';
+    `)] as never);
+    expect([...a.pages, ...a.components].map((c) => c.name).sort()).toEqual(['App', 'CTA', 'FAQ']);
+    const graph = buildGraphFromAnalysis(a);
+    expect(graph.edges.some((e) => e.source.endsWith('#App') && e.target.endsWith('#FAQ'))).toBe(true);
+  });
+
   it('um serviço .ts com Promise<void> não ganha componente com o nome do arquivo', () => {
     const n = nomes([
       arquivo('src/services/api.ts', 'export async function salvar(): Promise<void> { await fetch("/api/x"); }'),
