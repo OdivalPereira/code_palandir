@@ -433,3 +433,23 @@ describe('extractZipArchive', () => {
     expect(arquivos.map((f) => f.path)).toEqual(['src/App.tsx']);
   });
 });
+
+describe('Nós do grafo: estado do botão para leitor de tela', () => {
+  it('o botão de incluir no Prompt diz se está marcado', async () => {
+    const { ReactFlowProvider } = await import('@xyflow/react');
+    const { RouteNode } = await import('../features/graph/nodes/RouteNode');
+    const { fireEvent } = await import('@testing-library/react');
+    useSelectionStore.getState().clearSelection();
+    const data = { id: 'node-route-x', label: '/x', nodeType: 'route', filePath: 'src/App.tsx' };
+    render(
+      <ReactFlowProvider>
+        <RouteNode {...({ id: 'node-route-x', data, selected: false } as never)} />
+      </ReactFlowProvider>
+    );
+    const botao = screen.getByRole('button', { name: 'Incluir no Prompt' });
+    expect(botao.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(botao);
+    expect(screen.getByRole('button', { name: 'Incluir no Prompt' }).getAttribute('aria-pressed')).toBe('true');
+    useSelectionStore.getState().clearSelection();
+  });
+});

@@ -54,6 +54,9 @@ export const RouteNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
 
       {/* Quick Select Checkbox */}
       <button
+        type="button"
+        aria-pressed={checked}
+        aria-label="Incluir no Prompt"
         onClick={handleCheckboxClick}
         className="text-slate-400 hover:text-blue-300 transition-colors p-0.5"
         title={checked ? 'Remover do Prompt' : 'Adicionar ao Prompt'}

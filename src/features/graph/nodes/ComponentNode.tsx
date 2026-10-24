@@ -155,6 +155,8 @@ export const ComponentNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
           {/* Visual Expand / Collapse Button */}
           {hasChildren && (
             <button
+              type="button"
+              aria-expanded={isExpanded}
               onClick={handleToggleExpand}
               className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
                 isExpanded
@@ -184,6 +186,9 @@ export const ComponentNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
           {/* Quick Select All Group (Component + Actions + APIs) */}
           {groupElements.length > 1 && (
             <button
+              type="button"
+              aria-pressed={allGroupSelected ? true : isPartiallySelected ? 'mixed' : false}
+              aria-label="Incluir o grupo inteiro no Prompt"
               onClick={handleSelectAllGroup}
               className={`p-0.5 rounded transition-colors ${
                 allGroupSelected
@@ -206,6 +211,9 @@ export const ComponentNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
 
           {/* Quick Select Checkbox */}
           <button
+            type="button"
+            aria-pressed={checked}
+            aria-label="Incluir no Prompt"
             onClick={handleCheckboxClick}
             className="text-slate-400 hover:text-purple-300 transition-colors p-0.5"
             title={checked ? 'Remover do Prompt' : 'Adicionar ao Prompt'}
@@ -250,6 +258,8 @@ export const ComponentNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
         <div className="mt-2 flex items-center gap-1.5 flex-wrap">
           {childCount > 0 && (
             <button
+              type="button"
+              aria-expanded={isExpanded}
               onClick={handleToggleExpand}
               className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${
                 isExpanded
@@ -264,6 +274,8 @@ export const ComponentNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
           )}
           {actionsCount > 0 && (
             <button
+              type="button"
+              aria-expanded={isExpanded}
               onClick={handleToggleExpand}
               className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${
                 isExpanded
@@ -278,6 +290,8 @@ export const ComponentNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
           )}
           {apisCount > 0 && (
             <button
+              type="button"
+              aria-expanded={isExpanded}
               onClick={handleToggleExpand}
               className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${
                 isExpanded
@@ -292,6 +306,8 @@ export const ComponentNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
           )}
           {storesCount > 0 && (
             <button
+              type="button"
+              aria-expanded={isExpanded}
               onClick={handleToggleExpand}
               className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${
                 isExpanded
@@ -306,6 +322,8 @@ export const ComponentNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
           )}
           {hooksCount > 0 && (
             <button
+              type="button"
+              aria-expanded={isExpanded}
               onClick={handleToggleExpand}
               className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-medium transition-colors ${
                 isExpanded
