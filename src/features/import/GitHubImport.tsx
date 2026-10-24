@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Github,
   AlertCircle,
@@ -26,6 +26,7 @@ import {
   getGitHubToken,
   setGitHubToken,
   clearGitHubToken,
+  isGitHubTokenRememberedInSession,
   fetchGitHubRateLimit,
   isFineGrainedToken,
   POPULAR_GITHUB_REPOS,
@@ -44,7 +45,8 @@ export const GitHubImport: React.FC = () => {
   const [repoInput, setRepoInput] = useState('');
   const [activeMode, setActiveMode] = useState<'public' | 'token'>('public');
   const [tokenInput, setTokenInput] = useState(() => getGitHubToken() || '');
-  const [rememberInSession, setRememberInSession] = useState(false);
+  // Reopening the dialog must not forget the choice; otherwise the next blur/submit deletes the saved copy.
+  const [rememberInSession, setRememberInSession] = useState(() => isGitHubTokenRememberedInSession());
   const [showTokenText, setShowTokenText] = useState(false);
   const [showTokenGuide, setShowTokenGuide] = useState(false);
   const [copiedGhCmd, setCopiedGhCmd] = useState(false);
@@ -53,6 +55,16 @@ export const GitHubImport: React.FC = () => {
   const [progress, setProgress] = useState<FetchRepoProgress | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [rateLimit, setRateLimit] = useState<GitHubRateLimitInfo | null>(null);
+
+  // An import still running when the dialog closes (or the tab changes) must not replace the project
+  // the user opened in the meantime.
+  const montado = useRef(true);
+  useEffect(() => {
+    montado.current = true;
+    return () => {
+      montado.current = false;
+    };
+  }, []);
 
   // Load rate limit on mount
   useEffect(() => {
@@ -142,8 +154,12 @@ export const GitHubImport: React.FC = () => {
         token: effectiveToken,
         branch: parsed.branch,
         subpath: parsed.subpath,
-        onProgress: (p) => setProgress(p),
+        onProgress: (p) => {
+          if (montado.current) setProgress(p);
+        },
       });
+
+      if (!montado.current) return;
 
       if (files.length === 0) {
         throw new Error('Nenhum arquivo de código suportado (.tsx, .jsx, .ts, .js, .vue) foi encontrado no repositório.');
@@ -169,6 +185,7 @@ export const GitHubImport: React.FC = () => {
 
       setImportModalOpen(false);
     } catch (err: any) {
+      if (!montado.current) return;
       const msg = err?.message || 'Falha ao conectar com o repositório do GitHub.';
       setErrorMessage(msg);
       // Auto-suggest token mode if private or rate limited
@@ -176,8 +193,10 @@ export const GitHubImport: React.FC = () => {
         setActiveMode('token');
       }
     } finally {
-      setIsLoading(false);
-      setProgress(null);
+      if (montado.current) {
+        setIsLoading(false);
+        setProgress(null);
+      }
     }
   };
 

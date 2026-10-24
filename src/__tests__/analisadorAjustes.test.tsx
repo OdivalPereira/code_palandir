@@ -163,3 +163,81 @@ describe('redactSecrets e o prompt', () => {
     expect(prompt).toContain('- **Arquivo:** `src/a b c.tsx`');
   });
 });
+
+describe('Dialog', () => {
+  it('leva o foco para dentro ao abrir, prende o Tab e devolve o foco ao fechar', async () => {
+    const { Dialog } = await import('../ui/Dialog');
+    const { fireEvent } = await import('@testing-library/react');
+    const abrir = document.createElement('button');
+    abrir.textContent = 'abrir';
+    document.body.appendChild(abrir);
+    abrir.focus();
+
+    const { rerender } = render(
+      <Dialog open onClose={() => {}} title="Título">
+        <button>um</button>
+        <button>dois</button>
+      </Dialog>
+    );
+    const fechar = screen.getByRole('button', { name: 'Fechar diálogo' });
+    const dois = screen.getByRole('button', { name: 'dois' });
+    expect(document.activeElement).toBe(fechar);
+
+    dois.focus();
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(document.activeElement).toBe(fechar);
+
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(dois);
+
+    rerender(
+      <Dialog open={false} onClose={() => {}} title="Título">
+        <button>um</button>
+      </Dialog>
+    );
+    expect(document.activeElement).toBe(abrir);
+    abrir.remove();
+  });
+});
+
+describe('Token do GitHub lembrado na sessão', () => {
+  it('reabrir o diálogo mantém a escolha de lembrar', async () => {
+    const gh = await import('../services/github');
+    gh.setGitHubToken('ghp_' + 'x'.repeat(36), true);
+    expect(gh.isGitHubTokenRememberedInSession()).toBe(true);
+    gh.clearGitHubToken();
+    expect(gh.isGitHubTokenRememberedInSession()).toBe(false);
+  });
+});
+
+describe('Importação do GitHub abandonada', () => {
+  it('fechar o diálogo antes do fim não troca o projeto aberto depois', async () => {
+    const { vi } = await import('vitest');
+    const { fireEvent } = await import('@testing-library/react');
+    const gh = await import('../services/github');
+    const { GitHubImport } = await import('../features/import/GitHubImport');
+
+    let soltar: (v: unknown) => void = () => {};
+    vi.spyOn(gh, 'fetchGitHubRateLimit').mockResolvedValue(null as never);
+    vi.spyOn(gh, 'fetchGitHubRepo').mockImplementation(
+      () => new Promise((res) => (soltar = res as (v: unknown) => void)) as never
+    );
+    const setProject = vi.spyOn(useProjectStore.getState(), 'setProject');
+    useProjectStore.setState({ setProject } as never);
+
+    const { container, unmount } = render(<GitHubImport />);
+    const campo = container.querySelector('input[type="text"]') as HTMLInputElement;
+    fireEvent.change(campo, { target: { value: 'dono/repo' } });
+    fireEvent.submit(container.querySelector('form')!);
+
+    unmount();
+    await act(async () => {
+      soltar({
+        info: { owner: 'dono', repo: 'repo' },
+        files: [{ path: 'src/App.tsx', content: 'export function App(){return <div/>}', size: 10, language: 'tsx' }],
+      });
+    });
+    expect(setProject).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+});

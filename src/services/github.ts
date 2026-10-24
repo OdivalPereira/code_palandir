@@ -102,6 +102,15 @@ export function setGitHubToken(token: string | null, rememberInSession = false):
   }
 }
 
+/** True when the current token was saved with "remember in this session" (sessionStorage). */
+export function isGitHubTokenRememberedInSession(): boolean {
+  try {
+    return typeof window !== 'undefined' && !!window.sessionStorage?.getItem(SESSION_TOKEN_KEY);
+  } catch {
+    return false;
+  }
+}
+
 export function clearGitHubToken(): void {
   inMemoryToken = null;
   try {

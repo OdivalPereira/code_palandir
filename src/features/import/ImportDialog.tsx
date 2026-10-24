@@ -19,8 +19,13 @@ export const ImportDialog: React.FC = () => {
     >
       <div className="space-y-4">
         {/* Navigation Tabs */}
-        <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800">
+        <div role="tablist" aria-label="Origem do projeto" className="flex rounded-xl bg-slate-950 p-1 border border-slate-800">
           <button
+            type="button"
+            role="tab"
+            id="importar-aba-local"
+            aria-selected={activeTab === 'local'}
+            aria-controls="importar-painel"
             onClick={() => setActiveTab('local')}
             className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-2 text-xs font-medium transition-all ${
               activeTab === 'local'
@@ -28,10 +33,15 @@ export const ImportDialog: React.FC = () => {
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Folder className="h-3.5 w-3.5 text-indigo-400" />
+            <Folder className="h-3.5 w-3.5 text-indigo-400" aria-hidden="true" />
             <span>Local / ZIP / Demo</span>
           </button>
           <button
+            type="button"
+            role="tab"
+            id="importar-aba-github"
+            aria-selected={activeTab === 'github'}
+            aria-controls="importar-painel"
             onClick={() => setActiveTab('github')}
             className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-2 text-xs font-medium transition-all ${
               activeTab === 'github'
@@ -39,13 +49,15 @@ export const ImportDialog: React.FC = () => {
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Github className="h-3.5 w-3.5 text-purple-400" />
+            <Github className="h-3.5 w-3.5 text-purple-400" aria-hidden="true" />
             <span>GitHub Repositório</span>
           </button>
         </div>
 
         {/* Tab Content */}
-        {activeTab === 'local' ? <LocalImport /> : <GitHubImport />}
+        <div role="tabpanel" id="importar-painel" aria-labelledby={`importar-aba-${activeTab}`}>
+          {activeTab === 'local' ? <LocalImport /> : <GitHubImport />}
+        </div>
       </div>
     </Dialog>
   );
