@@ -380,3 +380,25 @@ export function App() {
     expect(mapa['/sobre']).toBe('Sobre');
   });
 });
+
+describe('VueAnalyzer', () => {
+  it('lê <script lang="ts" setup>, template com v-if aninhado, kebab-case e v-on', async () => {
+    const { VueAnalyzer } = await import('../engine/analyzers/vueAnalyzer');
+    const sfc = `<template>
+  <div>
+    <Foo />
+    <template v-if="ok"><Bar /></template>
+    <Baz @click.prevent="salvar()" />
+    <user-card v-on:submit='enviar' />
+  </div>
+</template>
+<script lang="ts" setup>
+import { useCartStore } from '@/stores/cart';
+const cart = useCartStore();
+</script>`;
+    const [comp] = new VueAnalyzer().analyzeComponents({ path: 'src/views/Carrinho.vue', content: sfc, size: sfc.length, language: 'vue' } as never);
+    expect(comp.childrenNames).toEqual(expect.arrayContaining(['Foo', 'Bar', 'Baz', 'UserCard']));
+    expect(comp.actions.map((a) => a.name)).toEqual(expect.arrayContaining(['salvar', 'enviar']));
+    expect(comp.hooks.map((h) => h.name)).toContain('useCartStore');
+  });
+});

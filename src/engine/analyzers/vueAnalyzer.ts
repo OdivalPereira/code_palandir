@@ -18,25 +18,33 @@ export class VueAnalyzer implements FrameworkAnalyzer {
       /(?:Page|View)$/i.test(filename);
 
     // 1. Extract <template> and <script>
-    const templateMatch = content.match(/<template>([\s\S]*?)<\/template>/i);
+    // Greedy up to the last </template>: nested <template v-if> blocks must not cut the root one short.
+    const templateMatch = content.match(/<template\b[^>]*>([\s\S]*)<\/template>/i);
     const templateContent = templateMatch ? templateMatch[1] : '';
 
-    const scriptMatch = content.match(/<script(?:\s+setup)?(?:\s+lang=['"][^'"]+['"])?>([\s\S]*?)<\/script>/i);
-    const scriptContent = scriptMatch ? scriptMatch[1] : '';
+    // Any attribute order (<script lang="ts" setup>, generic="T"), and both blocks when an SFC has two.
+    const scriptContent = Array.from(content.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))
+      .map((m) => m[1])
+      .join('\n');
 
-    // 2. Extract child component names from template
+    // 2. Extract child component names from template (<UserCard> and <user-card>)
     const childrenNamesSet = new Set<string>();
     const tagMatches = templateContent.matchAll(/<([A-Z][A-Za-z0-9_]+)(?:\s|\/|>)/g);
     for (const m of tagMatches) {
       if (m[1] !== componentName) childrenNamesSet.add(m[1]);
     }
+    const kebabMatches = templateContent.matchAll(/<([a-z][a-z0-9]*(?:-[a-z0-9]+)+)(?=[\s/>])/g);
+    for (const m of kebabMatches) {
+      const pascal = m[1].replace(/(^|-)([a-z0-9])/g, (_, __, c: string) => c.toUpperCase());
+      if (pascal !== componentName) childrenNamesSet.add(pascal);
+    }
 
-    // 3. Extract actions (@click, @submit, v-on:click)
+    // 3. Extract actions (@click, @submit.prevent, v-on:click; single or double quotes)
     const actions: ComponentAction[] = [];
-    const eventMatches = templateContent.matchAll(/@([a-zA-Z0-9_-]+)="([^"]+)"/g);
+    const eventMatches = templateContent.matchAll(/(?:@|v-on:)([a-zA-Z0-9_.-]+)=(["'])(.*?)\2/g);
     for (const m of eventMatches) {
       const eventName = m[1];
-      const handlerExpression = m[2].trim().replace(/\(.*$/, '');
+      const handlerExpression = m[3].trim().replace(/\(.*$/, '');
       if (handlerExpression) {
         actions.push({
           id: `${file.path}#${componentName}#${handlerExpression}`,
@@ -44,7 +52,7 @@ export class VueAnalyzer implements FrameworkAnalyzer {
           trigger: `@${eventName}`,
           componentName,
           filePath: file.path,
-          codeSnippet: `@${eventName}="${m[2]}"`,
+          codeSnippet: `@${eventName}="${m[3]}"`,
           apiCalls: [],
           stateUpdates: [],
         });
