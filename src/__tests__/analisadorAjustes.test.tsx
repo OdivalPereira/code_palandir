@@ -443,7 +443,7 @@ describe('Nós do grafo: estado do botão para leitor de tela', () => {
     const data = { id: 'node-route-x', label: '/x', nodeType: 'route', filePath: 'src/App.tsx' };
     render(
       <ReactFlowProvider>
-        <RouteNode {...({ id: 'node-route-x', data, selected: false } as never)} />
+        <RouteNode {...({ id: 'node-route-x', data, selected: false } as unknown as React.ComponentProps<typeof RouteNode>)} />
       </ReactFlowProvider>
     );
     const botao = screen.getByRole('button', { name: 'Incluir no Prompt' });
@@ -451,5 +451,59 @@ describe('Nós do grafo: estado do botão para leitor de tela', () => {
     fireEvent.click(botao);
     expect(screen.getByRole('button', { name: 'Incluir no Prompt' }).getAttribute('aria-pressed')).toBe('true');
     useSelectionStore.getState().clearSelection();
+  });
+});
+
+describe('Exportações', () => {
+  it('Mermaid não funde dois nós cujos ids só diferem em pontuação', async () => {
+    const { generateMermaidDiagram } = await import('../services/mermaidGenerator');
+    const no = (id: string, label: string) =>
+      ({ id, type: 'component', position: { x: 0, y: 0 }, data: { id, label, nodeType: 'component' } }) as unknown as FlowUINode;
+    const texto = generateMermaidDiagram(
+      [no('node-comp-src/a-b/X.tsx#X', 'X de a-b'), no('node-comp-src/a_b/X.tsx#X', 'X de a_b')],
+      [],
+      { includeStyles: false }
+    );
+    const ids = Array.from(texto.matchAll(/^\s+(\w+)[[({]/gm)).map((m) => m[1]);
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  it('relatório Markdown não quebra a tabela com | ou crase num endpoint', async () => {
+    const { generateArchitectureMarkdownReport } = await import('../services/graphExporters');
+    const analise = analyzeProject(createDemoProjectFiles());
+    analise.apiCalls.unshift({
+      id: 'x',
+      endpoint: '/api/busca?q=a|b&c=`d`',
+      method: 'GET',
+      callerComponent: 'Busca',
+      client: 'fetch',
+      filePath: 'src/Busca.tsx',
+    } as never);
+    const md = generateArchitectureMarkdownReport(analise, [], [], 'demo');
+    const linha = md.split('\n').find((l) => l.includes('/api/busca'))!;
+    // 4 colunas => 5 barras não escapadas
+    expect(linha.replace(/\\\|/g, '').split('|').length - 1).toBe(5);
+    expect(linha).toContain('`` /api/busca?q=a\\|b&c=`d` ``');
+  });
+
+  it('cota do GitHub em cache não é reaproveitada para outro token', async () => {
+    const { vi } = await import('vitest');
+    const gh = await import('../services/github');
+    let chamadas = 0;
+    vi.stubGlobal('fetch', async (_url: string, init?: RequestInit) => {
+      chamadas++;
+      const autenticado = Boolean((init?.headers as Record<string, string> | undefined)?.Authorization);
+      return {
+        ok: true,
+        json: async () => ({ resources: { core: { limit: autenticado ? 5000 : 60, remaining: 1, reset: 0, used: 0 } } }),
+      } as Response;
+    });
+    gh.clearGitHubToken();
+    const anonimo = await gh.fetchGitHubRateLimit();
+    const comToken = await gh.fetchGitHubRateLimit('ghp_' + 'z'.repeat(36));
+    vi.unstubAllGlobals();
+    expect(anonimo?.limit).toBe(60);
+    expect(comToken?.limit).toBe(5000);
+    expect(chamadas).toBe(2);
   });
 });

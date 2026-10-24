@@ -209,12 +209,14 @@ export function parseGitHubUrl(input: string): ParsedGitHubUrl | null {
   return null;
 }
 
-let cachedRateLimit: { data: GitHubRateLimitInfo; timestamp: number } | null = null;
+// Keyed by token: the quota with a token (5.000/h) is not the anonymous one (60/h).
+let cachedRateLimit: { data: GitHubRateLimitInfo; timestamp: number; token: string | null } | null = null;
 
 export async function fetchGitHubRateLimit(token?: string): Promise<GitHubRateLimitInfo | null> {
   const effectiveToken = token || getGitHubToken();
   const now = Date.now();
-  if (cachedRateLimit && now - cachedRateLimit.timestamp < 15000) {
+  const cacheKey = effectiveToken ? effectiveToken.trim() : null;
+  if (cachedRateLimit && cachedRateLimit.token === cacheKey && now - cachedRateLimit.timestamp < 15000) {
     return cachedRateLimit.data;
   }
 
@@ -238,7 +240,7 @@ export async function fetchGitHubRateLimit(token?: string): Promise<GitHubRateLi
       reset: new Date(core.reset * 1000),
       used: core.used,
     };
-    cachedRateLimit = { data, timestamp: now };
+    cachedRateLimit = { data, timestamp: now, token: cacheKey };
     return data;
   } catch {
     return null;
