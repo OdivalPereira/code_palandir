@@ -1,5 +1,5 @@
 {
-  "atualizado_em": "2026-10-24T07:17:08.917440+00:00",
+  "atualizado_em": "2026-10-24T07:58:40.657443+00:00",
   "caminho_canonico": "/home/odival/Documentos/Projetos/code_palandir",
   "criado_em": "2026-10-07T18:16:25.686486+00:00",
   "eventos": [
@@ -392,11 +392,239 @@
       "simulacao": false,
       "timestamp": "2026-10-24T07:17:08.917413+00:00",
       "tipo": "etapa_aberta"
+    },
+    {
+      "autor": "coordenador",
+      "dados": {
+        "esforco": "high",
+        "etapa_id": "p2b-versao",
+        "fornecedor": "Google",
+        "modelo": "Gemini 3.8 Flash",
+        "papel": "coordenador",
+        "plataforma": "Antigravity",
+        "subagentes": {
+          "alta": "Gemini 3.8 Flash",
+          "moderada": "Gemini 3.8 Flash",
+          "simples": "Gemini 3.8 Flash"
+        }
+      },
+      "id": "EVT-000017",
+      "seq": 17,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:20:15.935774+00:00",
+      "tipo": "papel_assumido"
+    },
+    {
+      "autor": "conferência automática",
+      "dados": {
+        "commit": "3482ec5c6332ee7ef4fa92325a43f10a2219332b",
+        "etapa": "p2b-versao",
+        "feitos": 5,
+        "itens": [
+          {
+            "detalhe": "3482ec5c6332",
+            "estado": "feito",
+            "id": "E1",
+            "tipo": "commit_existe"
+          },
+          {
+            "detalhe": "20 arquivos, todos nos prefixos",
+            "estado": "feito",
+            "id": "E2",
+            "tipo": "arquivos_em"
+          },
+          {
+            "detalhe": "APROVADO, 4 arquivos, commit 3482ec5c6332",
+            "estado": "feito",
+            "id": "E3",
+            "tipo": "atestado_aprovado"
+          },
+          {
+            "detalhe": "1 delegações",
+            "estado": "feito",
+            "id": "E4",
+            "tipo": "delegacoes"
+          },
+          {
+            "detalhe": "1 ordem na conversa",
+            "estado": "feito",
+            "id": "E5",
+            "tipo": "conversa_nova"
+          }
+        ],
+        "ordem": "sociedade/ordens/p2b-versao.md",
+        "total": 5
+      },
+      "id": "EVT-000018",
+      "seq": 18,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:44:10.690906+00:00",
+      "tipo": "conferencia_registrada"
+    },
+    {
+      "autor": "conferência automática",
+      "dados": {
+        "commit": "3482ec5c6332ee7ef4fa92325a43f10a2219332b",
+        "etapa": "p2b-versao",
+        "feitos": 5,
+        "itens": [
+          {
+            "detalhe": "3482ec5c6332",
+            "estado": "feito",
+            "id": "E1",
+            "tipo": "commit_existe"
+          },
+          {
+            "detalhe": "20 arquivos, todos nos prefixos",
+            "estado": "feito",
+            "id": "E2",
+            "tipo": "arquivos_em"
+          },
+          {
+            "detalhe": "APROVADO, 4 arquivos, commit 3482ec5c6332",
+            "estado": "feito",
+            "id": "E3",
+            "tipo": "atestado_aprovado"
+          },
+          {
+            "detalhe": "1 delegações",
+            "estado": "feito",
+            "id": "E4",
+            "tipo": "delegacoes"
+          },
+          {
+            "detalhe": "1 ordem na conversa",
+            "estado": "feito",
+            "id": "E5",
+            "tipo": "conversa_nova"
+          }
+        ],
+        "ordem": "sociedade/ordens/p2b-versao.md",
+        "total": 5
+      },
+      "id": "EVT-000019",
+      "seq": 19,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:44:48.421596+00:00",
+      "tipo": "conferencia_registrada"
+    },
+    {
+      "autor": "Barbárvore",
+      "dados": {
+        "etapa_id": "p2b-versao",
+        "impacto": "desconhecido",
+        "versao": "3482ec5c6332ee7ef4fa92325a43f10a2219332b"
+      },
+      "id": "EVT-000020",
+      "seq": 20,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:58:01.768046+00:00",
+      "tipo": "versao_atualizada"
+    },
+    {
+      "autor": "Barbárvore",
+      "dados": {
+        "achados_referenciados": [],
+        "commit": "3482ec5c6332ee7ef4fa92325a43f10a2219332b",
+        "criterios_verificados": {
+          "C1 Precedência e motivo: nulos/diagnóstico, depois alteração/divergência, depois em_dia": true,
+          "C2 Alteração local preserva desconhecido, podendo compor o motivo": true,
+          "C3 Diagnóstico da instalação chega ao Conselho; núcleos permanecem atendidos": true,
+          "C4 Tabela explícita, fonte nula + alteração e diagnóstico com versões iguais/diferentes": true,
+          "C5 Tela com diagnóstico fictício exato, sem em_dia e com motivo": true,
+          "C6 307 anteriores preservados, adaptações justificadas e tipos sem erro": true,
+          "C7 Escopo só A1.1/A1.2, caminhos permitidos e cerca de 150 linhas de produto": true,
+          "E1 commit_existe: etapa/p2b-versao": true,
+          "E2 arquivos_em: src/ e sociedade/": true,
+          "E3 atestado_aprovado para o candidato": true,
+          "E4 delegação real, uma, Antigravity": true,
+          "E5 conversa_nova Antigravity": true
+        },
+        "etapa_id": "p2b-versao",
+        "fornecedor_revisor": "OpenAI",
+        "implementadores": [
+          {
+            "agente": "Coordenador",
+            "fornecedor": "Google"
+          }
+        ],
+        "justificativa_independencia": "Nível A documental, fornecedor diferente dos implementadores",
+        "lacunas": [
+          "Playwright, build, navegador gráfico, CSS computado e capturas: dispensados pelo usuário para esta revisão reduzida. A prova de tela é React/jsdom com dados fictícios, não uma validação visual completa.",
+          "Logs originais do implementador, delegação e conferência, o ramo/objetos Git originais e CI externo: não fornecidos nesta cópia. O vínculo ao SHA original usa o inventário, atestado e governança validados; a inspeção usa os SHAs reconstruídos. E1, E4 e E5 têm evidência documental, não confirmação por execução histórica.",
+          "Critérios anteriores da p2 fora de A1.1/A1.2, autorização operacional do merge, banco, login, produção, dados reais e serviços externos. Q226 foi lido como vínculo entre o aceite e o próximo passo; o revisor não integra nem registra a decisão.",
+          "Texto literal de todos os diagnósticos nos selos dos núcleos: as chamadas inalteradas passam contagem. O foco desta etapa é preservar desconhecido e corrigir o diagnóstico da instalação; a divergência inicial da sonda está explicitada em Evidências.",
+          "Modelo, esforço e ID efetivos da sessão não estão expostos por ferramenta. O cabeçalho distingue a escala solicitada dessa limitação. Leituras de skills fora da cópia e resolução física das dependências pelo link estão declaradas em Independência."
+        ],
+        "nivel_independencia": "A",
+        "parecer_id": "PAR-p2b-versao-3482ec5",
+        "revisor": "Barbárvore",
+        "veredito": "aceitar",
+        "versao_examinada": "3482ec5c6332ee7ef4fa92325a43f10a2219332b"
+      },
+      "id": "EVT-000021",
+      "seq": 21,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:58:01.787854+00:00",
+      "tipo": "parecer_registrado"
+    },
+    {
+      "autor": "OdivalPereira",
+      "dados": {
+        "ambiente": "local",
+        "comando": "sc.py entregar --etapa p2b-versao",
+        "criterio_id": "portao",
+        "etapa_id": "p2b-versao",
+        "evidencia_id": "EVD-portao-20261024075840639048_0022",
+        "exit_code": 0,
+        "motivo_invalida": null,
+        "saida_hash": "814bf7abbb89383ecc5111ab525288b72a47b722dfa4c44c1ea9bb492448f05c",
+        "saida_resumo": "atestado APROVADO do commit 3482ec5c6332, hash ec2c29e7f8dfe93a, 4 arquivos inspecionados",
+        "valida": true,
+        "verificador": "OdivalPereira",
+        "versao_entrega": "3482ec5c6332ee7ef4fa92325a43f10a2219332b"
+      },
+      "id": "EVT-000022",
+      "seq": 22,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:58:40.639117+00:00",
+      "tipo": "evidencia_registrada"
+    },
+    {
+      "autor": "OdivalPereira",
+      "dados": {
+        "acao": "aceitar",
+        "alcance": "etapa",
+        "atestado_hash": "ec2c29e7f8dfe93aaf2b3cb084ccd9d415f9f98e24a37d3ce21083c3672b1a8e",
+        "commit": "3482ec5c6332ee7ef4fa92325a43f10a2219332b",
+        "decisao_id": "DEC-p2b-versao-aceitar-23",
+        "etapa_id": "p2b-versao",
+        "quem": "OdivalPereira",
+        "referencia": "Aceite de Odival em 24/10/2026: revisão independente aceitar (PAR debf6d60) do commit 3482ec5, sem achados; A1.1 e A1.2 da p2-leitura resolvidos. Pela Q226, este aceite autoriza o merge da cadeia p2-leitura + p2b-versao em painel/base."
+      },
+      "id": "EVT-000023",
+      "seq": 23,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:58:40.647355+00:00",
+      "tipo": "decisao_registrada"
+    },
+    {
+      "autor": "OdivalPereira",
+      "dados": {
+        "elegivel_publicacao": true,
+        "etapa_id": "p2b-versao",
+        "resumo": "aceite de OdivalPereira: parecer do commit 3482ec5c6332"
+      },
+      "id": "EVT-000024",
+      "seq": 24,
+      "simulacao": false,
+      "timestamp": "2026-10-24T07:58:40.657402+00:00",
+      "tipo": "etapa_encerrada"
     }
   ],
   "projeto_id": "code-palandir",
   "resumos_externos": {},
-  "revisao": 17,
+  "revisao": 25,
   "versao_formato": "2.1.0",
   "versao_inicial": "418e385391fa3a1470a51847298aad613a746a4a"
 }

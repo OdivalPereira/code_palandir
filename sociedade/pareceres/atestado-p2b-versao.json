@@ -1,0 +1,107 @@
+{
+  "tipo": "atestado_pre_devolucao",
+  "versao": "1.3.0",
+  "timestamp": "2026-10-24T07:43:52.267060Z",
+  "papel": "Coordenador",
+  "etapa_id": "p2b-versao",
+  "fatia_id": "N/A",
+  "status": "APROVADO",
+  "verificacoes": {
+    "higiene_pastas": {
+      "ok": true,
+      "erros": []
+    },
+    "build": {
+      "ok": true,
+      "comando": "npm run build",
+      "detalhes": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+      "codigo": 0
+    },
+    "tipos_estaticos": {
+      "ok": true,
+      "comando": "npx tsc --noEmit",
+      "detalhes": "",
+      "codigo": 0
+    },
+    "compilacao": {
+      "ok": true,
+      "erros": []
+    },
+    "seguranca_antitoken": {
+      "ok": true,
+      "erros": []
+    },
+    "disjuncao": {
+      "ok": true,
+      "erros": []
+    },
+    "testes": {
+      "ok": true,
+      "detalhes": "app: 311 testes, 0 pulados, 53.0 s",
+      "comando": "app: npm test && npx tsc --noEmit && npm run build",
+      "totais": {
+        "total": 311,
+        "pulados": 0,
+        "falhos": 0
+      }
+    },
+    "arvore_limpa": {
+      "ok": true,
+      "suja": []
+    }
+  },
+  "commit": "3482ec5c6332ee7ef4fa92325a43f10a2219332b",
+  "base": "2028ff234b9c6b7fdd6ba3692117fd56546f08aa",
+  "origem_arquivos": "git",
+  "total_arquivos_inspecionados": 4,
+  "arquivos_removidos": [],
+  "commits_ignorados": [
+    "26fcabb08221c48db426ba077602625a1eed23fa",
+    "83046511b32f8b6defa339f54b37b307e023d910"
+  ],
+  "python": "3.12.3",
+  "hashes_artefatos": {
+    "src/__tests__/painelHoje.test.tsx": "cda1052e70229c5fc88a6d8f4b0693bc3831ae52dd701cfd285d3d7b36d7550a",
+    "src/__tests__/painelVersao.test.ts": "31c0796bda16afdc3902541a2fb09279801239556f27e7b48b1f2ecfce99f8c1",
+    "src/painel/hoje/HojePage.tsx": "f10e18d0192460fb2075e00e8e054810b5916c9df3f6084f6447f2d6fd8df3e3",
+    "src/painel/regras/classificarVersao.ts": "d501808e1b87a6b7044c376ef7ca0e00af51b2638e0fe1c3adca67cf5a859997"
+  },
+  "arquivos_inspecionados": [
+    "src/__tests__/painelHoje.test.tsx",
+    "src/__tests__/painelVersao.test.ts",
+    "src/painel/hoje/HojePage.tsx",
+    "src/painel/regras/classificarVersao.ts"
+  ],
+  "erros": [],
+  "portao": {
+    "modo": "por_area",
+    "perfil": "sociedade/perfil.md",
+    "perfil_sha256": "dceedb1cf00b285b70bd174e8ca6247adc7257c56ff945870ddc80b01754a95f",
+    "commit": "3482ec5c6332ee7ef4fa92325a43f10a2219332b",
+    "area_pedida": "app",
+    "areas_tocadas": [
+      "app"
+    ],
+    "cobertura_completa": true,
+    "areas": [
+      {
+        "area": "app",
+        "pasta": ".",
+        "comando": "npm test && npx tsc --noEmit && npm run build",
+        "timeout_s": 900,
+        "ok": true,
+        "codigo": 0,
+        "duracao_s": 53.0,
+        "timeout_estourado": false,
+        "testes": {
+          "total": 311,
+          "pulados": 0,
+          "falhos": 0
+        },
+        "motivos": [],
+        "saida_final": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n✓ built in 22.75s"
+      }
+    ]
+  },
+  "atestado_hash": "ec2c29e7f8dfe93aaf2b3cb084ccd9d415f9f98e24a37d3ce21083c3672b1a8e"
+}
