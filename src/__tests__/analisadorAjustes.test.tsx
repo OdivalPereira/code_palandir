@@ -402,3 +402,34 @@ const cart = useCartStore();
     expect(comp.hooks.map((h) => h.name)).toContain('useCartStore');
   });
 });
+
+describe('extractZipArchive', () => {
+  const zipCom = async (arquivos: Record<string, string>) => {
+    const JSZip = (await import('jszip')).default;
+    const zip = new JSZip();
+    for (const [caminho, conteudo] of Object.entries(arquivos)) zip.file(caminho, conteudo);
+    return zip.generateAsync({ type: 'arraybuffer' });
+  };
+
+  it('mantém src/ quando o ZIP só tem essa pasta, e tira a pasta-invólucro', async () => {
+    const { extractZipArchive } = await import('../services/fileSystem');
+    const soSrc = await extractZipArchive(
+      await zipCom({ 'src/pages/Home.tsx': 'export function Home(){return <div/>}', 'src/App.tsx': 'export function App(){return <div/>}' })
+    );
+    expect(soSrc.map((f) => f.path).sort()).toEqual(['src/App.tsx', 'src/pages/Home.tsx']);
+
+    const embrulhado = await extractZipArchive(
+      await zipCom({ 'meu-app-abc123/src/App.tsx': 'export function App(){return <div/>}', 'meu-app-abc123/package.json': '{}' })
+    );
+    expect(embrulhado.map((f) => f.path)).toContain('src/App.tsx');
+  });
+
+  it('pula arquivo acima de 2 MB', async () => {
+    const { extractZipArchive } = await import('../services/fileSystem');
+    const grande = 'a'.repeat(2 * 1024 * 1024 + 10);
+    const arquivos = await extractZipArchive(
+      await zipCom({ 'src/App.tsx': 'export function App(){return <div/>}', 'src/gerado.js': grande })
+    );
+    expect(arquivos.map((f) => f.path)).toEqual(['src/App.tsx']);
+  });
+});
