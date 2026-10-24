@@ -1,10 +1,25 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Link, Routes, Route } from 'react-router-dom';
 import { PainelShell } from './PainelShell';
-import { AnalisadorPage } from './AnalisadorPage';
 import { EstadoTela } from './rpgTheme';
 import { HojePage } from '../painel/hoje/HojePage';
 import { ProjetosPage } from '../painel/projetos/ProjetosPage';
+
+// O Analisador traz Babel, React Flow, dagre e JSZip: só carrega quando a rota é aberta,
+// e o Conselho e as Regiões abrem sem esse peso.
+const AnalisadorPage = lazy(() => import('./AnalisadorPage'));
+
+const CarregandoAnalisador: React.FC = () => (
+  <div className="w-full max-w-7xl mx-auto p-3 sm:p-4 md:p-6">
+    <EstadoTela estado="carregando" titulo="Despertando o Palantír..." mensagem="Carregando o analisador visual." />
+  </div>
+);
+
+const AnalisadorRoute: React.FC = () => (
+  <Suspense fallback={<CarregandoAnalisador />}>
+    <AnalisadorPage />
+  </Suspense>
+);
 
 /** Comportamento do React Router v7, já ligado na v6 (e sem os avisos no console). */
 export const ROUTER_FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
@@ -35,7 +50,7 @@ export const App: React.FC = () => {
           <Route path="/" element={<HojePage />} />
           <Route path="/projetos" element={<ProjetosPage />} />
           <Route path="/projetos/:id" element={<ProjetosPage />} />
-          <Route path="/analisador" element={<AnalisadorPage />} />
+          <Route path="/analisador" element={<AnalisadorRoute />} />
           <Route path="*" element={<PaginaNaoEncontrada />} />
         </Routes>
       </PainelShell>
