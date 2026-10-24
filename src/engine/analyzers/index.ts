@@ -40,7 +40,7 @@ export function analyzeProject(files: ProjectFile[]): ProjectAnalysis {
   }
 
   // Detect routes
-  const routes = detectRoutes(files, allComponents);
+  const routes = detectRoutes(files, allComponents, framework);
 
   // Mark components that correspond to routes as pages
   for (const route of routes) {

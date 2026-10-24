@@ -44,6 +44,18 @@ export interface BabelParsedComponentResult {
   apiCalls: ApiCall[];
 }
 
+// React's own hooks: never custom and never a store, even when the name ends in "State"/"Store".
+const REACT_BUILTIN_HOOKS = new Set([
+  'useState', 'useEffect', 'useContext', 'useReducer', 'useCallback', 'useMemo', 'useRef', 'useId',
+  'useLayoutEffect', 'useInsertionEffect', 'useTransition', 'useDeferredValue', 'useImperativeHandle',
+  'useDebugValue', 'useSyncExternalStore', 'useFormState', 'useActionState', 'useOptimistic',
+]);
+
+/** useAuthStore, useStore, useAppState → store; useState, useSyncExternalStore → not. */
+export function looksLikeStoreHook(name: string): boolean {
+  return !REACT_BUILTIN_HOOKS.has(name) && /^use\w*(?:Store|State)$/.test(name);
+}
+
 function safeParseAst(content: string) {
   // 1. Primary parse attempt with full modern plugin suite and errorRecovery: true
   try {
@@ -252,7 +264,7 @@ export function parseSourceWithBabel(
             // Hook detection: e.g. useState, useEffect, useAuth, useCustomHook
             if (callee.type === 'Identifier' && /^use[A-Z]/.test(callee.name)) {
               const hookName = callee.name;
-              const isCustom = !['useState', 'useEffect', 'useContext', 'useReducer', 'useCallback', 'useMemo', 'useRef', 'useId'].includes(hookName);
+              const isCustom = !REACT_BUILTIN_HOOKS.has(hookName);
 
               const hookObj: ComponentHook = {
                 id: `${filePath}#${componentName}#${hookName}#${callPath.node.loc?.start?.line || 0}`,
@@ -262,10 +274,11 @@ export function parseSourceWithBabel(
               hooks.push(hookObj);
               allHooks.push(hookObj);
 
-              // If hook looks like a store: useAuthStore, useAppStore, etc.
-              if (/Store|State/i.test(hookName)) {
+              // If hook looks like a store: useAuthStore, useAppStore, etc. (once per component)
+              const storeId = `${filePath}#${componentName}#${hookName}`;
+              if (looksLikeStoreHook(hookName) && !stores.some((st) => st.id === storeId)) {
                 const storeObj: ComponentStoreAccess = {
-                  id: `${filePath}#${componentName}#${hookName}`,
+                  id: storeId,
                   storeName: hookName,
                   type: 'zustand',
                   properties: [],
@@ -735,7 +748,7 @@ function extractHooksWithRegex(content: string): ComponentHook[] {
       hooks.push({
         id: name,
         name,
-        isCustom: !['useState', 'useEffect', 'useContext'].includes(name),
+        isCustom: !REACT_BUILTIN_HOOKS.has(name),
       });
     }
   }
@@ -748,7 +761,7 @@ function extractStoresWithRegex(content: string, componentName: string, filePath
   const seen = new Set<string>();
   for (const m of matches) {
     const storeName = m[1];
-    if (!seen.has(storeName)) {
+    if (looksLikeStoreHook(storeName) && !seen.has(storeName)) {
       seen.add(storeName);
       stores.push({
         id: `${filePath}#${componentName}#${storeName}`,

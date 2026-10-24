@@ -1,8 +1,19 @@
-import type { ProjectFile } from '@/types/project';
+import type { ProjectFile, SupportedFramework } from '@/types/project';
 import type { UIRoute, UIComponent } from '@/types/analysis';
 import { detectNextAppRoutes } from './nextAppRouterDetector';
 
-export function detectRoutes(files: ProjectFile[], components: UIComponent[]): UIRoute[] {
+const PAGES_ROUTER_FILE = /(?:^|\/)pages\/(.+)\.(?:tsx|jsx|js|ts)$/i;
+
+/**
+ * @param framework when known, the file-based Pages Router convention only applies to Next.js;
+ *   a React SPA with a `src/pages/` folder declares its routes in the router instead.
+ */
+export function detectRoutes(
+  files: ProjectFile[],
+  components: UIComponent[],
+  framework?: SupportedFramework
+): UIRoute[] {
+  const usePagesRouter = framework === undefined || framework === 'nextjs';
   const routes: UIRoute[] = [];
   const componentMap = new Map<string, UIComponent>();
   for (const c of components) {
@@ -14,12 +25,12 @@ export function detectRoutes(files: ProjectFile[], components: UIComponent[]): U
   routes.push(...appRouterRoutes);
 
   // 1.1 Next.js Pages Router
-  for (const file of files) {
+  for (const file of usePagesRouter ? files : []) {
     const p = file.path;
 
     // Pages Router: e.g. pages/about.tsx, pages/users/[id].tsx
-    if (/(?:src\/)?pages\/(.+)\.(?:tsx|jsx|js|ts)$/i.test(p) && !p.includes('_app') && !p.includes('_document') && !p.includes('/api/')) {
-      const match = p.match(/(?:src\/)?pages\/(.+)\.(?:tsx|jsx|js|ts)$/i);
+    if (PAGES_ROUTER_FILE.test(p) && !p.includes('_app') && !p.includes('_document') && !p.includes('/api/')) {
+      const match = p.match(PAGES_ROUTER_FILE);
       if (match) {
         let routePath = '/' + match[1].replace(/index$/i, '').replace(/\[([^\]]+)\]/g, ':$1');
         if (routePath.length > 1 && routePath.endsWith('/')) {

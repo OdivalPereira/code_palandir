@@ -33,21 +33,26 @@ export function buildGraphFromAnalysis(
     }
   }
 
-  // Helper to add edges without duplication
-  const addedEdgeIds = new Set<string>();
+  // Edges are requested while nodes are still being added (a route before its page, a parent
+  // before its children), so they are queued and only resolved once every node exists.
+  const pendingEdges: Array<{ source: string; target: string; relation: FlowUIEdgeRelation; label?: string }> = [];
   function addEdge(source: string, target: string, relation: FlowUIEdgeRelation, label?: string) {
-    if (addedNodeIds.has(source) && addedNodeIds.has(target)) {
+    pendingEdges.push({ source, target, relation, label });
+  }
+  function flushEdges() {
+    const addedEdgeIds = new Set<string>();
+    for (const { source, target, relation, label } of pendingEdges) {
+      if (!addedNodeIds.has(source) || !addedNodeIds.has(target)) continue;
       const edgeId = `e-${source}-${target}-${relation}`;
-      if (!addedEdgeIds.has(edgeId)) {
-        addedEdgeIds.add(edgeId);
-        edges.push({
-          id: edgeId,
-          source,
-          target,
-          type: 'customEdge',
-          data: { relation, label },
-        });
-      }
+      if (addedEdgeIds.has(edgeId)) continue;
+      addedEdgeIds.add(edgeId);
+      edges.push({
+        id: edgeId,
+        source,
+        target,
+        type: 'customEdge',
+        data: { relation, label },
+      });
     }
   }
 
@@ -395,6 +400,8 @@ export function buildGraphFromAnalysis(
       }
     }
   }
+
+  flushEdges();
 
   // 5. Run Dagre Auto-Layout on visible nodes & edges
   if (nodes.length > 0) {
