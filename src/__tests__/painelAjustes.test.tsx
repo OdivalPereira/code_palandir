@@ -6,6 +6,7 @@ import { PaginaNaoEncontrada, ROUTER_FUTURE } from '../app/App';
 import { ProjetosPage } from '../painel/projetos/ProjetosPage';
 import { HojePage } from '../painel/hoje/HojePage';
 import { PergaminhoAbertura } from '../painel/mensagem/PergaminhoAbertura';
+import { montarAbertura, selecaoInicial } from '../painel/mensagem/escalaAbertura';
 import * as clipboardService from '@/services/clipboard';
 import { copyToClipboard } from '@/services/clipboard';
 import { formatarColetadoEm, pluralizar } from '../painel/formatacao';
@@ -324,5 +325,49 @@ describe('D08 e D05: o que não se sabe não aparece como resolvido', () => {
     soltarLenta({ estado: 'sucesso', dados: { ...exemploOficial, maquina: 'velha' }, erros: [], modo: 'supabase' });
     await p1;
     expect(usePainelStore.getState().dados?.maquina).toBe('nova');
+  });
+});
+
+describe('Pergaminho: valores do instantâneo não viram comando na linha Assumir', () => {
+  const loja = exemploOficial.projetos.find((p) => p.id === 'loja-exemplo')!;
+  const cardapio = exemploOficial.cardapio ?? [];
+  const comEtapa = (etapaId: string) => [
+    { ...loja, etapas: [{ ...loja.etapas[1], id: etapaId, estacao: 'execucao' as const }] },
+  ];
+
+  it('o exemplo oficial continua gerando a mensagem', () => {
+    const r = montarAbertura(exemploOficial.projetos, cardapio, selecaoInicial());
+    expect(r.mensagem).not.toBeNull();
+    expect(r.bloqueios).toEqual([]);
+  });
+
+  it.each([
+    'x; touch /tmp/pwn #',
+    'e1 --plataforma "evil"',
+    '../../etc',
+    'e1$(id)',
+    'e1\nrm -rf ~',
+  ])('etapa com id %j bloqueia a mensagem', (etapaId) => {
+    const r = montarAbertura(comEtapa(etapaId), cardapio, selecaoInicial());
+    expect(r.mensagem).toBeNull();
+    expect(r.bloqueios.join(' ')).toMatch(/não é seguro para a linha Assumir/);
+  });
+
+  it('modelo do cardápio com aspas e $( ) bloqueia, com o motivo', () => {
+    const ruim = cardapio.map((c) =>
+      c.plataforma === 'Antigravity' && c.nivel === 'moderada' ? { ...c, modelo: 'm" $(id) `id`' } : c
+    );
+    const r = montarAbertura(exemploOficial.projetos, ruim, selecaoInicial());
+    expect(r.mensagem).toBeNull();
+    expect(r.bloqueios.join(' ')).toMatch(/modelo .* terminal interpretaria/);
+  });
+
+  it('subagente com vírgula quebraria --subagentes e bloqueia', () => {
+    const ruim = cardapio.map((c) =>
+      c.plataforma === 'Antigravity' && c.nivel === 'alta' ? { ...c, modelo: 'Argon,simples=x' } : c
+    );
+    const r = montarAbertura(exemploOficial.projetos, ruim, selecaoInicial());
+    expect(r.mensagem).toBeNull();
+    expect(r.bloqueios.join(' ')).toMatch(/subagente \(alta\)/);
   });
 });
