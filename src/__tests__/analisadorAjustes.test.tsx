@@ -293,3 +293,70 @@ describe('Parser: o que não é componente não vira componente', () => {
     expect(hero!.stores.map((st) => [st.storeName, st.type])).toContainEqual(['HeroService', 'angular-service']);
   });
 });
+
+describe('GitHub: URLs e importação parcial', () => {
+  it('interpreta links de arquivo, perfil e pasta', async () => {
+    const { parseGitHubUrl } = await import('../services/github');
+    expect(parseGitHubUrl('github.com/pmndrs')).toBeNull();
+    expect(parseGitHubUrl('https://github.com/pmndrs/zustand/blob/main/src/vanilla.ts')).toEqual({
+      owner: 'pmndrs',
+      repo: 'zustand',
+      branch: 'main',
+      subpath: 'src',
+    });
+    expect(parseGitHubUrl('https://github.com/pmndrs/zustand/blob/main/README.md')).toEqual({
+      owner: 'pmndrs',
+      repo: 'zustand',
+      branch: 'main',
+    });
+    expect(parseGitHubUrl('https://github.com/vercel/next.js/tree/canary/examples/blog')).toEqual({
+      owner: 'vercel',
+      repo: 'next.js',
+      branch: 'canary',
+      subpath: 'examples/blog',
+    });
+    expect(parseGitHubUrl('pmndrs/zustand')).toEqual({ owner: 'pmndrs', repo: 'zustand' });
+  });
+
+  it('avisa o teto de arquivos, a árvore truncada e a branch trocada, e baixa da branch lida', async () => {
+    const { vi } = await import('vitest');
+    const gh = await import('../services/github');
+    const total = gh.GITHUB_MAX_FILES + 5;
+    const tree = Array.from({ length: total }, (_, i) => ({
+      type: 'blob',
+      path: `src/components/C${i}.tsx`,
+      size: 40,
+      url: `https://api.github.com/blob/${i}`,
+    }));
+    const pedidos: string[] = [];
+    const resposta = (corpo: unknown, ok = true, status = 200) =>
+      ({
+        ok,
+        status,
+        statusText: '',
+        headers: new Headers(),
+        json: async () => corpo,
+        text: async () => (typeof corpo === 'string' ? corpo : JSON.stringify(corpo)),
+      }) as Response;
+    vi.stubGlobal('fetch', async (url: string) => {
+      pedidos.push(url);
+      if (url.endsWith('/repos/dono/repo')) return resposta({ default_branch: 'main', private: false });
+      if (url.includes('/git/trees/inexistente')) return resposta({}, false, 404);
+      if (url.includes('/git/trees/main')) return resposta({ tree, truncated: true });
+      if (url.startsWith('https://raw.githubusercontent.com/')) return resposta('export function C(){return <div/>}');
+      return resposta({}, false, 404);
+    });
+
+    const { info, files } = await gh.fetchGitHubRepo('dono', 'repo', { branch: 'inexistente' });
+    vi.unstubAllGlobals();
+
+    expect(files).toHaveLength(gh.GITHUB_MAX_FILES);
+    expect(info.defaultBranch).toBe('main');
+    const avisos = (info.warnings ?? []).join(' | ');
+    expect(avisos).toMatch(/branch "inexistente" não foi encontrada/);
+    expect(avisos).toMatch(/truncou a árvore/);
+    expect(avisos).toMatch(new RegExp(`${gh.GITHUB_MAX_FILES} arquivos mais relevantes de ${total}`));
+    const brutos = pedidos.filter((u) => u.startsWith('https://raw.githubusercontent.com/'));
+    expect(brutos.every((u) => u.includes('/main/'))).toBe(true);
+  });
+});

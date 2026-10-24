@@ -61,11 +61,12 @@ describe('GitHub URL Parser & Options', () => {
     const withBlob = parseGitHubUrl(
       'https://github.com/facebook/react/blob/main/packages/react/index.js'
     );
+    // A blob link names a file; the import reads the folder that holds it.
     expect(withBlob).toEqual({
       owner: 'facebook',
       repo: 'react',
       branch: 'main',
-      subpath: 'packages/react/index.js',
+      subpath: 'packages/react',
     });
   });
 

@@ -25,4 +25,6 @@ export interface ProjectMeta {
   fileCount: number;
   totalSize: number;
   createdAt: number;
+  /** Partial import notices shown above the graph (e.g. GitHub file cap or truncated tree). */
+  warnings?: string[];
 }

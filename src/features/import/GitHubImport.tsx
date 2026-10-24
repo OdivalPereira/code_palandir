@@ -176,6 +176,7 @@ export const GitHubImport: React.FC = () => {
           fileCount: files.length,
           totalSize: files.reduce((acc, f) => acc + f.size, 0),
           createdAt: Date.now(),
+          warnings: info.warnings,
         },
         files
       );
