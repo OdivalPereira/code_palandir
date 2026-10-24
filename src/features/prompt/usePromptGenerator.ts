@@ -39,7 +39,7 @@ export function redactSecrets(text: string): string {
     .replace(/(\b[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:)[^@\s/]+@/gi, '$1REDACTED@')
     // .env style lines: DB_PASSWORD=..., export STRIPE_SECRET=...
     .replace(
-      /^(\s*(?:export\s+)?[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*\s*=\s*)((?!\S*REDACTED)\S+)/gm,
+      /^(\s*(?:export\s+)?[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*\s*=\s*)("(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|[^\s]+)/gm,
       '$1[REDACTED_SECRET]'
     )
     // Generic API keys/secrets assignments in code: apiKey = "...", password: "...", token = "..."

@@ -142,6 +142,15 @@ describe('redactSecrets e o prompt', () => {
     expect(limpo).toMatch(/REDACTED/);
   });
 
+  it.each(['"', "'"])('oculta o valor inteiro entre %s, inclusive espaços', (aspas) => {
+    const segredo = 'parte inicial restante-secreto';
+    const entrada = `API_KEY=${aspas}${segredo}${aspas}
+PUBLIC_NAME=exemplo`;
+    const limpo = redactSecrets(entrada);
+    expect(limpo).toBe('API_KEY=[REDACTED_SECRET]\nPUBLIC_NAME=exemplo');
+    for (const parte of segredo.split(' ')) expect(limpo).not.toContain(parte);
+  });
+
   it('não mexe em texto comum nem na mensagem-ouro', () => {
     const ouro =
       'Assumir: sc.py assumir coordenador --etapa e3-carrinho --plataforma "Antigravity" --modelo "Gemini 3.8 Flash" --esforco "medium"';
