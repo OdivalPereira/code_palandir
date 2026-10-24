@@ -1,6 +1,6 @@
 import { classificarVersao, type ResultadoVersao } from '../regras/classificarVersao';
-import React, { useState, useEffect } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import {
   EstadoTela,
   MolduraPergaminho,
@@ -31,7 +31,6 @@ function rotuloNucleo(
 
 export const ProjetosPage: React.FC = () => {
   const { id: paramId } = useParams<{ id?: string }>();
-  const navigate = useNavigate();
   const { estado, dados, erros, projetoSelecionadoId, selecionarProjeto } = usePainelStore();
 
   const [passagensExpandidas, setPassagensExpandidas] = useState<Record<string, boolean>>({});
@@ -43,6 +42,16 @@ export const ProjetosPage: React.FC = () => {
       selecionarProjeto(paramId);
     }
   }, [paramId, paramExiste, projetoSelecionadoId, selecionarProjeto]);
+
+  // Ao escolher outra região, o foco vai ao nome dela: abaixo de xl o detalhe fica sob a lista.
+  const tituloDetalheRef = useRef<HTMLHeadingElement>(null);
+  const paramAnterior = useRef(paramId);
+  useEffect(() => {
+    if (paramId && paramAnterior.current !== paramId) {
+      tituloDetalheRef.current?.focus();
+    }
+    paramAnterior.current = paramId;
+  }, [paramId]);
 
   // Trata os estados de tela D05
   if (estado === 'carregando') {
@@ -126,10 +135,6 @@ export const ProjetosPage: React.FC = () => {
   });
   const pendenciasAtivo = projetoAtivo.pendencias?.length ?? 0;
 
-  const handleSelecionarProjeto = (id: string) => {
-    selecionarProjeto(id);
-    navigate(`/projetos/${id}`);
-  };
 
   const togglePassagem = (chave: string) => {
     setPassagensExpandidas((prev) => ({
@@ -218,12 +223,10 @@ export const ProjetosPage: React.FC = () => {
 
               return (
                 <li key={p.id}>
-                  <button
-                    type="button"
-                    onClick={() => handleSelecionarProjeto(p.id)}
-                    aria-pressed={isAtivo}
-                    aria-current={isAtivo ? 'true' : undefined}
-                    className={`min-h-[44px] w-full text-left p-3 rounded-lg border transition-all shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
+                  <Link
+                    to={`/projetos/${p.id}`}
+                    aria-current={isAtivo ? 'page' : undefined}
+                    className={`block min-h-[44px] w-full text-left p-3 rounded-lg border transition-all shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
                       isAtivo
                         ? 'border-amber-500 bg-stone-900 ring-1 ring-amber-500/40'
                         : 'border-amber-900/50 bg-stone-950/80 hover:border-amber-700/70 hover:bg-stone-900/70'
@@ -274,7 +277,7 @@ export const ProjetosPage: React.FC = () => {
                         </div>
                       )}
                     </div>
-                  </button>
+                  </Link>
                 </li>
               );
             })}
@@ -290,8 +293,10 @@ export const ProjetosPage: React.FC = () => {
           <div className="p-3 sm:p-4 rounded-lg border border-amber-900/80 bg-stone-900/90 shadow-lg flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1
+                ref={tituloDetalheRef}
+                tabIndex={-1}
                 style={RPG_TITLE_STYLE}
-                className="text-amber-100 uppercase tracking-wider text-base sm:text-lg font-bold"
+                className="text-amber-100 uppercase tracking-wider text-base sm:text-lg font-bold break-words focus:outline-none"
               >
                 {projetoAtivo.nome}
               </h1>

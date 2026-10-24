@@ -293,7 +293,7 @@ describe('D08 e D05: o que não se sabe não aparece como resolvido', () => {
     fireEvent.click(screen.getByRole('button', { name: /arquiteto → coordenador/ }));
     expect(screen.getByText('BLOCO-Alfa')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: /Projeto Dois/ }));
+    fireEvent.click(screen.getByRole('link', { name: /Projeto Dois/ }));
     expect(screen.queryByText('BLOCO-Beta')).toBeNull();
   });
 
@@ -438,5 +438,41 @@ describe('Regiões: uma tela, muitos selos, nenhuma região viva extra', () => {
       </MemoryRouter>
     );
     expect(container.querySelectorAll('[role="status"]').length).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('Regiões: a URL é a fonte da região escolhida', () => {
+  beforeEach(() => {
+    usePainelStore.getState().resetar();
+  });
+
+  it('cada região é um link para /projetos/<id>, com aria-current na ativa', () => {
+    render(
+      <MemoryRouter initialEntries={['/projetos/loja-exemplo']}>
+        <Routes>
+          <Route path="/projetos/:id" element={<ProjetosPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    const lista = screen.getByRole('complementary', { name: /Lista de Regiões/i });
+    const loja = within(lista).getByRole('link', { name: /Loja Exemplo/ });
+    const receitas = within(lista).getByRole('link', { name: /App Receitas/ });
+    expect(loja.getAttribute('href')).toBe('/projetos/loja-exemplo');
+    expect(loja.getAttribute('aria-current')).toBe('page');
+    expect(receitas.getAttribute('aria-current')).toBeNull();
+  });
+
+  it('escolher outra região leva o foco ao nome dela e atualiza o store', () => {
+    render(
+      <MemoryRouter initialEntries={['/projetos/loja-exemplo']}>
+        <Routes>
+          <Route path="/projetos/:id" element={<ProjetosPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByRole('link', { name: /App Receitas/ }));
+    const titulo = screen.getByRole('heading', { level: 1, name: 'App Receitas' });
+    expect(document.activeElement).toBe(titulo);
+    expect(usePainelStore.getState().projetoSelecionadoId).toBe('app-receitas');
   });
 });

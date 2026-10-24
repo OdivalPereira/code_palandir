@@ -227,7 +227,7 @@ describe('ProjetosPage — Regiões e Jornada (F4)', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Loja Exemplo' })).toBeTruthy();
 
     // Clica em App Receitas na lista
-    const botaoAppReceitas = screen.getByRole('button', { name: /App Receitas/i });
+    const botaoAppReceitas = screen.getByRole('link', { name: /App Receitas/i });
     fireEvent.click(botaoAppReceitas);
 
     // Detalhe agora mostra App Receitas
