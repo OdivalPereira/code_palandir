@@ -112,7 +112,7 @@ test.describe('Code Palandir — Acessibilidade, Layout Responsivo e Capturas E2
     await expect(page.getByText('Diário de Campo').first()).toBeVisible();
 
     // 3. Marcos da Jornada e seções
-    await expect(page.getByRole('navigation', { name: /Marcos da Jornada/i }).first()).toBeVisible();
+    await expect(page.getByRole('group', { name: /Marcos da etapa/i }).first()).toBeVisible();
 
     // 4. Alvos de toque na navegação (>= 44px)
     const navLinks = page.locator('aside[aria-label="Navegação Principal"] a');

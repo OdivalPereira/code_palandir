@@ -205,7 +205,7 @@ export const PainelShell: React.FC<PainelShellProps> = ({ children }) => {
                       <span className="text-[10px] text-stone-400 font-sans">Cartas dos Agentes</span>
                     </div>
                   </div>
-                  <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-amber-900/60 bg-stone-900 text-amber-400/80">
+                  <span className="text-[9px] font-mono uppercase whitespace-nowrap px-1.5 py-0.5 rounded border border-amber-900/60 bg-stone-900 text-amber-400/80">
                     Fase B · p3
                   </span>
                 </div>

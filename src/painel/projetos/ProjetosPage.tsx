@@ -23,7 +23,7 @@ function rotuloNucleo(
   r: ResultadoVersao,
   detalhe: boolean
 ): string {
-  if (nucleo === null) return 'nucleo: desconhecido';
+  if (nucleo === null) return 'núcleo: desconhecido';
   if (r.estado === 'em_dia') return detalhe ? `núcleo: ${nucleo}` : nucleo;
   if (r.estado === 'defasado') return `${nucleo} ! ${r.motivo}`;
   return `${nucleo} (${r.motivo})`;
@@ -244,7 +244,7 @@ export const ProjetosPage: React.FC = () => {
                           {estacaoRecente}
                         </span>
                       ) : (
-                        <SeloEstado estado="desconhecido" rotulo="desconhecida ?" />
+                        <SeloEstado estado="desconhecido" rotulo="estação desconhecida" />
                       )}
                     </div>
 
