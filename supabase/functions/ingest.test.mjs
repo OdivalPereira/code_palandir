@@ -1,4 +1,4 @@
-import { describe, it, after } from 'node:test';
+// @vitest-environment node
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -13,6 +13,10 @@ import {
   varrerSegredos,
 } from './_shared/ingest.ts';
 
+const runner = process.env.VITEST ? await import('vitest') : await import('node:test');
+const { describe, it } = runner;
+const afterHook = runner.after ?? runner.afterAll;
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RAIZ_REPO = path.resolve(__dirname, '..', '..');
 const CAMINHO_SCHEMA_SHARED = path.join(__dirname, '_shared', 'painel-1.schema.json');
@@ -26,8 +30,8 @@ let totalTestes = 0;
 let testesPassados = 0;
 const registrarTeste = (nome, fn) => {
   totalTestes += 1;
-  it(nome, async (t) => {
-    await fn(t);
+  it(nome, async () => {
+    await fn();
     testesPassados += 1;
   });
 };
@@ -94,7 +98,12 @@ function compilarValidadorEstrutural(esquemaRaiz) {
 
 async function obterValidadorParaTestes() {
   try {
-    const [{ default: Ajv2020 }, { default: addFormats }] = await Promise.all([import('ajv/dist/2020.js'), import('ajv-formats')]);
+    const modAjv = ['ajv', 'dist', '2020.js'].join('/');
+    const modFormats = ['ajv', 'formats'].join('-');
+    const [{ default: Ajv2020 }, { default: addFormats }] = await Promise.all([
+      import(/* @vite-ignore */ modAjv),
+      import(/* @vite-ignore */ modFormats),
+    ]);
     const ajv = new Ajv2020({ allErrors: true, strict: false });
     addFormats(ajv);
     return ajv.compile(schemaJson);
@@ -149,17 +158,18 @@ function gerarJwtLocalDemo(role) {
   return `${unsigned}.${crypto.createHmac('sha256', 'super-secret-jwt-token-with-at-least-32-characters-long').update(unsigned).digest('base64url')}`;
 }
 
-describe('Contrato painel-1.schema.json e modulo puro _shared/ingest.ts', async () => {
-  const validarEsquema = await obterValidadorParaTestes();
-  const tokenClaro = 'maquina-teste-f3-local';
-  const tokenHash = await calcularSha256Hex(tokenClaro);
-  const maquinaPadrao = {
-    id: '11111111-1111-4111-8111-111111111111',
-    dono: '22222222-2222-4222-8222-222222222222',
-    apelido: 'Gondor-Dev',
-    token_hash: tokenHash,
-    ultimo_envio_em: '2026-10-23T15:00:00Z',
-  };
+const validarEsquema = await obterValidadorParaTestes();
+const tokenClaro = 'maquina-teste-f3-local';
+const tokenHash = await calcularSha256Hex(tokenClaro);
+const maquinaPadrao = {
+  id: '11111111-1111-4111-8111-111111111111',
+  dono: '22222222-2222-4222-8222-222222222222',
+  apelido: 'Gondor-Dev',
+  token_hash: tokenHash,
+  ultimo_envio_em: '2026-10-23T15:00:00Z',
+};
+
+describe('Contrato painel-1.schema.json e modulo puro _shared/ingest.ts', () => {
 
   registrarTeste('copia _shared/painel-1.schema.json e identica byte a byte (SHA-256) a sociedade/central/', async () => {
     const bytesShared = fs.readFileSync(CAMINHO_SCHEMA_SHARED);
@@ -292,7 +302,7 @@ describe('Contrato painel-1.schema.json e modulo puro _shared/ingest.ts', async 
   });
 });
 
-describe('Integracao real com Supabase local (http://127.0.0.1:55321/functions/v1/ingest)', () => {
+  describe('Integracao real com Supabase local (http://127.0.0.1:55321/functions/v1/ingest)', () => {
   const SUPABASE_URL = 'http://127.0.0.1:55321';
   const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || gerarJwtLocalDemo('service_role');
 
@@ -349,7 +359,7 @@ describe('Integracao real com Supabase local (http://127.0.0.1:55321/functions/v
     assert.ok(typeof corpoValido.id === 'string' && typeof corpoValido.recebido_em === 'string');
   });
 
-  after(() => {
+  afterHook(() => {
     console.log(`Tests  ${testesPassados} passed (${totalTestes})`);
   });
 });
