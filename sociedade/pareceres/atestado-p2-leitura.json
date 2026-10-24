@@ -1,0 +1,171 @@
+{
+  "tipo": "atestado_pre_devolucao",
+  "versao": "1.3.0",
+  "timestamp": "2026-10-24T06:56:30.332242Z",
+  "papel": "Coordenador",
+  "etapa_id": "p2-leitura",
+  "fatia_id": "N/A",
+  "status": "APROVADO",
+  "verificacoes": {
+    "higiene_pastas": {
+      "ok": true,
+      "erros": []
+    },
+    "build": {
+      "ok": true,
+      "comando": "npm run build",
+      "detalhes": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+      "codigo": 0
+    },
+    "tipos_estaticos": {
+      "ok": true,
+      "comando": "npx tsc --noEmit",
+      "detalhes": "",
+      "codigo": 0
+    },
+    "compilacao": {
+      "ok": true,
+      "erros": []
+    },
+    "seguranca_antitoken": {
+      "ok": true,
+      "erros": []
+    },
+    "disjuncao": {
+      "ok": true,
+      "erros": []
+    },
+    "testes": {
+      "ok": true,
+      "detalhes": "app: 307 testes, 0 pulados, 73.5 s",
+      "comando": "app: npm test && npx tsc --noEmit && npm run build",
+      "totais": {
+        "total": 307,
+        "pulados": 0,
+        "falhos": 0
+      }
+    },
+    "arvore_limpa": {
+      "ok": true,
+      "suja": []
+    }
+  },
+  "commit": "2028ff234b9c6b7fdd6ba3692117fd56546f08aa",
+  "base": "00970bcfce70319863acbec8403f5f67654e03d1",
+  "origem_arquivos": "git",
+  "total_arquivos_inspecionados": 36,
+  "arquivos_removidos": [],
+  "commits_ignorados": [
+    "22ec84a1ec021358aa77985b0b33785298217167",
+    "4c156dea3bf06a4bd26d3a8a4c10033a31433223"
+  ],
+  "python": "3.12.3",
+  "hashes_artefatos": {
+    "e2e/capturas/conselho-1280x800.png": "848b94222558b900b71409bde90ae3001e505683d7790d947fee1a79e0d7f3b0",
+    "e2e/capturas/conselho-360x820.png": "b2e45b6890854318b4f0de32fd8d63e57cf7105edc686a6b4f82e82f3814706c",
+    "e2e/capturas/palantir-1280x800.png": "36f452b866ab942a67ca80a9d53a33b8723f406f2d9a9c97569a1e4fddf16b2c",
+    "e2e/capturas/palantir-360x820.png": "0db55f0e58d470f3f8437cd69fde0682f8d8abcb88fe2241ef98f39d3e46742f",
+    "e2e/capturas/regioes-1280x800.png": "80c180fcde511878364a1dda7c9c7b5198d498611575c5aec2f6671d13cfe472",
+    "e2e/capturas/regioes-360x820.png": "a125137ef726ee8e3a3c9345729a5a33a55e1007fd3c57718f7ecbd498cfece9",
+    "e2e/painel.pw.ts": "0751909eed92081cc344e7bb535e66287ab2776575b8e04e62e0bb50f7e85f5f",
+    "package-lock.json": "52cb2538cfe2a7a6581ccc2cf64ff740dbb527582c9a5e1df668f599b64ab136",
+    "package.json": "3ed7cf4928d35a6528381e64583a49e626c1b16504ae701b7cb367b8c2def00f",
+    "playwright.config.ts": "64f6a9e0348c1efc38f5a808429e0dbd893e1716561332bd56de4a3848afc107",
+    "src/__tests__/painelA11y.test.tsx": "2e9ac024c17bdc6f8158840d0d07d7a7ac6f6e7d83ab8a1e435732a84d3d6a02",
+    "src/__tests__/painelContrato.test.ts": "4eeb46d26fa9df6d2142bac1f99fce348c9315dcb9418928ff91c5a5cc816f95",
+    "src/__tests__/painelHoje.test.tsx": "c879d6f49fa807bf74eb9689756b9f5d9c8090e16653783db8c23c4111d09db2",
+    "src/__tests__/painelMensagem.test.ts": "58ba8428416c0175fe6c8960f8a99ee16ae5dcf4c23e52cd949da50200bcffdc",
+    "src/__tests__/painelPergaminho.test.tsx": "9e6f0f7912c9609a33d3a3bff7d19df79e7617167b177b31a4292170ef026376",
+    "src/__tests__/painelProjetos.test.tsx": "69a2d78954195150a3d5ba1a7152eed80c6edd0f20f01f2f9431bf26e425b5af",
+    "src/__tests__/painelVersao.test.ts": "29bf5a71b0ecdd3f24107cdb0d994caa0bc5df1b7192b01d631e66ed329e2909",
+    "src/__tests__/selfImport.test.ts": "036fd7661e425f15a99d23ef05dce9fcaf8df89a9766fdc7ad383b2219abb18a",
+    "src/app/AnalisadorPage.tsx": "280d7f4c76d1c8c98ad0fb370afc847bfc93a6163774999104c461f3eeb4dffb",
+    "src/app/App.tsx": "d6bb5f75125ce067ae11d2dd39f2e9d95af94af95bf02c3acf8922c83fde7037",
+    "src/app/PainelShell.tsx": "aac52285f0ac1be9bc7453018a0328ac0f83bf7c389428c4c8655731219745da",
+    "src/app/rpgTheme.tsx": "b6e552de787b2adc03ba9ae81180f4a8bd57a725f2c8423e3452fbe96a375947",
+    "src/painel/contrato/painel-1.schema.json": "fdf345d7dbfd654e8cd64f2f432b500ae02a5de2004af553148a63c4e7d56a2c",
+    "src/painel/contrato/painel1.types.ts": "10e132848a1f6a664b6002aa8b60cc2feb308eb2e5523d5a379987c7ee909843",
+    "src/painel/contrato/validador.ts": "7b7fd6497bcf30b138ff2c00733bf2db2cf3e970bf3656aa65823ffb11e5256d",
+    "src/painel/fixtures/cenarios.ts": "298cb7a5eff2532a509088407f92ac440b4fe3c53675335127c926be1a519915",
+    "src/painel/fixtures/exemploOficial.ts": "b67df446a9d6d7659c1427b81fe418a28449b1832916493ed0e705565cf7421e",
+    "src/painel/fonte/Fonte.ts": "72ee4d8ae64541e22ce4a99b0f1c13a635c3997e15d13997370a8c4be481d610",
+    "src/painel/fonte/FonteFixture.ts": "715173228544fe84903d7313a0f48dd835853ff4a64158776298a54654919f13",
+    "src/painel/hoje/HojePage.tsx": "f951b59787432c214c534f58d35ab083315fb175632359be6749c8784a6cdd0b",
+    "src/painel/mensagem/PergaminhoAbertura.tsx": "c6ac916b6b98f04f1585d0d7cd6d2c343f33c2d8414f6fecd5be13a3b4766297",
+    "src/painel/mensagem/escalaAbertura.ts": "e8b0c377bf0deb8ca0d169aced971fa4233a349dc920cbdb4652d303c4d4b399",
+    "src/painel/mensagem/geradorMensagem.ts": "969d2676207a61e7d3c5d162a121d39d5b20eb0497fca5c7ed02d672dcf4f398",
+    "src/painel/projetos/ProjetosPage.tsx": "208d6a4e589d445cdfaa2f0f9a16e11209b378a682aa56d8a001a1af9eb25420",
+    "src/painel/regras/classificarVersao.ts": "cb28198556074a3324cffade9eeb1ea76698211e5e30323a5d659b360a9d87ad",
+    "src/stores/painelStore.ts": "ee6a3fadd58ce96ea292e11f57b0aeb776d1a4581a8791ac844b17c1534ebf72"
+  },
+  "arquivos_inspecionados": [
+    "e2e/capturas/conselho-1280x800.png",
+    "e2e/capturas/conselho-360x820.png",
+    "e2e/capturas/palantir-1280x800.png",
+    "e2e/capturas/palantir-360x820.png",
+    "e2e/capturas/regioes-1280x800.png",
+    "e2e/capturas/regioes-360x820.png",
+    "e2e/painel.pw.ts",
+    "package-lock.json",
+    "package.json",
+    "playwright.config.ts",
+    "src/__tests__/painelA11y.test.tsx",
+    "src/__tests__/painelContrato.test.ts",
+    "src/__tests__/painelHoje.test.tsx",
+    "src/__tests__/painelMensagem.test.ts",
+    "src/__tests__/painelPergaminho.test.tsx",
+    "src/__tests__/painelProjetos.test.tsx",
+    "src/__tests__/painelVersao.test.ts",
+    "src/__tests__/selfImport.test.ts",
+    "src/app/AnalisadorPage.tsx",
+    "src/app/App.tsx",
+    "src/app/PainelShell.tsx",
+    "src/app/rpgTheme.tsx",
+    "src/painel/contrato/painel-1.schema.json",
+    "src/painel/contrato/painel1.types.ts",
+    "src/painel/contrato/validador.ts",
+    "src/painel/fixtures/cenarios.ts",
+    "src/painel/fixtures/exemploOficial.ts",
+    "src/painel/fonte/Fonte.ts",
+    "src/painel/fonte/FonteFixture.ts",
+    "src/painel/hoje/HojePage.tsx",
+    "src/painel/mensagem/PergaminhoAbertura.tsx",
+    "src/painel/mensagem/escalaAbertura.ts",
+    "src/painel/mensagem/geradorMensagem.ts",
+    "src/painel/projetos/ProjetosPage.tsx",
+    "src/painel/regras/classificarVersao.ts",
+    "src/stores/painelStore.ts"
+  ],
+  "erros": [],
+  "portao": {
+    "modo": "por_area",
+    "perfil": "sociedade/perfil.md",
+    "perfil_sha256": "dceedb1cf00b285b70bd174e8ca6247adc7257c56ff945870ddc80b01754a95f",
+    "commit": "2028ff234b9c6b7fdd6ba3692117fd56546f08aa",
+    "area_pedida": null,
+    "areas_tocadas": [
+      "app"
+    ],
+    "cobertura_completa": true,
+    "areas": [
+      {
+        "area": "app",
+        "pasta": ".",
+        "comando": "npm test && npx tsc --noEmit && npm run build",
+        "timeout_s": 900,
+        "ok": true,
+        "codigo": 0,
+        "duracao_s": 73.5,
+        "timeout_estourado": false,
+        "testes": {
+          "total": 307,
+          "pulados": 0,
+          "falhos": 0
+        },
+        "motivos": [],
+        "saida_final": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n✓ built in 26.46s"
+      }
+    ]
+  },
+  "atestado_hash": "45f5cee53450f8c0f22a61a3a08e4c8f4b03f1d73e8fa5fd69d1c446fd29c8ba"
+}

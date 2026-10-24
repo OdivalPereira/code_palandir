@@ -1,0 +1,114 @@
+{
+  "tipo": "atestado_pre_devolucao",
+  "versao": "1.3.0",
+  "timestamp": "2026-10-24T05:52:47.625808Z",
+  "papel": "Coordenador",
+  "etapa_id": "p2-leitura",
+  "fatia_id": "F5",
+  "status": "APROVADO",
+  "verificacoes": {
+    "higiene_pastas": {
+      "ok": true,
+      "erros": []
+    },
+    "build": {
+      "ok": true,
+      "comando": "npm run build",
+      "detalhes": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+      "codigo": 0
+    },
+    "tipos_estaticos": {
+      "ok": true,
+      "comando": "npx tsc --noEmit",
+      "detalhes": "",
+      "codigo": 0
+    },
+    "compilacao": {
+      "ok": true,
+      "erros": []
+    },
+    "seguranca_antitoken": {
+      "ok": true,
+      "erros": []
+    },
+    "disjuncao": {
+      "ok": true,
+      "erros": []
+    },
+    "testes": {
+      "ok": true,
+      "detalhes": "app: 212 testes, 0 pulados, 71.2 s",
+      "comando": "app: npm test && npx tsc --noEmit && npm run build",
+      "totais": {
+        "total": 212,
+        "pulados": 0,
+        "falhos": 0
+      }
+    },
+    "arvore_limpa": {
+      "ok": true,
+      "suja": []
+    }
+  },
+  "commit": "481232353de2cf04bd3a3f93c721ba1c2b538742",
+  "base": "1251e86773e52b5ff0691155f69d9bd961899f40",
+  "origem_arquivos": "git",
+  "total_arquivos_inspecionados": 9,
+  "arquivos_removidos": [],
+  "commits_ignorados": [],
+  "python": "3.12.3",
+  "hashes_artefatos": {
+    "e2e/capturas/conselho-1280x800.png": "5b1a1f96d3e659f72d497976fdc9111ad588c619980286b40902d283749db264",
+    "e2e/capturas/conselho-360x820.png": "fbea802ca42a82b861c1f4b07795a536e5f6d410c5966ac396007cc0ea680447",
+    "e2e/capturas/palantir-1280x800.png": "c6354bb671877ef5cb47f9f2826efbf562f59f5c107a0bb953ea1045c6a8b5db",
+    "e2e/capturas/palantir-360x820.png": "ebb5825acfeb5c7e1db30da6fcee84ba9c3e68772abd172b261b1e981a08e60c",
+    "e2e/capturas/regioes-1280x800.png": "a0df155dca313c84a77daf1b44be082395df3dbce9064332811c0cfd25e400a5",
+    "e2e/capturas/regioes-360x820.png": "28b73bd0813de3be36d615462da420e325a2545e819b2e67028f314dee335463",
+    "e2e/painel.pw.ts": "0751909eed92081cc344e7bb535e66287ab2776575b8e04e62e0bb50f7e85f5f",
+    "playwright.config.ts": "64f6a9e0348c1efc38f5a808429e0dbd893e1716561332bd56de4a3848afc107",
+    "src/__tests__/painelA11y.test.tsx": "2bc6ef46c5d62a6da57a6a48165139c41b92cfea5e03416eda2f5d48df7cb38f"
+  },
+  "arquivos_inspecionados": [
+    "e2e/capturas/conselho-1280x800.png",
+    "e2e/capturas/conselho-360x820.png",
+    "e2e/capturas/palantir-1280x800.png",
+    "e2e/capturas/palantir-360x820.png",
+    "e2e/capturas/regioes-1280x800.png",
+    "e2e/capturas/regioes-360x820.png",
+    "e2e/painel.pw.ts",
+    "playwright.config.ts",
+    "src/__tests__/painelA11y.test.tsx"
+  ],
+  "erros": [],
+  "portao": {
+    "modo": "por_area",
+    "perfil": "sociedade/perfil.md",
+    "perfil_sha256": "dceedb1cf00b285b70bd174e8ca6247adc7257c56ff945870ddc80b01754a95f",
+    "commit": "481232353de2cf04bd3a3f93c721ba1c2b538742",
+    "area_pedida": "app",
+    "areas_tocadas": [
+      "app"
+    ],
+    "cobertura_completa": true,
+    "areas": [
+      {
+        "area": "app",
+        "pasta": ".",
+        "comando": "npm test && npx tsc --noEmit && npm run build",
+        "timeout_s": 900,
+        "ok": true,
+        "codigo": 0,
+        "duracao_s": 71.2,
+        "timeout_estourado": false,
+        "testes": {
+          "total": 212,
+          "pulados": 0,
+          "falhos": 0
+        },
+        "motivos": [],
+        "saida_final": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n✓ built in 39.28s"
+      }
+    ]
+  },
+  "atestado_hash": "671cddcf2a39a371acc9afc5d9972b53999c6b3ac5c31d7797d23c76c7d85162"
+}
