@@ -3,6 +3,7 @@ import type { ProjectFile, ProjectMeta } from '@/types/project';
 import type { ProjectAnalysis } from '@/types/analysis';
 import { analyzeProject } from '@/engine/analyzers';
 import { useGraphStore } from './graphStore';
+import { useSelectionStore } from './selectionStore';
 
 interface ProjectState {
   meta: ProjectMeta | null;
@@ -24,6 +25,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   error: null,
 
   setProject: (meta, files) => {
+    // Elements picked in the previous project must not leak into this project's prompt.
+    useSelectionStore.getState().clearSelection();
     set({ meta, files, error: null });
     get().runAnalysis();
   },
@@ -63,5 +66,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       error: null,
     });
     useGraphStore.getState().reset();
+    useSelectionStore.getState().clearSelection();
   },
 }));

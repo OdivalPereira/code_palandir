@@ -44,9 +44,9 @@ describe('ProjetosPage — Regiões e Jornada (F4)', () => {
     expect(within(lista).getByText(/2 pendências/i)).toBeTruthy();
 
     // Diário de Campo: núcleo desconhecido, estação desconhecida, 3 diagnósticos, NUNCA EM DIA
-    expect(within(lista).getByText(/nucleo: desconhecido/i)).toBeTruthy();
-    expect(within(lista).getByText(/desconhecida \?/i)).toBeTruthy();
-    expect(within(lista).getByText(/\? 3 diagnósticos · estado desconhecido/i)).toBeTruthy();
+    expect(within(lista).getByText(/núcleo: desconhecido/i)).toBeTruthy();
+    expect(within(lista).getByText(/^estação desconhecida$/i)).toBeTruthy();
+    expect(within(lista).getByText(/^3 diagnósticos · estado desconhecido$/i)).toBeTruthy();
     expect(within(lista).getByText('NUNCA EM DIA')).toBeTruthy();
   });
 
@@ -169,7 +169,7 @@ describe('ProjetosPage — Regiões e Jornada (F4)', () => {
     renderComRouter('/projetos/diario-campo');
 
     // Núcleo desconhecido
-    expect(screen.getAllByText(/nucleo: desconhecido/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/núcleo: desconhecido/i).length).toBeGreaterThanOrEqual(1);
 
     // Acampamento com ramo, sha e limpa desconhecidos
     expect(screen.getByText(/ramo: desconhecido/i)).toBeTruthy();
@@ -227,7 +227,7 @@ describe('ProjetosPage — Regiões e Jornada (F4)', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Loja Exemplo' })).toBeTruthy();
 
     // Clica em App Receitas na lista
-    const botaoAppReceitas = screen.getByRole('button', { name: /App Receitas/i });
+    const botaoAppReceitas = screen.getByRole('link', { name: /App Receitas/i });
     fireEvent.click(botaoAppReceitas);
 
     // Detalhe agora mostra App Receitas

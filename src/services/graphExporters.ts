@@ -3,6 +3,12 @@ import type { ProjectAnalysis, ArchitecturalHealthReport } from '@/types/analysi
 import { generateMermaidDiagram, type MermaidExportOptions } from './mermaidGenerator';
 import { calculateArchitecturalMetrics } from '@/engine/architecturalMetrics';
 
+/** Value inside a Markdown table cell as inline code: a "|" or a backtick must not break the table. */
+function codigoCelula(valor: string | undefined | null): string {
+  const texto = String(valor ?? '').replace(/[\r\n]+/g, ' ').replace(/\|/g, '\\|');
+  return texto.includes('`') ? `\`\` ${texto} \`\`` : `\`${texto}\``;
+}
+
 export function exportToMermaid(
   nodes: FlowUINode[],
   edges: FlowUIEdge[],
@@ -64,7 +70,7 @@ export function generateArchitectureMarkdownReport(
           ? '🟠 Alto'
           : '🟡 Médio';
       lines.push(
-        `| \`${comp.componentName}\` | ${typeLabel} | ${comp.afferentCoupling} | ${comp.efferentCoupling} | ${comp.instability} | ${riskBadge} | ${comp.reasons.join('; ')} |`
+        `| ${codigoCelula(comp.componentName)} | ${typeLabel} | ${comp.afferentCoupling} | ${comp.efferentCoupling} | ${comp.instability} | ${riskBadge} | ${comp.reasons.join('; ').replace(/\|/g, '\\|')} |`
       );
     }
   }
@@ -75,7 +81,9 @@ export function generateArchitectureMarkdownReport(
     lines.push('| Rota | Componente de Página | Arquivo |');
     lines.push('|---|---|---|');
     for (const route of analysis.routes) {
-      lines.push(`| \`${route.path}\` | \`<${route.pageComponentName} />\` | \`${route.filePath}\` |`);
+      lines.push(
+        `| ${codigoCelula(route.path)} | ${codigoCelula(`<${route.pageComponentName} />`)} | ${codigoCelula(route.filePath)} |`
+      );
     }
   }
 
@@ -87,7 +95,7 @@ export function generateArchitectureMarkdownReport(
     lines.push('|---|---|---|---|');
     for (const api of analysis.apiCalls.slice(0, 15)) {
       lines.push(
-        `| \`${api.method}\` | \`${api.endpoint}\` | \`${api.callerComponent}\` | \`${api.client || 'fetch'}\` |`
+        `| ${codigoCelula(api.method)} | ${codigoCelula(api.endpoint)} | ${codigoCelula(api.callerComponent)} | ${codigoCelula(api.client || 'fetch')} |`
       );
     }
   }

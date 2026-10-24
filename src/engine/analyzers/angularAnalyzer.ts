@@ -1,3 +1,4 @@
+import { parse } from '@babel/parser';
 import type { ProjectFile } from '@/types/project';
 import type { UIComponent, ComponentAction, ComponentStoreAccess, ApiCall, UIWireframeElement } from '@/types/analysis';
 import type { FrameworkAnalyzer } from './types';
@@ -10,10 +11,28 @@ export class AngularAnalyzer implements FrameworkAnalyzer {
 
   analyzeComponents(file: ProjectFile): UIComponent[] {
     const content = file.content;
-    const classMatch = content.match(/export\s+class\s+([A-Za-z0-9_]+Component)/);
-    if (!classMatch) return [];
-
-    const componentName = classMatch[1];
+    // O decorador identifica o componente; o sufixo do nome é opcional.
+    let componentName: string | undefined;
+    try {
+      const ast = parse(content, { sourceType: 'module', plugins: ['typescript', 'decorators'] });
+      for (const statement of ast.program.body) {
+        const declaration = statement.type === 'ExportNamedDeclaration' || statement.type === 'ExportDefaultDeclaration'
+          ? statement.declaration : statement;
+        if (declaration?.type !== 'ClassDeclaration') continue;
+        const component = declaration.decorators?.some(({ expression }) =>
+          expression.type === 'CallExpression' &&
+          expression.callee.type === 'Identifier' && expression.callee.name === 'Component'
+        );
+        if (component && declaration.id) {
+          componentName = declaration.id.name;
+          break;
+        }
+      }
+    } catch {
+      // Mantém a recuperação anterior para fontes incompletas.
+      componentName = content.match(/export\s+class\s+([A-Za-z0-9_]+Component)/)?.[1];
+    }
+    if (!componentName) return [];
     const isPage =
       /(?:^|\/)pages\//i.test(file.path) ||
       /(?:^|\/)views\//i.test(file.path) ||

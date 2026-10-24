@@ -122,8 +122,8 @@ const GraphCanvasInner: React.FC = () => {
     const metaAny = meta as any;
     const analysisAny = analysis as any;
 
-    if (Array.isArray(metaAny?.warnings) && metaAny.warnings.length > 0) {
-      return metaAny.warnings[0];
+    if (meta?.warnings && meta.warnings.length > 0) {
+      return meta.warnings.join(' ');
     }
     if (Array.isArray(analysisAny?.warnings) && analysisAny.warnings.length > 0) {
       return analysisAny.warnings[0];
@@ -292,6 +292,7 @@ const GraphCanvasInner: React.FC = () => {
         minZoom={0.1}
         maxZoom={2}
         defaultEdgeOptions={{ type: 'customEdge' }}
+        colorMode="dark"
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#334155" />
 

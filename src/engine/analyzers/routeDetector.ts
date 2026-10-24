@@ -1,8 +1,52 @@
-import type { ProjectFile } from '@/types/project';
+import type { ProjectFile, SupportedFramework } from '@/types/project';
 import type { UIRoute, UIComponent } from '@/types/analysis';
 import { detectNextAppRoutes } from './nextAppRouterDetector';
 
-export function detectRoutes(files: ProjectFile[], components: UIComponent[]): UIRoute[] {
+const PAGES_ROUTER_FILE = /(?:^|\/)pages\/(.+)\.(?:tsx|jsx|js|ts)$/i;
+
+// JSX wrappers around the routed screen: <Suspense fallback={...}><Page /></Suspense>
+const ROUTE_WRAPPERS = new Set(['Suspense', 'React.Suspense', 'Fragment', 'React.Fragment', 'StrictMode', 'React.StrictMode']);
+
+/** Text inside the braces that open at `open` (content[open] === '{'), or null if unbalanced. */
+function balancedBraces(content: string, open: number): string | null {
+  let depth = 0;
+  for (let i = open; i < content.length; i++) {
+    if (content[i] === '{') depth++;
+    else if (content[i] === '}') {
+      depth--;
+      if (depth === 0) return content.slice(open + 1, i);
+    }
+  }
+  return null;
+}
+
+/**
+ * The screen a route element renders, looking through Suspense/Fragment wrappers and ignoring
+ * whatever sits in `fallback={...}`. Returns the first known component, or null.
+ */
+function screenInElement(expression: string, isKnown: (name: string) => boolean): string | null {
+  let cleaned = expression;
+  for (let at = cleaned.indexOf('fallback={'); at >= 0; at = cleaned.indexOf('fallback={')) {
+    const inner = balancedBraces(cleaned, at + 'fallback='.length);
+    if (inner === null) break;
+    cleaned = cleaned.slice(0, at) + cleaned.slice(at + 'fallback={'.length + inner.length + 1);
+  }
+  for (const m of cleaned.matchAll(/<([A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)?)/g)) {
+    if (!ROUTE_WRAPPERS.has(m[1]) && isKnown(m[1])) return m[1];
+  }
+  return null;
+}
+
+/**
+ * @param framework when known, the file-based Pages Router convention only applies to Next.js;
+ *   a React SPA with a `src/pages/` folder declares its routes in the router instead.
+ */
+export function detectRoutes(
+  files: ProjectFile[],
+  components: UIComponent[],
+  framework?: SupportedFramework
+): UIRoute[] {
+  const usePagesRouter = framework === undefined || framework === 'nextjs';
   const routes: UIRoute[] = [];
   const componentMap = new Map<string, UIComponent>();
   for (const c of components) {
@@ -14,12 +58,12 @@ export function detectRoutes(files: ProjectFile[], components: UIComponent[]): U
   routes.push(...appRouterRoutes);
 
   // 1.1 Next.js Pages Router
-  for (const file of files) {
+  for (const file of usePagesRouter ? files : []) {
     const p = file.path;
 
     // Pages Router: e.g. pages/about.tsx, pages/users/[id].tsx
-    if (/(?:src\/)?pages\/(.+)\.(?:tsx|jsx|js|ts)$/i.test(p) && !p.includes('_app') && !p.includes('_document') && !p.includes('/api/')) {
-      const match = p.match(/(?:src\/)?pages\/(.+)\.(?:tsx|jsx|js|ts)$/i);
+    if (PAGES_ROUTER_FILE.test(p) && !p.includes('_app') && !p.includes('_document') && !p.includes('/api/')) {
+      const match = p.match(PAGES_ROUTER_FILE);
       if (match) {
         let routePath = '/' + match[1].replace(/index$/i, '').replace(/\[([^\]]+)\]/g, ':$1');
         if (routePath.length > 1 && routePath.endsWith('/')) {
@@ -59,10 +103,16 @@ export function detectRoutes(files: ProjectFile[], components: UIComponent[]): U
     const content = file.content.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '');
 
     if (content.includes('<Route') || content.includes('createBrowserRouter') || content.includes('createRoutesFromElements')) {
+      const isKnown = (name: string) => componentMap.has(name);
       const routeMatches = content.matchAll(/<Route[^>]*path=["']([^"']+)["'][^>]*(?:element=\{<([A-Za-z0-9_]+)|component=\{([A-Za-z0-9_]+))/g);
       for (const m of routeMatches) {
         const routePath = m[1];
-        const compName = m[2] || m[3] || 'PageComponent';
+        let compName = m[2] || m[3] || 'PageComponent';
+        if (m[2] && !isKnown(compName) && m.index !== undefined) {
+          const open = content.indexOf('element={', m.index) + 'element='.length;
+          const expression = balancedBraces(content, open);
+          compName = (expression && screenInElement(expression, isKnown)) || compName;
+        }
         // Only accept if component exists in the analyzed codebase or is a common router pattern
         if (componentMap.has(compName) || components.some((c) => c.name === compName)) {
           routes.push({

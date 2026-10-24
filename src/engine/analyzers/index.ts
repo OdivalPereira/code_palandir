@@ -22,12 +22,13 @@ export function analyzeProject(files: ProjectFile[]): ProjectAnalysis {
 
   for (const file of files) {
     let comps: UIComponent[] = [];
-    if (reactAnalyzer.canHandle(file)) {
+    // Angular first: the React analyzer accepts any .ts file and would shadow *.component.ts.
+    if (angularAnalyzer.canHandle(file)) {
+      comps = angularAnalyzer.analyzeComponents(file);
+    } else if (reactAnalyzer.canHandle(file)) {
       comps = reactAnalyzer.analyzeComponents(file);
     } else if (vueAnalyzer.canHandle(file)) {
       comps = vueAnalyzer.analyzeComponents(file);
-    } else if (angularAnalyzer.canHandle(file)) {
-      comps = angularAnalyzer.analyzeComponents(file);
     }
 
     for (const comp of comps) {
@@ -40,11 +41,13 @@ export function analyzeProject(files: ProjectFile[]): ProjectAnalysis {
   }
 
   // Detect routes
-  const routes = detectRoutes(files, allComponents);
+  const routes = detectRoutes(files, allComponents, framework);
 
   // Mark components that correspond to routes as pages
   for (const route of routes) {
-    const matchedComp = allComponents.find(c => c.name === route.pageComponentName);
+    const matchedComp =
+      allComponents.find(c => c.name === route.pageComponentName && c.filePath === route.filePath) ??
+      allComponents.find(c => c.name === route.pageComponentName);
     if (matchedComp) {
       matchedComp.isPage = true;
     }

@@ -68,13 +68,13 @@ export const MolduraPergaminho: React.FC<MolduraPergaminhoProps> = ({
             {titulo && (
               <h2
                 style={RPG_TITLE_STYLE}
-                className="text-amber-100 uppercase tracking-wide text-sm sm:text-base font-semibold truncate"
+                className="text-amber-100 uppercase tracking-wide text-sm sm:text-base font-semibold break-words"
               >
                 {titulo}
               </h2>
             )}
             {subtitulo && (
-              <p className="text-xs text-stone-400 font-sans mt-0.5 truncate">
+              <p className="text-xs text-stone-400 font-sans mt-0.5 break-words">
                 {subtitulo}
               </p>
             )}
@@ -141,9 +141,10 @@ export const SeloEstado: React.FC<SeloEstadoProps> = ({
   const texto = rotulo || conf.rotuloPadrao;
 
   return (
+    // Selo estático: sem role="status". Uma tela tem dezenas deles, e regiões vivas
+    // fariam o leitor de tela anunciar todos a cada troca de projeto.
     <Badge
       className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium border rounded font-mono shadow-sm ${conf.classes} ${className}`}
-      role="status"
     >
       <span className="font-bold select-none" aria-hidden="true">
         {conf.simbolo}
@@ -169,6 +170,8 @@ export type EstacaoJornada =
 
 export interface MarcoJornadaProps {
   estacaoAtual?: EstacaoJornada | string | null;
+  /** Nome do grupo para leitor de tela (ex.: "Marcos da etapa e3-carrinho"). */
+  rotulo?: string;
   className?: string;
 }
 
@@ -183,17 +186,21 @@ const ESTACOES_ORDENADAS: Array<{ id: EstacaoJornada; rotulo: string; icone: str
 
 export const MarcoJornada: React.FC<MarcoJornadaProps> = ({
   estacaoAtual,
+  rotulo = 'Marcos da Jornada',
   className = '',
 }) => {
   const normalizada = (estacaoAtual || '').toLowerCase() as EstacaoJornada;
   const indiceAtual = ESTACOES_ORDENADAS.findIndex((e) => e.id === normalizada);
+  const encerrada = normalizada === 'encerrada';
+  const desconhecida = indiceAtual < 0 && !encerrada;
 
+  // Um passo a passo não é navegação: grupo rotulado, não <nav> (evita landmarks repetidos).
   return (
-    <nav aria-label="Marcos da Jornada" className={`w-full ${className}`}>
+    <div role="group" aria-label={rotulo} className={`w-full ${className}`}>
       <ol role="list" className="flex items-center justify-between gap-1 overflow-x-auto py-1">
         {ESTACOES_ORDENADAS.map((est, idx) => {
           const isCurrent = est.id === normalizada;
-          const isPassed = indiceAtual >= 0 && idx < indiceAtual;
+          const isPassed = encerrada || (indiceAtual >= 0 && idx < indiceAtual);
 
           let estadoClasses = 'border-stone-700 bg-stone-900/70 text-stone-400';
           if (isCurrent) {
@@ -213,7 +220,12 @@ export const MarcoJornada: React.FC<MarcoJornadaProps> = ({
                 {est.icone}
               </span>
               <span className="text-[10px] font-sans font-medium tracking-tight mt-0.5 truncate max-w-full">
+                {isPassed && <span aria-hidden="true">✓ </span>}
                 {est.rotulo}
+              </span>
+              {/* Estado também em texto, não só na cor (WCAG 1.4.1) */}
+              <span className="sr-only">
+                {desconhecida ? ' (estado desconhecido)' : isCurrent ? ' (estação atual)' : isPassed ? ' (concluída)' : ' (a percorrer)'}
               </span>
             </li>
           );
@@ -224,133 +236,12 @@ export const MarcoJornada: React.FC<MarcoJornadaProps> = ({
           <SeloEstado estado="em_dia" rotulo="Jornada Encerrada" />
         </div>
       )}
-      {normalizada === 'desconhecida' && (
+      {desconhecida && (
         <div className="mt-1 flex items-center justify-center">
           <SeloEstado estado="desconhecido" rotulo="Estação Desconhecida" />
         </div>
       )}
-    </nav>
-  );
-};
-
-/* =========================================================================
-   4. REGIÃO / MAPA DE PROJETOS
-   ========================================================================= */
-
-export interface RegiaoMapaProps {
-  id: string;
-  nome: string;
-  nucleo?: string | null;
-  estacao?: EstacaoJornada | string | null;
-  pendencias?: number;
-  diagnosticos?: number;
-  pastas?: string[];
-  ativo?: boolean;
-  onClick?: () => void;
-  className?: string;
-}
-
-export const RegiaoMapa: React.FC<RegiaoMapaProps> = ({
-  id,
-  nome,
-  nucleo,
-  estacao,
-  pendencias = 0,
-  diagnosticos = 0,
-  pastas = [],
-  ativo = false,
-  onClick,
-  className = '',
-}) => {
-  const temDiagnosticos = diagnosticos > 0;
-  const variante: VarianteMoldura = temDiagnosticos
-    ? 'nevoa'
-    : ativo
-    ? 'destaque'
-    : 'default';
-
-  return (
-    <MolduraPergaminho
-      id={id}
-      variante={variante}
-      className={`transition-all ${onClick ? 'cursor-pointer hover:border-amber-600' : ''} ${className}`}
-      onClick={onClick}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <h3
-            style={RPG_TITLE_STYLE}
-            className="text-amber-100 uppercase tracking-wide text-sm font-bold truncate"
-          >
-            {nome}
-          </h3>
-          <div className="flex items-center gap-2 mt-1 text-xs">
-            <span className="text-stone-400">Núcleo:</span>
-            {nucleo ? (
-              <span className="font-mono text-stone-200">{nucleo}</span>
-            ) : (
-              <span className="font-mono text-purple-200 border border-purple-500 bg-purple-950/60 px-1 py-0.2 rounded text-[11px]">
-                ? desconhecido
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Estação / Selo */}
-        <div className="flex-shrink-0">
-          {estacao ? (
-            <span className="text-xs font-mono px-2 py-0.5 rounded border border-amber-900/70 bg-stone-950 text-amber-200 uppercase">
-              {estacao}
-            </span>
-          ) : (
-            <SeloEstado estado="desconhecido" rotulo="desconhecido" />
-          )}
-        </div>
-      </div>
-
-      {/* Contadores */}
-      <div className="flex items-center gap-3 mt-3 pt-2 border-t border-amber-900/40 text-xs">
-        <div className="flex items-center gap-1">
-          <span className="text-stone-400">Pendências:</span>
-          <span
-            className={`font-mono font-bold ${
-              pendencias > 0 ? 'text-amber-300' : 'text-stone-300'
-            }`}
-          >
-            {pendencias}
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <span className="text-stone-400">Diagnósticos:</span>
-          <span
-            className={`font-mono font-bold ${
-              diagnosticos > 0 ? 'text-purple-300' : 'text-stone-300'
-            }`}
-          >
-            {diagnosticos}
-          </span>
-        </div>
-      </div>
-
-      {/* Acampamentos (pastas) */}
-      {pastas && pastas.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {pastas.slice(0, 4).map((pasta, idx) => (
-            <span
-              key={idx}
-              className="text-[10px] font-mono text-stone-400 bg-stone-950 px-1.5 py-0.5 rounded border border-stone-800"
-            >
-              {pasta}
-            </span>
-          ))}
-          {pastas.length > 4 && (
-            <span className="text-[10px] text-stone-400 font-mono self-center">
-              +{pastas.length - 4}
-            </span>
-          )}
-        </div>
-      )}
-    </MolduraPergaminho>
+    </div>
   );
 };
 

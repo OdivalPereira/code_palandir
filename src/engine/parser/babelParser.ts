@@ -1,5 +1,5 @@
 import { parse, type ParserPlugin } from '@babel/parser';
-import traverseModule from '@babel/traverse';
+import traverseModule, { type NodePath } from '@babel/traverse';
 import type { UIComponent, ComponentAction, ComponentHook, ComponentStoreAccess, ApiCall, UIWireframeElement } from '@/types/analysis';
 
 // Handle ES module default export vs CommonJS
@@ -42,6 +42,31 @@ export interface BabelParsedComponentResult {
   hooks: ComponentHook[];
   stores: ComponentStoreAccess[];
   apiCalls: ApiCall[];
+}
+
+// React's own hooks: never custom and never a store, even when the name ends in "State"/"Store".
+const REACT_BUILTIN_HOOKS = new Set([
+  'useState', 'useEffect', 'useContext', 'useReducer', 'useCallback', 'useMemo', 'useRef', 'useId',
+  'useLayoutEffect', 'useInsertionEffect', 'useTransition', 'useDeferredValue', 'useImperativeHandle',
+  'useDebugValue', 'useSyncExternalStore', 'useFormState', 'useActionState', 'useOptimistic',
+]);
+
+/** useAuthStore, useStore, useAppState → store; useState, useSyncExternalStore → not. */
+export function looksLikeStoreHook(name: string): boolean {
+  return !REACT_BUILTIN_HOOKS.has(name) && /^use\w*(?:Store|State)$/.test(name);
+}
+
+/** Siglas também são componentes quando a declaração contém JSX. */
+function isComponentName(name: string, declaration?: NodePath): boolean {
+  if (!/^[A-Z]/.test(name)) return false;
+  if (!/^[A-Z0-9_]+$/.test(name)) return true;
+  if (!declaration) return false;
+  let hasJSX = false;
+  declaration.traverse({
+    JSXElement(path) { hasJSX = true; path.stop(); },
+    JSXFragment(path) { hasJSX = true; path.stop(); },
+  });
+  return hasJSX;
 }
 
 function safeParseAst(content: string) {
@@ -102,7 +127,8 @@ export function parseSourceWithBabel(
     /(?:^|\/)app\/(?:.+[\\/])?page\.(?:tsx|jsx|js|ts)$/i.test(filePath) ||
     (/(?:^|\/)pages\/.+\.(?:tsx|jsx|js|ts)$/i.test(filePath) && !/(?:_app|_document|_error|[\/\\]api[\/\\])/i.test(filePath)) ||
     /(?:^|\/)views\/.+\.(?:tsx|jsx|vue|svelte|js|ts)$/i.test(filePath) ||
-    /(?:Page|View)\.(?:tsx|jsx|vue|svelte|js|ts)$/i.test(filename);
+    // Case-sensitive: LoginPage.tsx and HomeView.vue are pages; Overview.tsx and Preview.tsx are not.
+    /(?:Page|View)\.(?:tsx|jsx|vue|svelte|js|ts)$/.test(filename);
 
   const ast = safeParseAst(content);
 
@@ -116,8 +142,8 @@ export function parseSourceWithBabel(
             const name = path.node?.id?.name;
             if (!name) return;
 
-            // React component convention: Capitalized name
-            if (/^[A-Z]/.test(name)) {
+            // React component convention: Capitalized name (GET/POST route handlers are not components)
+            if (isComponentName(name, path)) {
               processComponentNode(path, name);
             }
           } catch {
@@ -131,7 +157,7 @@ export function parseSourceWithBabel(
             if (path.node?.id?.type !== 'Identifier') return;
             const name = path.node.id.name;
 
-            if (!/^[A-Z]/.test(name)) return;
+            if (!isComponentName(name, path)) return;
 
             const init = path.node.init;
             if (init) {
@@ -252,7 +278,7 @@ export function parseSourceWithBabel(
             // Hook detection: e.g. useState, useEffect, useAuth, useCustomHook
             if (callee.type === 'Identifier' && /^use[A-Z]/.test(callee.name)) {
               const hookName = callee.name;
-              const isCustom = !['useState', 'useEffect', 'useContext', 'useReducer', 'useCallback', 'useMemo', 'useRef', 'useId'].includes(hookName);
+              const isCustom = !REACT_BUILTIN_HOOKS.has(hookName);
 
               const hookObj: ComponentHook = {
                 id: `${filePath}#${componentName}#${hookName}#${callPath.node.loc?.start?.line || 0}`,
@@ -262,10 +288,11 @@ export function parseSourceWithBabel(
               hooks.push(hookObj);
               allHooks.push(hookObj);
 
-              // If hook looks like a store: useAuthStore, useAppStore, etc.
-              if (/Store|State/i.test(hookName)) {
+              // If hook looks like a store: useAuthStore, useAppStore, etc. (once per component)
+              const storeId = `${filePath}#${componentName}#${hookName}`;
+              if (looksLikeStoreHook(hookName) && !stores.some((st) => st.id === storeId)) {
                 const storeObj: ComponentStoreAccess = {
-                  id: `${filePath}#${componentName}#${hookName}`,
+                  id: storeId,
                   storeName: hookName,
                   type: 'zustand',
                   properties: [],
@@ -638,13 +665,13 @@ function extractComponentsWithRegex(content: string, filePath: string, isLikelyP
   // Function declarations: export function Header, function Header, export default function Header
   const funcMatches = content.matchAll(/(?:export\s+)?(?:default\s+)?function\s+([A-Z][A-Za-z0-9_]*)\s*\(/g);
   for (const m of funcMatches) {
-    names.add(m[1]);
+    if (isComponentName(m[1])) names.add(m[1]);
   }
 
   // Const/let/var declarations: const Header = () =>, export const Header: React.FC = () =>
   const varMatches = content.matchAll(/(?:export\s+)?(?:const|let|var)\s+([A-Z][A-Za-z0-9_]*)\s*(?::[^=]+)?\s*=\s*(?:(?:\([^)]*\)|[a-zA-Z0-9_]+)\s*=>|function\b|React\.memo|memo|React\.forwardRef|forwardRef)/g);
   for (const m of varMatches) {
-    names.add(m[1]);
+    if (isComponentName(m[1])) names.add(m[1]);
   }
 
   // Class declarations: class Header extends ...
@@ -654,10 +681,13 @@ function extractComponentsWithRegex(content: string, filePath: string, isLikelyP
   }
 
   // If no explicit component name found, but file is a page, or PascalCase filename, or contains JSX:
-  if (names.size === 0) {
+  // A plain .ts file cannot hold JSX, and `Promise<void>` is a generic, not a tag: such a file only
+  // yields the components it declares, never one named after the file.
+  const isPlainTs = /\.[cm]?ts$/.test(filePath);
+  if (names.size === 0 && !isPlainTs) {
     const basename = filePath.split('/').pop()?.replace(/\.[^/.]+$/, '') || '';
     const isPascalCase = /^[A-Z][A-Za-z0-9_]*$/.test(basename);
-    const hasJSX = /<[A-Za-z][^>]*>/.test(content);
+    const hasJSX = /<\/[A-Za-z][A-Za-z0-9.]*>|<[A-Za-z][A-Za-z0-9.]*(?:\s[^<>]*)?\/>/.test(content);
     if (isLikelyPage || isPascalCase || hasJSX) {
       const fallbackName = isPascalCase ? basename : (basename.charAt(0).toUpperCase() + basename.slice(1) || 'Component');
       names.add(fallbackName);
@@ -735,7 +765,7 @@ function extractHooksWithRegex(content: string): ComponentHook[] {
       hooks.push({
         id: name,
         name,
-        isCustom: !['useState', 'useEffect', 'useContext'].includes(name),
+        isCustom: !REACT_BUILTIN_HOOKS.has(name),
       });
     }
   }
@@ -748,7 +778,7 @@ function extractStoresWithRegex(content: string, componentName: string, filePath
   const seen = new Set<string>();
   for (const m of matches) {
     const storeName = m[1];
-    if (!seen.has(storeName)) {
+    if (looksLikeStoreHook(storeName) && !seen.has(storeName)) {
       seen.add(storeName);
       stores.push({
         id: `${filePath}#${componentName}#${storeName}`,

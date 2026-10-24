@@ -46,9 +46,20 @@ export function generateMermaidDiagram(
 
   const lines: string[] = [`flowchart ${direction}`];
 
-  // Helper para sanitizar IDs compatíveis com Mermaid (alfanumérico e underscore)
+  // Helper para sanitizar IDs compatíveis com Mermaid (alfanumérico e underscore).
+  // src/a-b/X e src/a_b/X dariam o mesmo id e fundiriam dois nós: cada id original
+  // recebe um id próprio, com sufixo quando colide.
+  const idsMermaid = new Map<string, string>();
+  const idsUsados = new Set<string>();
   const sanitizeId = (id: string): string => {
-    return id.replace(/[^a-zA-Z0-9_]/g, '_');
+    const existente = idsMermaid.get(id);
+    if (existente) return existente;
+    const base = id.replace(/[^a-zA-Z0-9_]/g, '_');
+    let candidato = base;
+    for (let n = 2; idsUsados.has(candidato); n++) candidato = `${base}_${n}`;
+    idsMermaid.set(id, candidato);
+    idsUsados.add(candidato);
+    return candidato;
   };
 
   // Helper para sanitizar labels em caixas de texto com escape de aspas

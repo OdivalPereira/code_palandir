@@ -76,6 +76,58 @@ export function motivoEscalaAusente(chave: string, plataforma: string): string {
   return `A escala ${nivel}: ${modelo} · esforço ${esforco} não está mais no cardápio de ${plataforma}; escolha outra.`;
 }
 
+/*
+ * A mensagem de abertura é colada num agente que executa a linha `Assumir: sc.py assumir ...`.
+ * Ids e nomes vêm do instantâneo (o coletor lê nomes de pasta e de repositório), então um valor
+ * com aspas, $, crase, ; ou quebra de linha viraria comando. Esses valores bloqueiam a mensagem.
+ */
+const ID_SEGURO = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const TEXTO_INSEGURO = /["$`\\\r\n;|&<>]/;
+
+function mostrar(valor: string): string {
+  const curto = valor.length > 40 ? `${valor.slice(0, 40)}…` : valor;
+  return JSON.stringify(curto);
+}
+
+export function motivoIdInseguro(campo: string, valor: string): string {
+  return `O id de ${campo} ${mostrar(valor)} não é seguro para a linha Assumir (só letras, números, ponto, hífen e sublinhado; sem ".."); corrija na origem.`;
+}
+
+export function motivoTextoInseguro(campo: string, valor: string): string {
+  return `O valor de ${campo} ${mostrar(valor)} tem caractere que o terminal interpretaria (aspas, $, crase, barra invertida, ;, |, &, <, > ou quebra de linha); corrija no cardápio.`;
+}
+
+/** Motivos de bloqueio para valores que não podem ir à linha `Assumir:`. */
+export function motivosValoresInseguros(v: {
+  projetoId: string;
+  etapaId: string;
+  plataforma: string;
+  modelo: string;
+  esforco: string;
+  subagentes?: Partial<Record<NivelCardapio, string>>;
+}): string[] {
+  const motivos: string[] = [];
+  const id = (campo: string, valor: string) => {
+    if (!ID_SEGURO.test(valor) || valor.includes('..')) motivos.push(motivoIdInseguro(campo, valor));
+  };
+  const texto = (campo: string, valor: string, extra?: RegExp) => {
+    if (TEXTO_INSEGURO.test(valor) || (extra && extra.test(valor))) {
+      motivos.push(motivoTextoInseguro(campo, valor));
+    }
+  };
+  id('projeto', v.projetoId);
+  id('etapa', v.etapaId);
+  texto('plataforma', v.plataforma);
+  texto('modelo', v.modelo);
+  texto('esforço', v.esforco);
+  for (const nivel of NIVEIS_SUBAGENTE) {
+    const modelo = v.subagentes?.[nivel];
+    // "," e "=" separam os níveis em --subagentes "alta=X,moderada=Y"
+    if (modelo) texto(`subagente (${nivel})`, modelo, /[,=]/);
+  }
+  return motivos;
+}
+
 export function chaveOpcaoCardapio(item: ItemCardapio): string {
   return `${item.nivel}::${item.modelo}::${item.esforco}`;
 }
@@ -98,7 +150,8 @@ export function resolverEtapaPadrao(projeto?: ProjetoPainel | null): string | nu
   if (!projeto || projeto.etapas.length === 0) return null;
   const carrinho = projeto.etapas.find((e) => e.id === 'e3-carrinho');
   if (carrinho) return carrinho.id;
-  const emAndamento = projeto.etapas.find((e) => e.estacao !== 'encerrada');
+  // Estação desconhecida não é "em andamento" (D08): só vira padrão se não houver outra.
+  const emAndamento = projeto.etapas.find((e) => e.estacao !== 'encerrada' && e.estacao !== 'desconhecida');
   if (emAndamento) return emAndamento.id;
   return projeto.etapas[projeto.etapas.length - 1].id;
 }
@@ -244,7 +297,7 @@ export function montarAbertura(
   }
 
   const usarSubagentes = selecao.incluirSubagentes && avisoSubagentes === null;
-  const mensagem = gerarMensagemAbertura({
+  const parametros = {
     projetoId: selecao.projetoId,
     etapaId: selecao.etapaId,
     papel: selecao.papel,
@@ -258,7 +311,14 @@ export function montarAbertura(
           simples: selecao.subagentes.simples as string,
         }
       : undefined,
-  });
+  };
+
+  const inseguros = motivosValoresInseguros(parametros);
+  if (inseguros.length > 0) {
+    return { selecao, opcoes, ausentes, bloqueios: inseguros, avisoSubagentes, mensagem: null };
+  }
+
+  const mensagem = gerarMensagemAbertura(parametros);
 
   return { selecao, opcoes, ausentes, bloqueios, avisoSubagentes, mensagem };
 }

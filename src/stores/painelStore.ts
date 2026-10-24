@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { Painel1 } from '../painel/contrato/painel1.types';
 import { validarPainel1 } from '../painel/contrato/validador';
 import { exemploOficial } from '../painel/fixtures/cenarios';
-import type { EstadoCarregamentoPainel, Fonte } from '../painel/fonte/Fonte';
+import type { EstadoCarregamentoPainel, Fonte, ResultadoFonte } from '../painel/fonte/Fonte';
 import { FonteFixture, type NomeCenarioFixture } from '../painel/fonte/FonteFixture';
 
 export interface PainelStoreState {
@@ -20,6 +20,8 @@ export interface PainelStoreState {
   resetar: () => void;
 }
 
+let ultimoPedido = 0;
+
 const fixtureInicial = new FonteFixture('valido');
 const resultadoInicial = fixtureInicial.carregarSincrono();
 
@@ -31,9 +33,26 @@ export const usePainelStore = create<PainelStoreState>((set, get) => ({
   projetoSelecionadoId: 'loja-exemplo',
 
   carregar: async (fonte?: Fonte) => {
+    const pedido = ++ultimoPedido;
     set({ estado: 'carregando' });
     const fonteUtilizada = fonte || new FonteFixture(get().cenarioAtivo || 'valido');
-    const resultado = await fonteUtilizada.carregar();
+
+    let resultado: ResultadoFonte<Painel1>;
+    try {
+      resultado = await fonteUtilizada.carregar();
+    } catch (e) {
+      // Fonte que rejeita (rede, Supabase) vira estado de erro, nunca "carregando" eterno (D05).
+      if (pedido !== ultimoPedido) return;
+      set({
+        estado: 'erro',
+        dados: null,
+        erros: [`Falha ao carregar o instantâneo: ${e instanceof Error ? e.message : String(e)}`],
+        projetoSelecionadoId: null,
+      });
+      return;
+    }
+    // Só o pedido mais recente grava: uma resposta lenta não sobrescreve a nova.
+    if (pedido !== ultimoPedido) return;
 
     let proximoProjetoId: string | null = null;
     if (resultado.dados?.projetos && resultado.dados.projetos.length > 0) {
@@ -51,6 +70,7 @@ export const usePainelStore = create<PainelStoreState>((set, get) => ({
   },
 
   selecionarCenario: (cenario: NomeCenarioFixture) => {
+    ultimoPedido++; // invalida um carregar() ainda em voo
     const fonte = new FonteFixture(cenario);
     const resultado = fonte.carregarSincrono();
 
@@ -71,6 +91,7 @@ export const usePainelStore = create<PainelStoreState>((set, get) => ({
   },
 
   carregarDadoBruto: (bruto: unknown) => {
+    ultimoPedido++; // invalida um carregar() ainda em voo
     const validacao = validarPainel1(bruto);
 
     if (!validacao.valido) {

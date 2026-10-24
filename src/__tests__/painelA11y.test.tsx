@@ -135,7 +135,6 @@ describe('Suíte de Acessibilidade e D05 — Painel RPG (F5)', () => {
             'text-emerald-200': [['emerald-950/20']],
       'text-emerald-300': [SELO_EM_DIA, [...CARTAO, 'emerald-950/40']],
       'text-purple-200': [SELO_DESC],
-      'text-purple-300': [CARTAO],
       'text-rose-200': [SELO_ERRO, ['rose-950/20']],
       'text-rose-300': [['rose-950/20', 'stone-950/80']],
     };
@@ -200,10 +199,12 @@ describe('Suíte de Acessibilidade e D05 — Painel RPG (F5)', () => {
     ];
 
     cenariosEstado.forEach(({ estado, simboloEsperado, rotuloEsperado }) => {
-      it(`SeloEstado(${estado}) exibe símbolo "${simboloEsperado}" e texto "${rotuloEsperado}" com role="status"`, () => {
-        render(<SeloEstado estado={estado} />);
-        const badge = screen.getByRole('status');
+      it(`SeloEstado(${estado}) exibe símbolo "${simboloEsperado}" e texto "${rotuloEsperado}", sem ser região viva`, () => {
+        const { container } = render(<SeloEstado estado={estado} />);
+        const badge = container.firstElementChild as HTMLElement;
         expect(badge).toBeTruthy();
+        expect(badge.getAttribute('role')).toBeNull();
+        expect(badge.getAttribute('aria-live')).toBeNull();
         expect(within(badge).getByText(simboloEsperado)).toBeTruthy();
         expect(within(badge).getByText(rotuloEsperado)).toBeTruthy();
       });

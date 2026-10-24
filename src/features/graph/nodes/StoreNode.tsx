@@ -53,6 +53,9 @@ export const StoreNode: React.FC<NodeProps<any>> = ({ data, selected }) => {
       )}
 
       <button
+        type="button"
+        aria-pressed={checked}
+        aria-label="Incluir no Prompt"
         onClick={handleCheckboxClick}
         className="text-slate-400 hover:text-cyan-300 transition-colors p-0.5"
         title={checked ? 'Remover do Prompt' : 'Adicionar ao Prompt'}

@@ -8,7 +8,12 @@ export interface GitHubRepoInfo {
   description?: string;
   stars?: number;
   isPrivate?: boolean;
+  /** Why the import is partial (truncated tree, file cap, failed files, branch fallback). */
+  warnings?: string[];
 }
+
+/** Files fetched per import; the rest is reported in `warnings`, never dropped silently. */
+export const GITHUB_MAX_FILES = 150;
 
 export interface ParsedGitHubUrl {
   owner: string;
@@ -102,6 +107,15 @@ export function setGitHubToken(token: string | null, rememberInSession = false):
   }
 }
 
+/** True when the current token was saved with "remember in this session" (sessionStorage). */
+export function isGitHubTokenRememberedInSession(): boolean {
+  try {
+    return typeof window !== 'undefined' && !!window.sessionStorage?.getItem(SESSION_TOKEN_KEY);
+  } catch {
+    return false;
+  }
+}
+
 export function clearGitHubToken(): void {
   inMemoryToken = null;
   try {
@@ -151,6 +165,8 @@ export function parseGitHubUrl(input: string): ParsedGitHubUrl | null {
   // Format 1: owner/repo (e.g. facebook/react or pmndrs/zustand)
   if (/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(cleaned)) {
     const [owner, repo] = cleaned.split('/');
+    // "github.com/owner" is a profile URL, not owner "github.com" with repo "owner"
+    if (/^(?:www\.)?github\.com$/i.test(owner)) return null;
     return { owner, repo };
   }
 
@@ -173,8 +189,13 @@ export function parseGitHubUrl(input: string): ParsedGitHubUrl | null {
     if (httpMatch[3]) {
       result.branch = httpMatch[3];
     }
-    if (httpMatch[4]) {
-      result.subpath = httpMatch[4];
+    let subpath = httpMatch[4];
+    // A /blob/ link points to a file: analyze the folder that holds it
+    if (subpath && /\/blob\//.test(cleaned)) {
+      subpath = subpath.includes('/') ? subpath.slice(0, subpath.lastIndexOf('/')) : '';
+    }
+    if (subpath) {
+      result.subpath = subpath;
     }
     return result;
   }
@@ -188,12 +209,14 @@ export function parseGitHubUrl(input: string): ParsedGitHubUrl | null {
   return null;
 }
 
-let cachedRateLimit: { data: GitHubRateLimitInfo; timestamp: number } | null = null;
+// Keyed by token: the quota with a token (5.000/h) is not the anonymous one (60/h).
+let cachedRateLimit: { data: GitHubRateLimitInfo; timestamp: number; token: string | null } | null = null;
 
 export async function fetchGitHubRateLimit(token?: string): Promise<GitHubRateLimitInfo | null> {
   const effectiveToken = token || getGitHubToken();
   const now = Date.now();
-  if (cachedRateLimit && now - cachedRateLimit.timestamp < 15000) {
+  const cacheKey = effectiveToken ? effectiveToken.trim() : null;
+  if (cachedRateLimit && cachedRateLimit.token === cacheKey && now - cachedRateLimit.timestamp < 15000) {
     return cachedRateLimit.data;
   }
 
@@ -217,7 +240,7 @@ export async function fetchGitHubRateLimit(token?: string): Promise<GitHubRateLi
       reset: new Date(core.reset * 1000),
       used: core.used,
     };
-    cachedRateLimit = { data, timestamp: now };
+    cachedRateLimit = { data, timestamp: now, token: cacheKey };
     return data;
   } catch {
     return null;
@@ -357,7 +380,9 @@ export async function fetchGitHubRepo(
   }
 
   const metaData = await metaRes.json();
-  const defaultBranch = options.branch || metaData.default_branch || 'main';
+  // Becomes the repo's default branch if the requested one does not exist (raw URLs must use it too)
+  let defaultBranch = options.branch || metaData.default_branch || 'main';
+  const warnings: string[] = [];
 
   // 2. Fetch Git Tree recursively (1 single fast CORS-friendly request)
   onProgress({
@@ -379,6 +404,10 @@ export async function fetchGitHubRepo(
       );
       if (fallbackRes.ok) {
         treeRes = fallbackRes;
+        warnings.push(
+          `A branch "${defaultBranch}" não foi encontrada; foi lida a branch padrão "${metaData.default_branch}".`
+        );
+        defaultBranch = metaData.default_branch;
       }
     }
     if (treeRes.ok) {
@@ -416,8 +445,17 @@ export async function fetchGitHubRepo(
     // Sort files by priority: package.json, configs, pages/components first, tests/docs last
     eligibleItems.sort((a: any, b: any) => scoreFrontendFile(b.path) - scoreFrontendFile(a.path));
 
-    // Limit maximum files to 150 to keep processing responsive in the browser
-    const filesToFetch = eligibleItems.slice(0, 150);
+    if (treeData.truncated) {
+      warnings.push('O GitHub truncou a árvore do repositório; parte dos arquivos não foi listada.');
+    }
+
+    // Limit maximum files to keep processing responsive in the browser
+    const filesToFetch = eligibleItems.slice(0, GITHUB_MAX_FILES);
+    if (eligibleItems.length > filesToFetch.length) {
+      warnings.push(
+        `Só os ${filesToFetch.length} arquivos mais relevantes de ${eligibleItems.length} foram lidos.`
+      );
+    }
 
     let completed = 0;
     let rateLimitHit = false;
@@ -496,6 +534,15 @@ export async function fetchGitHubRepo(
     }
 
     if (files.length > 0) {
+      const missing = filesToFetch.length - files.length;
+      if (missing > 0) {
+        warnings.push(
+          rateLimitHit
+            ? `Limite da API do GitHub atingido: ${missing} de ${filesToFetch.length} arquivos não foram baixados.`
+            : `${missing} de ${filesToFetch.length} arquivos não puderam ser baixados.`
+        );
+      }
+
       onProgress({
         step: 'complete',
         message: `${files.length} arquivos carregados com sucesso!`,
@@ -511,6 +558,7 @@ export async function fetchGitHubRepo(
           description: metaData.description,
           stars: metaData.stargazers_count,
           isPrivate: Boolean(metaData.private),
+          warnings,
         },
         files,
       };
@@ -529,7 +577,7 @@ export async function fetchGitHubRepo(
 
   let zipRes: Response;
   try {
-    zipRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/zipball/${defaultBranch}`, {
+    zipRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/zipball/${encodeURIComponent(defaultBranch)}`, {
       headers: {
         ...headers,
         Accept: 'application/vnd.github.v3.raw',
@@ -544,13 +592,29 @@ export async function fetchGitHubRepo(
   }
 
   if (!zipRes.ok) {
+    if ((zipRes.status === 403 || zipRes.status === 429) && zipRes.headers.get('x-ratelimit-remaining') === '0') {
+      throw new Error(
+        'Limite de requisições anônimas da API do GitHub atingido (60 req/h). Adicione um Fine-Grained Token gratuito para obter até 5.000 req/h.'
+      );
+    }
     throw new Error(
       `Não foi possível baixar o código da branch principal "${defaultBranch}" (HTTP ${zipRes.status}).`
     );
   }
 
   const zipBuffer = await zipRes.arrayBuffer();
-  const files = await extractZipArchive(zipBuffer);
+  let files = await extractZipArchive(zipBuffer);
+
+  // The ZIP holds the whole repo: keep only the requested subfolder, as the tree path does
+  if (options.subpath) {
+    const prefix = options.subpath.replace(/^\/+|\/+$/g, '') + '/';
+    files = files
+      .filter((f) => f.path.startsWith(prefix))
+      .map((f) => ({ ...f, path: f.path.slice(prefix.length) }));
+    if (files.length === 0) {
+      throw new Error(`Nenhum arquivo de código frontend suportado foi encontrado na subpasta "${options.subpath}".`);
+    }
+  }
 
   return {
     info: {
@@ -560,6 +624,7 @@ export async function fetchGitHubRepo(
       description: metaData.description,
       stars: metaData.stargazers_count,
       isPrivate: Boolean(metaData.private),
+      warnings,
     },
     files,
   };

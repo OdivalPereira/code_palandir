@@ -95,6 +95,8 @@ export function sanitizeFilePath(rawPath: string): string {
   return safeSegments.join('/');
 }
 
+const MAX_ZIP_ENTRY_BYTES = 2 * 1024 * 1024;
+
 export function isZipSlipPath(rawPath: string): boolean {
   if (!rawPath) return false;
 
@@ -325,7 +327,10 @@ export async function extractZipArchive(zipBuffer: ArrayBuffer): Promise<Project
       const allSharePrefix = relevantEntries.every(
         (entry) => entry.startsWith(potentialPrefix) || entry === potentialPrefix.slice(0, -1)
       );
-      if (allSharePrefix) {
+      // A wrapper folder (GitHub zipball "owner-repo-sha/", "my-app/") is dropped, but a source
+      // folder like src/ or app/ is part of the paths the analyzers read (src/pages, app/page.tsx).
+      const isSourceFolder = /^(?:src|app|pages|components|lib|public)\/$/i.test(potentialPrefix);
+      if (allSharePrefix && !isSourceFolder) {
         commonPrefix = potentialPrefix;
       }
     }
@@ -348,10 +353,15 @@ export async function extractZipArchive(zipBuffer: ArrayBuffer): Promise<Project
 
     if (!relativePath || shouldIgnorePath(relativePath)) continue;
 
+    // Check the size the ZIP declares before inflating, so one huge entry is not decompressed
+    // into memory only to be thrown away.
+    const declaredSize = (zipEntry as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize;
+    if (typeof declaredSize === 'number' && declaredSize > MAX_ZIP_ENTRY_BYTES) continue;
+
     try {
       const content = await zipEntry.async('string');
       // Skip very large single files (> 2MB)
-      if (content.length > 2 * 1024 * 1024) continue;
+      if (content.length > MAX_ZIP_ENTRY_BYTES) continue;
 
       const sha256 = await computeFileHash(content);
 

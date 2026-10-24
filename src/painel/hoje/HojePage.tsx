@@ -9,6 +9,7 @@ import {
 import { usePainelStore } from '@/stores/painelStore';
 import { ordenarPendencias } from '../mensagem/geradorMensagem';
 import { PergaminhoAbertura } from '../mensagem/PergaminhoAbertura';
+import { pluralizar } from '../formatacao';
 
 export const HojePage: React.FC = () => {
   const { estado, dados, erros } = usePainelStore();
@@ -55,6 +56,8 @@ export const HojePage: React.FC = () => {
   }
 
   const pendenciasOrdenadas = ordenarPendencias(dados.projetos);
+  // Projeto com diagnóstico pode ter pendências que o coletor não leu (D08).
+  const projetosIlegiveis = dados.diagnosticos.some((d) => d.projeto !== null);
 
   // Projetos que possuem diagnósticos ou nucleo === null (Regra D08: nunca em dia)
   const projetosEmNevoa = dados.projetos.filter((proj) => {
@@ -79,6 +82,7 @@ export const HojePage: React.FC = () => {
 
   return (
     <div className="w-full max-w-7xl mx-auto p-3 sm:p-4 md:p-6 space-y-4">
+      <h1 className="sr-only">O Conselho</h1>
       {estado === 'parcial' && (
         <EstadoTela
           estado="parcial"
@@ -96,8 +100,18 @@ export const HojePage: React.FC = () => {
             subtitulo="Pendências priorizadas em todos os projetos"
             selo={
               <SeloEstado
-                estado={pendenciasOrdenadas.length > 0 ? 'atencao' : 'em_dia'}
-                rotulo={`${pendenciasOrdenadas.length} pendência(s)`}
+                estado={
+                  pendenciasOrdenadas.length > 0
+                    ? 'atencao'
+                    : projetosIlegiveis
+                    ? 'desconhecido'
+                    : 'em_dia'
+                }
+                rotulo={
+                  projetosIlegiveis
+                    ? pluralizar(pendenciasOrdenadas.length, 'pendência conhecida', 'pendências conhecidas')
+                    : pluralizar(pendenciasOrdenadas.length, 'pendência', 'pendências')
+                }
               />
             }
           >
@@ -178,7 +192,7 @@ export const HojePage: React.FC = () => {
                       </ul>
                     ) : (
                       <p className="text-xs font-mono text-purple-200">
-                        nucleo: null (sem bloco da Sociedade identificado)
+                        núcleo: desconhecido (o coletor não informou o motivo)
                       </p>
                     )}
                   </div>

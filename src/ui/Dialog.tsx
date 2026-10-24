@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from './Button';
@@ -12,6 +12,9 @@ export interface DialogProps {
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export const Dialog: React.FC<DialogProps> = ({
   open,
   onClose,
@@ -20,9 +23,41 @@ export const Dialog: React.FC<DialogProps> = ({
   children,
   maxWidth = 'md',
 }) => {
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Focus moves into the dialog on open and back to whatever opened it on close.
   useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const first = cardRef.current?.querySelector<HTMLElement>(FOCUSABLE);
+    (first ?? cardRef.current)?.focus();
+    return () => {
+      previous?.focus?.();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && open) onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      // Keep Tab inside the dialog (aria-modal promises the rest of the page is inert).
+      if (e.key === 'Tab' && cardRef.current) {
+        const items = Array.from(cardRef.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+        if (items.length === 0) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        const active = document.activeElement;
+        if (e.shiftKey && (active === first || !cardRef.current.contains(active))) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && (active === last || !cardRef.current.contains(active))) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -46,14 +81,16 @@ export const Dialog: React.FC<DialogProps> = ({
         aria-hidden="true"
       />
 
-      {/* Modal Card */}
+      {/* Modal Card (only one dialog is open at a time, so the ids are fixed) */}
       <div
+        ref={cardRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="dialog-title"
         aria-describedby={description ? 'dialog-description' : undefined}
+        tabIndex={-1}
         className={cn(
-          'relative w-full rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl transition-all z-10',
+          'relative w-full max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl transition-all z-10 focus:outline-none',
           maxWidths[maxWidth]
         )}
       >
