@@ -20,12 +20,10 @@ import { useUIStore } from '@/stores/uiStore';
 import { Button } from '@/ui/Button';
 import { Badge } from '@/ui/Badge';
 import { ComponentWireframe } from './ComponentWireframe';
-import type { UINodeType } from '@/types/graph';
+import type { FlowUINode, UINodeType } from '@/types/graph';
 
 export const DetailSidebar: React.FC = () => {
   const selectedNode = useGraphStore((state) => state.selectedNode);
-  const { selectedElements, toggleElement, isSelected } = useSelectionStore();
-  const setSidebarTab = useUIStore((state) => state.setSidebarTab);
 
   if (!selectedNode) {
     return (
@@ -38,6 +36,17 @@ export const DetailSidebar: React.FC = () => {
       </div>
     );
   }
+
+  return <NodeDetail key={selectedNode.id} node={selectedNode} />;
+};
+
+/**
+ * Detalhe do nó escolhido. Fica num componente próprio para que os hooks abaixo
+ * rodem sempre na mesma ordem (o estado vazio acima retorna antes de qualquer um).
+ */
+const NodeDetail: React.FC<{ node: FlowUINode }> = ({ node: selectedNode }) => {
+  const { selectedElements, toggleElement, isSelected } = useSelectionStore();
+  const setSidebarTab = useUIStore((state) => state.setSidebarTab);
 
   const { data } = selectedNode;
   const nodeType = data.nodeType as UINodeType;
