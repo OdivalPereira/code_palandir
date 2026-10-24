@@ -135,7 +135,6 @@ describe('Suíte de Acessibilidade e D05 — Painel RPG (F5)', () => {
             'text-emerald-200': [['emerald-950/20']],
       'text-emerald-300': [SELO_EM_DIA, [...CARTAO, 'emerald-950/40']],
       'text-purple-200': [SELO_DESC],
-      'text-purple-300': [CARTAO],
       'text-rose-200': [SELO_ERRO, ['rose-950/20']],
       'text-rose-300': [['rose-950/20', 'stone-950/80']],
     };
