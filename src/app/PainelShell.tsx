@@ -1,12 +1,15 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { RPG_TITLE_STYLE, SeloEstado } from './rpgTheme';
+import { usePainelStore } from '@/stores/painelStore';
+import { formatarColetadoEm } from '@/painel/formatacao';
 
 export interface PainelShellProps {
   children: React.ReactNode;
 }
 
 export const PainelShell: React.FC<PainelShellProps> = ({ children }) => {
+  const dados = usePainelStore((s) => s.dados);
   const location = useLocation();
   const currentPath = location.pathname;
 
@@ -50,12 +53,26 @@ export const PainelShell: React.FC<PainelShellProps> = ({ children }) => {
                 Code Palandir
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-stone-400 font-mono leading-none">
-              <span className="truncate">notebook-exemplo</span>
-              <span className="text-stone-400">•</span>
-              <time dateTime="2026-10-23T15:00:00Z" className="truncate">
-                23/10 15:00Z
-              </time>
+            <div className="flex items-center gap-1.5 text-[11px] text-stone-400 font-mono leading-none min-w-0">
+              {dados ? (
+                <>
+                  <span className="truncate" title={`Máquina: ${dados.maquina}`}>
+                    {dados.maquina}
+                  </span>
+                  <span className="text-stone-400" aria-hidden="true">
+                    •
+                  </span>
+                  <time
+                    dateTime={dados.coletado_em}
+                    title={`Coletado em ${dados.coletado_em}`}
+                    className="flex-shrink-0"
+                  >
+                    {formatarColetadoEm(dados.coletado_em)}
+                  </time>
+                </>
+              ) : (
+                <span className="truncate">sem instantâneo</span>
+              )}
             </div>
           </div>
         </div>
