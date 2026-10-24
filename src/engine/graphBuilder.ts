@@ -217,7 +217,12 @@ export function buildGraphFromAnalysis(
       });
 
       // Link route to page or entry component if target is visible
-      const targetComp = allComponentsMap.get(route.pageComponentName);
+      // Same name in several files (Next's `export default function Page()` in every route):
+      // the component declared in the route's own file wins over the last one with that name.
+      const targetComp =
+        [...analysis.pages, ...analysis.components].find(
+          (c) => c.name === route.pageComponentName && c.filePath === route.filePath
+        ) ?? allComponentsMap.get(route.pageComponentName);
       if (targetComp) {
         const targetNodeId = targetComp.isPage ? `node-page-${targetComp.id}` : `node-comp-${targetComp.id}`;
         if (visibleContainerIds.has(targetNodeId)) {

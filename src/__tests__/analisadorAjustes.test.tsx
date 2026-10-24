@@ -507,3 +507,29 @@ describe('Exportações', () => {
     expect(chamadas).toBe(2);
   });
 });
+
+describe('Next App Router com vários Page', () => {
+  it('cada rota liga ao Page do próprio arquivo', () => {
+    const pagina = (texto: string) => `export default function Page() { return <main>${texto}</main>; }`;
+    const files = [
+      { path: 'package.json', content: '{"dependencies":{"next":"15.0.0","react":"19.0.0"}}', size: 10, language: 'json' },
+      { path: 'app/page.tsx', content: pagina('home'), size: 10, language: 'tsx' },
+      { path: 'app/sobre/page.tsx', content: pagina('sobre'), size: 10, language: 'tsx' },
+      { path: 'app/contato/page.tsx', content: pagina('contato'), size: 10, language: 'tsx' },
+    ];
+    const analise = analyzeProject(files as never);
+    const grafo = buildGraphFromAnalysis(analise);
+    const arquivoDoNo = (id: string) => grafo.nodes.find((n) => n.id === id)?.data.filePath;
+    const rotas = grafo.edges
+      .filter((e) => e.data?.relation === 'routes_to')
+      .map((e) => [grafo.nodes.find((n) => n.id === e.source)?.data.label, arquivoDoNo(e.target)]);
+    expect(rotas).toEqual(
+      expect.arrayContaining([
+        ['/', 'app/page.tsx'],
+        ['/sobre', 'app/sobre/page.tsx'],
+        ['/contato', 'app/contato/page.tsx'],
+      ])
+    );
+    expect(analise.pages.filter((p) => p.name === 'Page')).toHaveLength(3);
+  });
+});

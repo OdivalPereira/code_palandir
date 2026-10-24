@@ -45,7 +45,9 @@ export function analyzeProject(files: ProjectFile[]): ProjectAnalysis {
 
   // Mark components that correspond to routes as pages
   for (const route of routes) {
-    const matchedComp = allComponents.find(c => c.name === route.pageComponentName);
+    const matchedComp =
+      allComponents.find(c => c.name === route.pageComponentName && c.filePath === route.filePath) ??
+      allComponents.find(c => c.name === route.pageComponentName);
     if (matchedComp) {
       matchedComp.isPage = true;
     }
