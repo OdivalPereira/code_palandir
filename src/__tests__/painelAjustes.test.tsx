@@ -417,6 +417,15 @@ describe('MarcoJornada', () => {
     expect(itens[5].textContent).toContain('(a percorrer)');
   });
 
+  it.each(['desconhecida', null, undefined])('não inventa progresso para estação %s', (estacao) => {
+    render(<MarcoJornada estacaoAtual={estacao} />);
+    for (const item of screen.getAllByRole('listitem')) {
+      expect(item.textContent).toContain('(estado desconhecido)');
+      expect(item.textContent).not.toMatch(/a percorrer|concluída|estação atual/);
+    }
+    expect(screen.getByText('Estação Desconhecida')).toBeTruthy();
+  });
+
   it('jornada encerrada marca as seis estações como concluídas', () => {
     render(<MarcoJornada estacaoAtual="encerrada" />);
     for (const item of screen.getAllByRole('listitem')) {

@@ -192,6 +192,7 @@ export const MarcoJornada: React.FC<MarcoJornadaProps> = ({
   const normalizada = (estacaoAtual || '').toLowerCase() as EstacaoJornada;
   const indiceAtual = ESTACOES_ORDENADAS.findIndex((e) => e.id === normalizada);
   const encerrada = normalizada === 'encerrada';
+  const desconhecida = indiceAtual < 0 && !encerrada;
 
   // Um passo a passo não é navegação: grupo rotulado, não <nav> (evita landmarks repetidos).
   return (
@@ -224,7 +225,7 @@ export const MarcoJornada: React.FC<MarcoJornadaProps> = ({
               </span>
               {/* Estado também em texto, não só na cor (WCAG 1.4.1) */}
               <span className="sr-only">
-                {isCurrent ? ' (estação atual)' : isPassed ? ' (concluída)' : ' (a percorrer)'}
+                {desconhecida ? ' (estado desconhecido)' : isCurrent ? ' (estação atual)' : isPassed ? ' (concluída)' : ' (a percorrer)'}
               </span>
             </li>
           );
@@ -235,7 +236,7 @@ export const MarcoJornada: React.FC<MarcoJornadaProps> = ({
           <SeloEstado estado="em_dia" rotulo="Jornada Encerrada" />
         </div>
       )}
-      {normalizada === 'desconhecida' && (
+      {desconhecida && (
         <div className="mt-1 flex items-center justify-center">
           <SeloEstado estado="desconhecido" rotulo="Estação Desconhecida" />
         </div>
