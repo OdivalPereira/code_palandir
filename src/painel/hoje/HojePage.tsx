@@ -1,3 +1,4 @@
+import { classificarVersao, rotuloVersao } from '../regras/classificarVersao';
 import React from 'react';
 import {
   EstadoTela,
@@ -283,12 +284,12 @@ export const HojePage: React.FC = () => {
                 </h3>
                 <ul className="space-y-2">
                   {dados.pacote.instalacoes.map((inst, idx) => {
-                    const versaoDesconhecida = inst.versao === null;
                     const origemDesconhecida = inst.origem === null;
-                    const defasadaOuSuja =
-                      !versaoDesconhecida &&
-                      ((fonteVersao !== null && inst.versao !== fonteVersao) ||
-                        inst.alteracao_local === true);
+                    const ver = classificarVersao({
+                      versao: inst.versao,
+                      fonteVersao,
+                      alteracaoLocal: inst.alteracao_local,
+                    });
 
                     return (
                       <li
@@ -312,26 +313,10 @@ export const HojePage: React.FC = () => {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-1.5">
-                          {versaoDesconhecida ? (
-                            <SeloEstado
-                              estado="desconhecido"
-                              rotulo="desconhecido"
-                            />
-                          ) : defasadaOuSuja ? (
-                            <SeloEstado
-                              estado="defasado"
-                              rotulo={`${inst.versao}${
-                                inst.alteracao_local
-                                  ? ' · alteração local'
-                                  : ' (defasado)'
-                              }`}
-                            />
-                          ) : (
-                            <SeloEstado
-                              estado="em_dia"
-                              rotulo={`${inst.versao} (em dia)`}
-                            />
-                          )}
+                          <SeloEstado
+                            estado={ver.estado}
+                            rotulo={rotuloVersao(inst.versao, ver)}
+                          />
                         </div>
                       </li>
                     );
@@ -346,14 +331,13 @@ export const HojePage: React.FC = () => {
                 </h3>
                 <ul className="space-y-2">
                   {dados.projetos.map((proj) => {
-                    const temDiagnostico = dados.diagnosticos.some(
-                      (d) => d.projeto === proj.id
-                    );
-                    const nucleoNull = proj.nucleo === null;
-                    const nucleoDefasado =
-                      !nucleoNull &&
-                      fonteVersao !== null &&
-                      proj.nucleo !== fonteVersao;
+                    const nuc = classificarVersao({
+                      versao: proj.nucleo,
+                      fonteVersao,
+                      diagnosticos: dados.diagnosticos.filter(
+                        (d) => d.projeto === proj.id
+                      ).length,
+                    });
 
                     return (
                       <li
@@ -364,27 +348,10 @@ export const HojePage: React.FC = () => {
                           {proj.nome}
                         </span>
 
-                        {nucleoNull ? (
-                          <SeloEstado
-                            estado="desconhecido"
-                            rotulo="desconhecido"
-                          />
-                        ) : nucleoDefasado ? (
-                          <SeloEstado
-                            estado="defasado"
-                            rotulo={`${proj.nucleo} (defasado)`}
-                          />
-                        ) : temDiagnostico ? (
-                          <SeloEstado
-                            estado="desconhecido"
-                            rotulo={`${proj.nucleo} (com diagnósticos)`}
-                          />
-                        ) : (
-                          <SeloEstado
-                            estado="em_dia"
-                            rotulo={`${proj.nucleo} (em dia)`}
-                          />
-                        )}
+                        <SeloEstado
+                          estado={nuc.estado}
+                          rotulo={rotuloVersao(proj.nucleo, nuc)}
+                        />
                       </li>
                     );
                   })}

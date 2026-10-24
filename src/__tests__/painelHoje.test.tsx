@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { HojePage } from '../painel/hoje/HojePage';
 import { exemploOficial } from '../painel/fixtures/cenarios';
 import { usePainelStore } from '../stores/painelStore';
+import type { Painel1 } from '../painel/contrato/painel1.types';
 import * as clipboardService from '@/services/clipboard';
 
 describe('HojePage — O Conselho e Pergaminho de Abertura (F3)', () => {
@@ -139,5 +140,24 @@ describe('HojePage — O Conselho e Pergaminho de Abertura (F3)', () => {
     expect(
       screen.getByRole('heading', { name: /I\. Espera pelo Conselho/i })
     ).toBeTruthy();
+  });
+
+  it('fonte_versao nula: nenhuma versão aparece "em dia" no Conselho (D08)', () => {
+    const dados = JSON.parse(JSON.stringify(exemploOficial)) as Painel1;
+    dados.pacote.fonte_versao = null;
+    dados.diagnosticos.push({
+      projeto: null,
+      campo: 'pacote.fonte_versao',
+      motivo: 'fonte ilegível (fictício)',
+    });
+    act(() => {
+      usePainelStore.getState().carregarDadoBruto(dados);
+    });
+    render(<HojePage />);
+
+    expect(screen.queryAllByText(/\(em dia\)/)).toHaveLength(0);
+    expect(
+      screen.getAllByText(/referência do pacote desconhecida/i).length
+    ).toBeGreaterThanOrEqual(1);
   });
 });

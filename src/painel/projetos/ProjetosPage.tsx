@@ -1,3 +1,4 @@
+import { classificarVersao, type ResultadoVersao } from '../regras/classificarVersao';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -14,6 +15,18 @@ import type {
   PassagemEtapa,
   PastaProjeto,
 } from '../contrato/painel1.types';
+
+// Só formatação do rótulo; a regra vive em classificarVersao.
+function rotuloNucleo(
+  nucleo: string | null,
+  r: ResultadoVersao,
+  detalhe: boolean
+): string {
+  if (nucleo === null) return 'nucleo: desconhecido';
+  if (r.estado === 'em_dia') return detalhe ? `núcleo: ${nucleo}` : nucleo;
+  if (r.estado === 'defasado') return `${nucleo} ! ${r.motivo}`;
+  return `${nucleo} (${r.motivo})`;
+}
 
 export const ProjetosPage: React.FC = () => {
   const { id: paramId } = useParams<{ id?: string }>();
@@ -82,6 +95,12 @@ export const ProjetosPage: React.FC = () => {
   const diagsProjetoAtivo = dados.diagnosticos.filter(
     (d) => d.projeto === projetoAtivo.id
   );
+
+  const nucAtivo = classificarVersao({
+    versao: projetoAtivo.nucleo,
+    fonteVersao,
+    diagnosticos: diagsProjetoAtivo.length,
+  });
 
   const handleSelecionarProjeto = (id: string) => {
     selecionarProjeto(id);
@@ -163,6 +182,11 @@ export const ProjetosPage: React.FC = () => {
               const isAtivo = p.id === projetoAtivo.id;
               const diags = dados.diagnosticos.filter((d) => d.projeto === p.id);
               const temDiags = diags.length > 0;
+              const nucP = classificarVersao({
+                versao: p.nucleo,
+                fonteVersao,
+                diagnosticos: diags.length,
+              });
               const numPendencias = p.pendencias?.length ?? 0;
               const etapaMaisRecente =
                 p.etapas && p.etapas.length > 0 ? p.etapas[p.etapas.length - 1] : null;
@@ -200,13 +224,10 @@ export const ProjetosPage: React.FC = () => {
                     {/* Núcleo */}
                     <div className="flex items-center gap-2 mt-2 text-xs">
                       <span className="text-stone-400">Núcleo:</span>
-                      {p.nucleo === null ? (
-                        <SeloEstado estado="desconhecido" rotulo="nucleo: desconhecido" />
-                      ) : fonteVersao && p.nucleo !== fonteVersao ? (
-                        <SeloEstado estado="defasado" rotulo={`${p.nucleo} ! defasado`} />
-                      ) : (
-                        <SeloEstado estado="em_dia" rotulo={p.nucleo} />
-                      )}
+                      <SeloEstado
+                        estado={nucP.estado}
+                        rotulo={rotuloNucleo(p.nucleo, nucP, false)}
+                      />
                     </div>
 
                     {/* Pendências e Diagnósticos */}
@@ -250,19 +271,10 @@ export const ProjetosPage: React.FC = () => {
               </h1>
               <div className="flex flex-wrap items-center gap-2 mt-1 text-xs">
                 <span className="text-stone-400">Núcleo:</span>
-                {projetoAtivo.nucleo === null ? (
-                  <SeloEstado estado="desconhecido" rotulo="nucleo: desconhecido" />
-                ) : fonteVersao && projetoAtivo.nucleo !== fonteVersao ? (
-                  <SeloEstado
-                    estado="defasado"
-                    rotulo={`${projetoAtivo.nucleo} ! defasado`}
-                  />
-                ) : (
-                  <SeloEstado
-                    estado="em_dia"
-                    rotulo={`núcleo: ${projetoAtivo.nucleo}`}
-                  />
-                )}
+                <SeloEstado
+                  estado={nucAtivo.estado}
+                  rotulo={rotuloNucleo(projetoAtivo.nucleo, nucAtivo, true)}
+                />
                 <span className="text-stone-400 font-mono">· ID: {projetoAtivo.id}</span>
               </div>
             </div>

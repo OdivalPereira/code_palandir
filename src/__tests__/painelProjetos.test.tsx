@@ -234,4 +234,19 @@ describe('ProjetosPage — Regiões e Jornada (F4)', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'App Receitas' })).toBeTruthy();
     expect(screen.getByText('r1-busca')).toBeTruthy();
   });
+
+  it('fonte_versao nula: Regiões (lista e detalhe) não mostram núcleo "em dia" (D08)', () => {
+    const dados = JSON.parse(JSON.stringify(exemploOficial)) as Painel1;
+    dados.pacote.fonte_versao = null;
+    act(() => {
+      usePainelStore.getState().carregarDadoBruto(dados);
+    });
+    const { container } = renderComRouter('/projetos');
+
+    expect(screen.queryAllByText(/^núcleo: [\d.]+$/)).toHaveLength(0);
+    expect(container.textContent).not.toMatch(/núcleo: [\d.]+(?! \()/);
+    expect(
+      screen.getAllByText(/referência do pacote desconhecida/i).length
+    ).toBeGreaterThanOrEqual(2);
+  });
 });
