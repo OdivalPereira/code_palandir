@@ -360,3 +360,23 @@ describe('GitHub: URLs e importação parcial', () => {
     expect(brutos.every((u) => u.includes('/main/'))).toBe(true);
   });
 });
+
+describe('detectRoutes: rota com Suspense', () => {
+  it('enxerga a tela dentro de <Suspense fallback={...}>', () => {
+    const app = `import { Suspense, lazy } from 'react';
+const Painel = lazy(() => import('./Painel'));
+export function App() {
+  return (
+    <Routes>
+      <Route path="/painel" element={<Suspense fallback={<Carregando texto="..." />}><Painel /></Suspense>} />
+      <Route path="/sobre" element={<Sobre />} />
+    </Routes>
+  );
+}`;
+    const comps = ['Painel', 'Sobre', 'Carregando', 'App'].map((name) => ({ name, filePath: `src/${name}.tsx` }));
+    const rotas = detectRoutes([{ path: 'src/App.tsx', content: app, language: 'tsx' }] as never, comps as never, 'react');
+    const mapa = Object.fromEntries(rotas.map((r) => [r.path, r.pageComponentName]));
+    expect(mapa['/painel']).toBe('Painel');
+    expect(mapa['/sobre']).toBe('Sobre');
+  });
+});
