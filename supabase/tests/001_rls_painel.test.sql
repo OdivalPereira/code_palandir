@@ -27,6 +27,12 @@ SELECT is(
   'v_ultimo_instantaneo tem security_invoker = true'
 );
 
+-- Limpeza dentro da transação de teste (preserva seed.sql após o ROLLBACK final)
+TRUNCATE TABLE public.instantaneos, public.cotas, public.maquinas CASCADE;
+DELETE FROM auth.users
+WHERE email IN ('dono@exemplo.test', 'outro@exemplo.test')
+   OR id IN ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222');
+
 -- Massa de teste fictícia (dono@exemplo.test e outro@exemplo.test)
 INSERT INTO auth.users (id, email, aud, role)
 VALUES
