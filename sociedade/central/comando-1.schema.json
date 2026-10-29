@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sociedade-do-codigo/comando/1",
+  "title": "Centro de comando comando/1 (24/10/2026; esquema irmão do painel/1)",
+  "description": "Tarefas, ações, eventos e perguntas do centro de comando (seção 9.2 da arquitetura; complemento 10.3). Na p3 é só a forma das fixtures fictícias; na p4 vira as tabelas com RLS de dono. Só metadados e textos curtos já filtrados (Q178): nunca código, diff, conversa inteira, segredo ou dado de cliente. Desconhecido é null, nunca vazio (D08).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["esquema", "gerado_em", "tarefas", "acoes", "eventos", "perguntas"],
+  "properties": {
+    "esquema": {"const": "comando/1"},
+    "gerado_em": {"type": "string", "format": "date-time"},
+    "tarefas": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/tarefa"}},
+    "acoes": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/acao"}},
+    "eventos": {"type": "array", "maxItems": 2000, "items": {"$ref": "#/$defs/evento"}},
+    "perguntas": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/pergunta"}}
+  },
+  "$defs": {
+    "uuid": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "instante": {"type": "string", "format": "date-time"},
+    "papel": {"enum": ["arquiteto", "coordenador", "revisor", "aragorn", "elrond", "galadriel", "legolas", "jules", "gwaihir"]},
+    "escala": {
+      "description": "como no painel/1, com o gwaihir no papel",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["papel", "plataforma", "fornecedor", "modelo", "esforco"],
+      "properties": {
+        "papel": {"$ref": "#/$defs/papel"},
+        "plataforma": {"type": "string", "maxLength": 40},
+        "fornecedor": {"type": "string", "maxLength": 40},
+        "modelo": {"type": "string", "maxLength": 60},
+        "esforco": {"type": "string", "maxLength": 20},
+        "subagentes": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "simples": {"type": "string", "maxLength": 60},
+            "moderada": {"type": "string", "maxLength": 60},
+            "alta": {"type": "string", "maxLength": 60}
+          }
+        }
+      }
+    },
+    "tarefa": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "projeto_id", "etapa_id", "pedido", "receptor_inicial", "estado", "escala", "contexto_selecao", "criado_em", "atualizado_em"],
+      "properties": {
+        "id": {"$ref": "#/$defs/uuid"},
+        "projeto_id": {"type": "string", "maxLength": 64},
+        "etapa_id": {"type": ["string", "null"], "maxLength": 40},
+        "pedido": {"type": "string", "minLength": 1, "maxLength": 280, "description": "o resultado em uma frase"},
+        "receptor_inicial": {"enum": ["gwaihir", "arquiteto", "executor"], "description": "escolhido por tarefa (Q216); gwaihir reservado até a p4 (Q230)"},
+        "estado": {"enum": ["rascunho", "aberta", "em_execucao", "aguardando_odival", "concluida", "cancelada"]},
+        "escala": {"anyOf": [{"$ref": "#/$defs/escala"}, {"type": "null"}]},
+        "contexto_selecao": {
+          "description": "o que o compositor visual selecionou (seção 9.8): só caminhos e nomes, nunca conteúdo de arquivo",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["caminhos", "simbolos", "decisoes"],
+          "properties": {
+            "caminhos": {"type": "array", "maxItems": 20, "items": {"type": "string", "maxLength": 200}},
+            "simbolos": {
+              "type": "array",
+              "maxItems": 50,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["tipo", "nome", "caminho"],
+                "properties": {
+                  "tipo": {"enum": ["route", "page", "component", "action", "hook", "store", "api", "table", "column"]},
+                  "nome": {"type": "string", "maxLength": 120},
+                  "caminho": {"type": ["string", "null"], "maxLength": 200}
+                }
+              }
+            },
+            "decisoes": {"type": "array", "maxItems": 10, "items": {"type": "string", "pattern": "^Q[0-9]{1,4}$"}}
+          }
+        },
+        "criado_em": {"$ref": "#/$defs/instante"},
+        "atualizado_em": {"$ref": "#/$defs/instante"}
+      }
+    },
+    "acao": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tarefa_id", "maquina_id", "alvo", "adaptador", "papel", "comando_permitido", "argumentos", "estado", "aprovado_por", "criado_em", "iniciado_em", "finalizado_em"],
+      "properties": {
+        "id": {"$ref": "#/$defs/uuid"},
+        "tarefa_id": {"$ref": "#/$defs/uuid"},
+        "maquina_id": {"anyOf": [{"$ref": "#/$defs/uuid"}, {"type": "null"}]},
+        "alvo": {"enum": ["local", "nuvem"]},
+        "adaptador": {"enum": ["claude", "codex", "gemini_cli", "antigravity_manual", "ollama", "sc_py", "jules"]},
+        "papel": {"$ref": "#/$defs/papel"},
+        "comando_permitido": {"type": "string", "maxLength": 80},
+        "argumentos": {"type": "array", "maxItems": 10, "items": {"type": "string", "maxLength": 200}},
+        "estado": {"enum": ["pendente", "aprovada", "em_andamento", "feita", "falhou", "cancelada"]},
+        "aprovado_por": {"enum": ["odival", "autorizacao_previa", null]},
+        "criado_em": {"$ref": "#/$defs/instante"},
+        "iniciado_em": {"anyOf": [{"$ref": "#/$defs/instante"}, {"type": "null"}]},
+        "finalizado_em": {"anyOf": [{"$ref": "#/$defs/instante"}, {"type": "null"}]}
+      }
+    },
+    "evento": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tarefa_id", "acao_id", "origem", "tipo", "corpo", "criado_em"],
+      "properties": {
+        "id": {"$ref": "#/$defs/uuid"},
+        "tarefa_id": {"$ref": "#/$defs/uuid"},
+        "acao_id": {"anyOf": [{"$ref": "#/$defs/uuid"}, {"type": "null"}]},
+        "origem": {"anyOf": [{"$ref": "#/$defs/papel"}, {"const": "odival"}]},
+        "tipo": {"enum": ["passagem", "pergunta", "resposta", "progresso", "erro", "resumo_gwaihir"]},
+        "corpo": {"type": "string", "maxLength": 2048, "description": "até 2 KB, já filtrado por segredos"},
+        "criado_em": {"$ref": "#/$defs/instante"}
+      }
+    },
+    "pergunta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tarefa_id", "acao_id", "autor", "enunciado", "alternativas", "recomendacao", "citacao_decisao", "confianca", "resposta", "criado_em"],
+      "properties": {
+        "id": {"$ref": "#/$defs/uuid"},
+        "tarefa_id": {"$ref": "#/$defs/uuid"},
+        "acao_id": {"anyOf": [{"$ref": "#/$defs/uuid"}, {"type": "null"}]},
+        "autor": {"$ref": "#/$defs/papel"},
+        "enunciado": {"type": "string", "minLength": 1, "maxLength": 600},
+        "alternativas": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["rotulo", "descricao"],
+            "properties": {
+              "rotulo": {"type": "string", "minLength": 1, "maxLength": 60},
+              "descricao": {"type": "string", "maxLength": 300}
+            }
+          }
+        },
+        "recomendacao": {
+          "description": "visível (rotulo preenchido), lacrada (só o SHA-256 até a resposta; depois, rotulo e revelacao) ou nenhuma",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["modo", "rotulo", "lacre_sha256", "revelacao"],
+          "properties": {
+            "modo": {"enum": ["visivel", "lacrada", "nenhuma"]},
+            "rotulo": {"type": ["string", "null"], "maxLength": 60},
+            "lacre_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+            "revelacao": {"type": ["string", "null"], "maxLength": 600, "description": "texto lacrado, cujo SHA-256 (UTF-8, sem quebra final) é o lacre"}
+          }
+        },
+        "citacao_decisao": {"type": ["string", "null"], "pattern": "^Q[0-9]{1,4}$"},
+        "confianca": {"enum": ["alta", "media", "baixa", null]},
+        "resposta": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["alternativa", "nota", "respondida_por", "respondido_em", "revogada_por_odival"],
+              "properties": {
+                "alternativa": {"type": "string", "minLength": 1, "maxLength": 60, "description": "rótulo escolhido, ou \"Outro\""},
+                "nota": {"type": ["string", "null"], "maxLength": 600},
+                "respondida_por": {"enum": ["odival", "gwaihir"]},
+                "respondido_em": {"$ref": "#/$defs/instante"},
+                "revogada_por_odival": {"type": "boolean"}
+              }
+            }
+          ]
+        },
+        "criado_em": {"$ref": "#/$defs/instante"}
+      }
+    }
+  }
+}

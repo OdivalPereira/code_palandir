@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sociedade-do-codigo/cartas/1",
+  "title": "Cartas dos agentes da Sociedade do Código (cartas/1, 24/10/2026)",
+  "description": "Textos da tela Sociedade (seção 5.7 da arquitetura). Os números medidos não ficam aqui: vêm do instantâneo, e sem dado aparecem como desconhecido (D08, D10). Forças e fraquezas são curadas por Odival (Q229).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["esquema", "atualizado_em", "cartas"],
+  "properties": {
+    "esquema": {"const": "cartas/1"},
+    "atualizado_em": {"type": "string", "format": "date-time"},
+    "cartas": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "papel", "nome", "titulo", "icone", "estado_padrao", "ocupante_padrao", "poderes", "forcas", "fraquezas"],
+        "properties": {
+          "id": {"enum": ["cirdan", "barbarvore", "gandalf", "aragorn", "elrond", "galadriel", "legolas", "gwaihir", "jules", "celebrimbor", "radagast", "faramir", "bilbo"]},
+          "papel": {"type": "string", "maxLength": 60},
+          "nome": {"type": "string", "maxLength": 60},
+          "titulo": {"type": "string", "maxLength": 80},
+          "icone": {"enum": ["navio", "arvore", "cajado", "passos", "pergaminho", "espelho", "arco", "aguia", "nuvem", "bigorna"]},
+          "estado_padrao": {"enum": ["ativo", "reserva", "espera"]},
+          "ocupante_padrao": {
+            "type": ["object", "null"],
+            "description": "ocupante segundo o perfil; null quando o papel ainda não tem ocupante",
+            "additionalProperties": false,
+            "required": ["plataforma", "fornecedor", "modelo", "esforco", "desde"],
+            "properties": {
+              "plataforma": {"type": "string", "maxLength": 40},
+              "fornecedor": {"type": "string", "maxLength": 40},
+              "modelo": {"type": "string", "maxLength": 60},
+              "esforco": {"type": "string", "maxLength": 20},
+              "desde": {"type": ["string", "null"], "format": "date"}
+            }
+          },
+          "poderes": {"type": "array", "minItems": 1, "maxItems": 5, "items": {"type": "string", "maxLength": 140}},
+          "forcas": {"type": "array", "minItems": 1, "maxItems": 5, "items": {"type": "string", "maxLength": 140}},
+          "fraquezas": {"type": "array", "minItems": 1, "maxItems": 5, "items": {"type": "string", "maxLength": 140}}
+        }
+      }
+    }
+  }
+}
